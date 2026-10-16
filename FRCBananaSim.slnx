@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="FRCBananaSim/FRCBananaSim.vcxproj" Id="a3d82426-f999-4a1d-a46d-8f14f2b5139c" />
+  <Project Path="FRCBananaSim/ProfilerViewer.vcxproj" Id="b7e21894-3d12-4f5a-9a8c-2f4e6d1b8c0a" />
+</Solution>

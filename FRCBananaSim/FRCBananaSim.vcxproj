@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{a3d82426-f999-4a1d-a46d-8f14f2b5139c}</ProjectGuid>
+    <RootNamespace>FRCBananaSim</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(SolutionDir)Builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(SolutionDir)Builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>$(SolutionDir)Builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)Builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)External;$(ProjectDir)External\glm;%(AdditionalIncludeDirectories);$(ProjectDir)External\glfw\include;$(ProjectDir)External\glad\include;$(ProjectDir)External\imgui\include;</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>glfw3.lib; opengl32.lib;Gdi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)External\glfw\bin;</AdditionalLibraryDirectories>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)External;$(ProjectDir)External\glm;%(AdditionalIncludeDirectories);$(ProjectDir)External\glfw\include;$(ProjectDir)External\glad\include;$(ProjectDir)External\imgui\include;</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>glfw3.lib; opengl32.lib;Gdi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)External\glfw\bin;</AdditionalLibraryDirectories>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)External;$(ProjectDir)External\glm;%(AdditionalIncludeDirectories);$(ProjectDir)External\glfw\include;$(ProjectDir)External\glad\include;$(ProjectDir)External\imgui\include;</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>glfw3.lib; opengl32.lib;Gdi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)External\glfw\bin;</AdditionalLibraryDirectories>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)External;$(ProjectDir)External\glm;%(AdditionalIncludeDirectories);$(ProjectDir)External\glfw\include;$(ProjectDir)External\glad\include;$(ProjectDir)External\imgui\include;</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>glfw3.lib; opengl32.lib;Gdi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)External\glfw\bin;</AdditionalLibraryDirectories>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="External\glad\src\glad.c" />
+    <ClCompile Include="External\imgui\backend\imgui_impl_glfw.cpp" />
+    <ClCompile Include="External\imgui\backend\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="External\imgui\imgui.cpp" />
+    <ClCompile Include="External\imgui\imgui_demo.cpp" />
+    <ClCompile Include="External\imgui\imgui_draw.cpp" />
+    <ClCompile Include="External\imgui\imgui_tables.cpp" />
+    <ClCompile Include="External\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="Source\Core\ECS\Core\IComponentStorage.cpp" />
+    <ClCompile Include="Source\Core\ECS\Core\Scene.cpp" />
+    <ClCompile Include="Source\Core\ECS\Core\System.cpp" />
+    <ClCompile Include="Source\Core\ECS\Systems\TransformPropagationSystem.cpp" />
+    <ClCompile Include="Source\Core\Engine.cpp" />
+    <ClCompile Include="Source\Main.cpp" />
+    <ClCompile Include="Source\Renderer\Camera.cpp" />
+    <ClCompile Include="Source\Renderer\Input.cpp" />
+    <ClCompile Include="Source\Renderer\Renderer.cpp" />
+    <ClCompile Include="Source\Renderer\Systems\RenderSystem.cpp" />
+    <ClCompile Include="Source\Telemetry\MemoryTracker.cpp" />
+    <ClCompile Include="Source\Telemetry\ProfilerUI.cpp" />
+    <ClCompile Include="Source\Telemetry\ProfilerWindow.cpp" />
+    <ClCompile Include="Source\Telemetry\SessionLoader.cpp" />
+    <ClCompile Include="Source\Telemetry\SessionManager.cpp" />
+    <ClCompile Include="Source\Telemetry\TelemetryManager.cpp" />
+    <ClCompile Include="Source\Telemetry\TelemetryOverlay.cpp" />
+    <ClCompile Include="Source\Telemetry\TelemetryTimer.cpp" />
+    <ClCompile Include="Source\Utils\DebugDraw.cpp" />
+    <ClCompile Include="Source\Utils\FixedTimestep.cpp" />
+    <ClCompile Include="Source\Utils\Log.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Source\Core\ECS\Components\HierarchyComponent.h" />
+    <ClInclude Include="Source\Core\ECS\Components\TransformComponent.h" />
+    <ClInclude Include="Source\Core\ECS\Core\ComponentStorage.h" />
+    <ClInclude Include="Source\Core\ECS\Core\Entity.h" />
+    <ClInclude Include="Source\Core\ECS\Core\IComponentStorage.h" />
+    <ClInclude Include="Source\Core\ECS\Core\Scene.h" />
+    <ClInclude Include="Source\Core\ECS\Core\System.h" />
+    <ClInclude Include="Source\Core\ECS\Systems\TransformPropagationSystem.h" />
+    <ClInclude Include="Source\Core\Engine.h" />
+    <ClInclude Include="Source\Renderer\Camera.h" />
+    <ClInclude Include="Source\Renderer\Components\MeshComponent.h" />
+    <ClInclude Include="Source\Renderer\Input.h" />
+    <ClInclude Include="Source\Renderer\Renderer.h" />
+    <ClInclude Include="Source\Renderer\Systems\RenderSystem.h" />
+    <ClInclude Include="Source\Telemetry\MemoryTracker.h" />
+    <ClInclude Include="Source\Telemetry\ProfileResult.h" />
+    <ClInclude Include="Source\Telemetry\ProfilerUI.h" />
+    <ClInclude Include="Source\Telemetry\ProfilerWindow.h" />
+    <ClInclude Include="Source\Telemetry\SessionLoader.h" />
+    <ClInclude Include="Source\Telemetry\SessionManager.h" />
+    <ClInclude Include="Source\Telemetry\TelemetryMacros.h" />
+    <ClInclude Include="Source\Telemetry\TelemetryManager.h" />
+    <ClInclude Include="Source\Telemetry\TelemetryOverlay.h" />
+    <ClInclude Include="Source\Telemetry\TelemetryTimer.h" />
+    <ClInclude Include="Source\Utils\DebugDraw.h" />
+    <ClInclude Include="Source\Utils\FixedTimestep.h" />
+    <ClInclude Include="Source\Utils\Log.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

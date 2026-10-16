@@ -1,0 +1,204 @@
+/**
+ * @file Scene.cpp
+ * @brief Implementation of Scene entity lifecycles, system execution, and hierarchy repairs.
+ */
+
+#include "Scene.h"
+#include "System.h"
+#include "../Components/HierarchyComponent.h"
+#include <algorithm>
+
+namespace FRCBananaSim::Core::ECS::Core
+{
+    using Components::HierarchyComponent;
+
+    // Defined here for the same reason as the destructor: the constructor can
+    // instantiate std::vector of std::unique_ptr of ISystem destruction (on exception
+    // unwind), which requires ISystem to be a complete type.
+    Scene::Scene() = default;
+
+    // Defined here rather than defaulted in the header so that
+    // std::vector<std::unique_ptr<ISystem>>'s destruction does not depend on
+    // include order in translation units that instantiate Scene.
+    Scene::~Scene() = default;
+
+    Entity Scene::CreateEntity()
+    {
+        Entity id;
+        if (!freeEntities.empty())
+        {
+            id = freeEntities.back();
+            freeEntities.pop_back();
+        }
+        else
+        {
+            id = nextEntity++;
+        }
+
+        if (id >= entityToIndex.size())
+        {
+            std::size_t newSize = id + 1;
+            if (newSize < entityToIndex.size() * 2)
+            {
+                newSize = entityToIndex.size() * 2;
+            }
+            entityToIndex.resize(newSize, invalidIndex);
+        }
+
+        entityToIndex[id] = entities.size();
+        entities.push_back(id);
+        return id;
+    }
+
+    void Scene::DestroyEntity(Entity entity)
+    {
+        if (entity < entityToIndex.size() && entityToIndex[entity] != invalidIndex)
+        {
+            std::size_t index = entityToIndex[entity];
+            std::size_t lastIndex = entities.size() - 1;
+
+            if (index != lastIndex)
+            {
+                Entity movedEntity = entities[lastIndex];
+                entities[index] = movedEntity;
+                entityToIndex[movedEntity] = index;
+            }
+
+            entities.pop_back();
+            entityToIndex[entity] = invalidIndex;
+        }
+
+        // Hierarchy fix-up must run *before* components are stripped: it
+        // needs to read this entity's own HierarchyComponent, which
+        // RemoveAllComponents() would otherwise erase first.
+        UpdateHierarchyOnDestroy(entity);
+        RemoveAllComponents(entity);
+
+        freeEntities.push_back(entity);
+    }
+
+    const std::vector<Entity>& Scene::GetEntities() const
+    {
+        return entities;
+    }
+
+    void Scene::AddSystem(std::unique_ptr<ISystem> system)
+    {
+        systems.push_back(std::move(system));
+    }
+
+    void Scene::SetDeltaTime(double dt)
+    {
+        deltaTime = dt;
+    }
+
+    void Scene::SetFixedDeltaTime(double dt)
+    {
+        fixedDeltaTime = dt;
+    }
+
+    double Scene::GetDeltaTime() const
+    {
+        return deltaTime;
+    }
+
+    double Scene::GetFixedDeltaTime() const
+    {
+        return fixedDeltaTime;
+    }
+
+    void Scene::UpdateSystems()
+    {
+        for (auto& system : systems)
+        {
+            system->Update();
+        }
+    }
+
+    void Scene::FixedUpdateSystems()
+    {
+        for (auto& system : systems)
+        {
+            system->FixedUpdate(fixedDeltaTime);
+        }
+    }
+
+    void Scene::RenderUpdateSystems()
+    {
+        for (auto& system : systems)
+        {
+            system->RenderUpdate();
+        }
+    }
+
+    void Scene::SetParent(Entity child, Entity parent)
+    {
+        auto* hierarchy = GetComponent<HierarchyComponent>(child);
+        if (!hierarchy)
+        {
+            HierarchyComponent hc;
+            hc.parent = parent;
+            AddComponent(child, hc);
+        }
+        else
+        {
+            hierarchy->parent = parent;
+        }
+
+        if (parent != invalidEntity)
+        {
+            auto* parentHierarchy = GetComponent<HierarchyComponent>(parent);
+            if (!parentHierarchy)
+            {
+                HierarchyComponent ph;
+                ph.parent = invalidEntity;
+                ph.children.push_back(child);
+                AddComponent(parent, ph);
+            }
+            else
+            {
+                parentHierarchy->children.push_back(child);
+            }
+        }
+    }
+
+    void Scene::RemoveAllComponents(Entity entity)
+    {
+        for (auto& [type, storage] : storagesRaw)
+        {
+            storage->Remove(entity);
+        }
+    }
+
+    void Scene::UpdateHierarchyOnDestroy(Entity entity)
+    {
+        auto* hierarchy = GetComponent<HierarchyComponent>(entity);
+        if (!hierarchy)
+        {
+            return;
+        }
+
+        if (hierarchy->parent != invalidEntity)
+        {
+            auto* parentHierarchy = GetComponent<HierarchyComponent>(hierarchy->parent);
+            if (parentHierarchy)
+            {
+                parentHierarchy->children.erase(
+                    std::remove(parentHierarchy->children.begin(),
+                        parentHierarchy->children.end(),
+                        entity),
+                    parentHierarchy->children.end()
+                );
+            }
+        }
+
+        for (Entity child : hierarchy->children)
+        {
+            auto* childHierarchy = GetComponent<HierarchyComponent>(child);
+            if (childHierarchy)
+            {
+                childHierarchy->parent = invalidEntity;
+            }
+        }
+    }
+}
