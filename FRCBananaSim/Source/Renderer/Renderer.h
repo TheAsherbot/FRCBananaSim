@@ -65,6 +65,12 @@ namespace FRCBananaSim::Renderer
         bool ShouldClose() const;
 
         /**
+         * @brief Controls vertical synchronization (VSync).
+         * @param enabled True to lock frame swaps to monitor refresh; false for uncapped/software-limited rates.
+         */
+        void SetVSync(bool enabled);
+
+        /**
          * @brief Polls events, updates camera/input, clears color and depth buffers.
          */
         void BeginFrame();

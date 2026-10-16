@@ -51,6 +51,7 @@ namespace FRCBananaSim::Telemetry
         // Switch to the new window's context to initialize its GL + ImGui state
         glfwMakeContextCurrent(window);
         gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
+        glfwSwapInterval(0); // Disable VSync on profiler window so swap buffers never stalls
 
         ImGuiContext* previousContext = ImGui::GetCurrentContext();
 

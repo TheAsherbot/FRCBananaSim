@@ -5,7 +5,8 @@
 
 #include "Scene.h"
 #include "System.h"
-#include "../Components/HierarchyComponent.h"
+#include "CORE/ECS/Components/HierarchyComponent.h"
+#include "Telemetry/TelemetryMacros.h"
 #include <algorithm>
 
 namespace FRCBananaSim::Core::ECS::Core
@@ -109,22 +110,23 @@ namespace FRCBananaSim::Core::ECS::Core
 
     void Scene::UpdateSystems()
     {
+        SIM_PROFILE_SCOPE("Scene::UpdateSystems");
         for (auto& system : systems)
         {
             system->Update();
         }
     }
-
     void Scene::FixedUpdateSystems()
     {
+        SIM_PROFILE_SCOPE("Scene::FixedUpdateSystems");
         for (auto& system : systems)
         {
             system->FixedUpdate(fixedDeltaTime);
         }
     }
-
     void Scene::RenderUpdateSystems()
     {
+        SIM_PROFILE_SCOPE("Scene::RenderUpdateSystems");
         for (auto& system : systems)
         {
             system->RenderUpdate();

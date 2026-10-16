@@ -131,7 +131,7 @@ int main()
     }
 
     // 6. Configure Engine Loop (60 Hz physics update, 144 max FPS)
-    Engine engine(60.0, 74);
+    Engine engine(60.0, 0);
 
     float rotationAngleDegrees = 0.0f;
     double accumulatedPhysicsMs = 0.0;

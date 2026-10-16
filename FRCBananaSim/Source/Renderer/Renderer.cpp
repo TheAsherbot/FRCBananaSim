@@ -6,6 +6,7 @@
 #include "Renderer/Renderer.h"
 #include "Renderer/Components/MeshComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
+#include "Telemetry/TelemetryMacros.h"
 #include "Utils/DebugDraw.h"
 #include "Utils/Log.h"
 
@@ -283,6 +284,7 @@ void main()
         }
 
         glfwMakeContextCurrent(impl->window);
+        glfwSwapInterval(0); // Disable VSync by default so software frame limiter has full control
         glfwSetFramebufferSizeCallback(impl->window, FramebufferSizeCallback);
 
         impl->input.AttachWindow(impl->window);
@@ -375,6 +377,14 @@ void main()
     bool Renderer::ShouldClose() const
     {
         return impl->valid ? glfwWindowShouldClose(impl->window) : true;
+    }
+
+    void Renderer::SetVSync(bool enabled)
+    {
+        if (impl && impl->valid)
+        {
+            glfwSwapInterval(enabled ? 1 : 0);
+        }
     }
 
     void Renderer::BeginFrame()

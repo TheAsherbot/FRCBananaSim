@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <string>
 #include <unordered_map>
 
@@ -18,7 +19,8 @@ namespace FRCBananaSim::Telemetry
     ProfilerUI::ProfilerUI()
         : scrollOffsetX(0.0f),
         zoomLevel(1.0f),
-        selectedFrameIndex(-1)
+        selectedFrameIndex(-1),
+        lastIndexedResultCount(0)
     {}
 
     ProfilerUI::~ProfilerUI()
@@ -51,21 +53,29 @@ namespace FRCBananaSim::Telemetry
             }
         }
 
-        // Extract all frame scopes early so we can read memory from them
-        std::vector<const ProfileResult*> frameResults;
-        for (const ProfileResult& r : results)
+        // --- Incremental Frame Indexing O(1) ---
+        // If results array was cleared or changed (e.g. new session loaded), reset index
+        if (results.size() < lastIndexedResultCount)
         {
-            if (r.name && std::string(r.name) == "Frame")
-            {
-                frameResults.push_back(&r);
-            }
+            frameIndices.clear();
+            lastIndexedResultCount = 0;
         }
 
-        if (!frameResults.empty())
+        // Only scan new scopes appended since the previous frame
+        for (std::size_t i = lastIndexedResultCount; i < results.size(); ++i)
         {
-            if (selectedFrameIndex < 0 || selectedFrameIndex >= static_cast<int>(frameResults.size()))
+            if (results[i].name && std::strcmp(results[i].name, "Frame") == 0)
             {
-                selectedFrameIndex = static_cast<int>(frameResults.size()) - 1; // Default to newest
+                frameIndices.push_back(i);
+            }
+        }
+        lastIndexedResultCount = results.size();
+
+        if (!frameIndices.empty())
+        {
+            if (selectedFrameIndex < 0 || selectedFrameIndex >= static_cast<int>(frameIndices.size()))
+            {
+                selectedFrameIndex = static_cast<int>(frameIndices.size()) - 1; // Default to newest
             }
         }
 
@@ -75,14 +85,14 @@ namespace FRCBananaSim::Telemetry
         std::size_t allocCount = MemoryTracker::GetActiveAllocationCount();
         bool isLiveMemory = true;
 
-        if (!frameResults.empty() && selectedFrameIndex >= 0 && selectedFrameIndex < static_cast<int>(frameResults.size()))
+        if (!frameIndices.empty() && selectedFrameIndex >= 0 && selectedFrameIndex < static_cast<int>(frameIndices.size()))
         {
-            const ProfileResult* r = frameResults[selectedFrameIndex];
-            if (r->memoryCurrentBytes > 0 || r->memoryPeakBytes > 0)
+            const ProfileResult& r = results[frameIndices[selectedFrameIndex]];
+            if (r.memoryCurrentBytes > 0 || r.memoryPeakBytes > 0)
             {
-                currentBytes = r->memoryCurrentBytes;
-                peakBytes = r->memoryPeakBytes;
-                allocCount = r->memoryAllocations;
+                currentBytes = r.memoryCurrentBytes;
+                peakBytes = r.memoryPeakBytes;
+                allocCount = r.memoryAllocations;
                 isLiveMemory = false;
             }
         }
@@ -103,36 +113,29 @@ namespace FRCBananaSim::Telemetry
                 return;
             }
 
-            // Extract all frame scopes to allow scrubbing
-            std::vector<const ProfileResult*> frameResults;
-            for (const ProfileResult& r : results)
-            {
-                if (r.name && std::string(r.name) == "Frame")
-                {
-                    frameResults.push_back(&r);
-                }
-            }
 
             long long frameStart = results.front().startTimestamp;
             long long frameEnd = results.back().endTimestamp;
+            std::size_t frameSliceStart = 0;
+            std::size_t frameSliceEnd = results.size() - 1;
 
-            if (!frameResults.empty())
+            if (!frameIndices.empty())
             {
-                if (selectedFrameIndex < 0 || selectedFrameIndex >= static_cast<int>(frameResults.size()))
-                {
-                    selectedFrameIndex = static_cast<int>(frameResults.size()) - 1; // Default to newest
-                }
-
-                // Add the slider to select a specific frame
-                ImGui::SliderInt("Scrub Frame", &selectedFrameIndex, 0, static_cast<int>(frameResults.size()) - 1);
+                // Add the slider to select a specific frame across the entire session
+                ImGui::SliderInt("Scrub Frame", &selectedFrameIndex, 0, static_cast<int>(frameIndices.size()) - 1);
                 ImGui::SameLine();
                 if (ImGui::Button("Go to Latest"))
                 {
-                    selectedFrameIndex = static_cast<int>(frameResults.size()) - 1;
+                    selectedFrameIndex = static_cast<int>(frameIndices.size()) - 1;
                 }
 
-                frameStart = frameResults[selectedFrameIndex]->startTimestamp;
-                frameEnd = frameResults[selectedFrameIndex]->endTimestamp;
+                std::size_t frameEndIdx = frameIndices[selectedFrameIndex];
+                std::size_t frameStartIdx = (selectedFrameIndex == 0) ? 0 : (frameIndices[selectedFrameIndex - 1] + 1);
+
+                frameSliceStart = frameStartIdx;
+                frameSliceEnd = frameEndIdx;
+                frameStart = results[frameEndIdx].startTimestamp;
+                frameEnd = results[frameEndIdx].endTimestamp;
             }
 
             // Zoom controls
@@ -149,7 +152,7 @@ namespace FRCBananaSim::Telemetry
                 frameRange = 1;
             }
 
-            // Assign depth by simple nesting detection within the last frame
+            // Assign depth by simple nesting detection strictly within the selected frame slice O(1)
             struct ScopeEntry
             {
                 const ProfileResult* result;
@@ -159,8 +162,9 @@ namespace FRCBananaSim::Telemetry
             std::vector<ScopeEntry> visibleScopes;
             std::vector<long long> depthEndStack;
 
-            for (const ProfileResult& r : results)
+            for (std::size_t i = frameSliceStart; i <= frameSliceEnd; ++i)
             {
+                const ProfileResult& r = results[i];
                 if (r.startTimestamp < frameStart || r.endTimestamp > frameEnd + 1)
                 {
                     continue;

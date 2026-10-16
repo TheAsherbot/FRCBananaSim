@@ -8,7 +8,7 @@
 #include "Telemetry/MemoryTracker.h"
 
 #include <chrono>
-#include <string>
+#include <cstring>
 #include <thread>
 
 namespace FRCBananaSim::Telemetry
@@ -42,8 +42,8 @@ namespace FRCBananaSim::Telemetry
         result.endTimestamp = end;
         result.threadId = threadId;
 
-        // Take a memory snapshot precisely at the end of the frame
-        if (name && std::string(name) == "Frame")
+        // Take a memory snapshot precisely at the end of the frame using fast strcmp
+        if (name && std::strcmp(name, "Frame") == 0)
         {
             result.memoryCurrentBytes = MemoryTracker::GetCurrentBytes();
             result.memoryPeakBytes = MemoryTracker::GetPeakBytes();

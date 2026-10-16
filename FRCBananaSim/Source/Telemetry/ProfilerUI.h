@@ -7,6 +7,7 @@
 
 #include "Telemetry/ProfileResult.h"
 
+#include <cstddef>
 #include <vector>
 
 namespace FRCBananaSim::Telemetry
@@ -42,5 +43,8 @@ namespace FRCBananaSim::Telemetry
         float scrollOffsetX;
         float zoomLevel;
         int selectedFrameIndex;
+
+        std::vector<std::size_t> frameIndices;
+        std::size_t lastIndexedResultCount;
     };
 }

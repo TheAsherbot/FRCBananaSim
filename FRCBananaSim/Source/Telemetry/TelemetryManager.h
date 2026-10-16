@@ -67,6 +67,18 @@ namespace FRCBananaSim::Telemetry
         TelemetryMode GetMode() const;
 
         /**
+         * @brief Enables or disables recording of profiling scopes (e.g. to only record on physics steps).
+         * @param enabled True to record incoming scopes; false to discard them.
+         */
+        void SetRecordingEnabled(bool enabled);
+
+        /**
+         * @brief Checks if telemetry scope recording is currently enabled.
+         * @return True if actively recording scopes.
+         */
+        bool IsRecordingEnabled() const;
+
+        /**
          * @brief Adds a high-level frame execution breakdown to the rolling history buffer.
          * @param summary High-level subsystem timing measurements for the completed frame.
          */
@@ -103,6 +115,7 @@ namespace FRCBananaSim::Telemetry
         int profileCount;
         std::mutex mutex;
         bool isInitialized;
+        bool isRecordingEnabled;
         TelemetryMode currentMode;
 
         std::vector<FrameSummary> frameHistory;

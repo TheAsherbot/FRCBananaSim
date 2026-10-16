@@ -4,9 +4,10 @@
  */
 
 #include "TransformPropagationSystem.h"
-#include "../Core/Scene.h"
-#include "../Components/TransformComponent.h"
-#include "../Components/HierarchyComponent.h"
+#include "Core/ECS/Core/Scene.h"
+#include "Core/ECS/Components/TransformComponent.h"
+#include "Core/ECS/Components/HierarchyComponent.h"
+#include "Telemetry/TelemetryMacros.h"
 
 namespace FRCBananaSim::Core::ECS::Systems
 {
@@ -21,6 +22,7 @@ namespace FRCBananaSim::Core::ECS::Systems
 
     void TransformPropagationSystem::Update()
     {
+        SIM_PROFILE_SCOPE("TransformPropagationSystem::Update");
         auto entitiesWithTransform = scene.Query<TransformComponent>();
         for (Entity e : entitiesWithTransform)
         {

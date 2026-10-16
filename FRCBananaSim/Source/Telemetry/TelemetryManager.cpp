@@ -22,6 +22,7 @@ namespace FRCBananaSim::Telemetry
     TelemetryManager::TelemetryManager()
         : profileCount(0),
         isInitialized(false),
+        isRecordingEnabled(true),
         currentMode(TelemetryMode::Off)
     {}
 
@@ -41,6 +42,16 @@ namespace FRCBananaSim::Telemetry
     TelemetryMode TelemetryManager::GetMode() const
     {
         return currentMode;
+    }
+
+    void TelemetryManager::SetRecordingEnabled(bool enabled)
+    {
+        isRecordingEnabled = enabled;
+    }
+
+    bool TelemetryManager::IsRecordingEnabled() const
+    {
+        return isRecordingEnabled;
     }
 
     void TelemetryManager::Initialize()
@@ -92,7 +103,7 @@ namespace FRCBananaSim::Telemetry
 
     void TelemetryManager::WriteProfile(const ProfileResult& result)
     {
-        if (!isInitialized)
+        if (!isInitialized || !isRecordingEnabled)
         {
             return;
         }
@@ -126,8 +137,7 @@ namespace FRCBananaSim::Telemetry
 
         outputStream << "}";
 
-        outputStream.flush();
-
+        // Store live result without capping (unlimited history)
         liveResults.push_back(result);
     }
 
@@ -147,11 +157,18 @@ namespace FRCBananaSim::Telemetry
     {
         std::lock_guard<std::mutex> lock(mutex);
 
+        if (outputStream.is_open())
+        {
+            outputStream.flush();
+        }
+
         frameHistory.push_back(summary);
         if (frameHistory.size() > 120)
         {
             frameHistory.erase(frameHistory.begin());
         }
+
+        // liveResults is NOT limited: keeps all recorded physics frames
     }
 
     const std::vector<FrameSummary>& TelemetryManager::GetFrameHistory() const

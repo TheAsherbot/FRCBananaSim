@@ -9,12 +9,12 @@
 
 namespace FRCBananaSim::Utils
 {
-	class FixedTimestep;
+    class FixedTimestep;
 }
 
 namespace FRCBananaSim::Core
 {
-	using FRCBananaSim::Utils::FixedTimestep;
+    using FRCBananaSim::Utils::FixedTimestep;
 
     /**
      * @class Engine
@@ -39,6 +39,9 @@ namespace FRCBananaSim::Core
         /// @brief Callback invoked once per frame for rendering.
         /// @param alpha Blend factor [0.0, 1.0] representing the sub-step interpolation progress.
         using RenderCallback = std::function<void(double alpha)>;
+
+        /// @brief Callback invoked once per frame after scene rendering completes for diagnostic/tool presentation.
+        using PostRenderCallback = std::function<void()>;
 
         /**
          * @brief Constructs an Engine instance configured with a target physics frequency and optional maximum frame rate.
@@ -83,6 +86,12 @@ namespace FRCBananaSim::Core
         void SetRenderCallback(RenderCallback cb);
 
         /**
+         * @brief Registers the callback for post-render tool presentation (e.g. secondary profiler window).
+         * @param cb Callback function executed outside the timed scene Render scope.
+         */
+        void SetPostRenderCallback(PostRenderCallback cb);
+
+        /**
          * @brief Starts the blocking engine loop. Runs until RequestExit() is called.
          */
         void Run();
@@ -100,5 +109,6 @@ namespace FRCBananaSim::Core
         FixedUpdateCallback fixedUpdateCallback;
         UpdateCallback updateCallback;
         RenderCallback renderCallback;
+        PostRenderCallback postRenderCallback;
     };
 }

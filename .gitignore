@@ -2,6 +2,7 @@
 out/
 build/
 Builds/
+telemetry_logs/
 build-linux/
 x64/
 CMakeFiles/

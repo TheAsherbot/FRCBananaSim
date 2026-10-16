@@ -8,6 +8,7 @@
 #include "Renderer/Components/MeshComponent.h"
 #include "Core/ECS/Core/Scene.h"
 #include "Core/ECS/Components/TransformComponent.h"
+#include "Telemetry/TelemetryMacros.h"
 
 namespace FRCBananaSim::Renderer::Systems
 {
@@ -24,6 +25,7 @@ namespace FRCBananaSim::Renderer::Systems
 
     void RenderSystem::RenderUpdate()
     {
+        SIM_PROFILE_SCOPE("RenderSystem::RenderUpdate");
         auto entities = scene.Query<MeshComponent, WorldTransformComponent>();
         for (Entity e : entities)
         {
