@@ -106,3 +106,86 @@ namespace FRCBananaSim::Core::Units
         static bool IsValidUnit(const std::string& unitString);
     };
 }
+
+namespace FRCBananaSim::Core::Units::Literals
+{
+    // Length
+    constexpr double operator""_m(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_m(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_cm(long double v) { return static_cast<double>(v) * 0.01; }
+    constexpr double operator""_cm(unsigned long long v) { return static_cast<double>(v) * 0.01; }
+    constexpr double operator""_mm(long double v) { return static_cast<double>(v) * 0.001; }
+    constexpr double operator""_mm(unsigned long long v) { return static_cast<double>(v) * 0.001; }
+    constexpr double operator""_in(long double v) { return static_cast<double>(v) * 0.0254; }
+    constexpr double operator""_in(unsigned long long v) { return static_cast<double>(v) * 0.0254; }
+    constexpr double operator""_ft(long double v) { return static_cast<double>(v) * 0.3048; }
+    constexpr double operator""_ft(unsigned long long v) { return static_cast<double>(v) * 0.3048; }
+
+    // Mass
+    constexpr double operator""_kg(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_kg(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_g(long double v) { return static_cast<double>(v) * 0.001; }
+    constexpr double operator""_g(unsigned long long v) { return static_cast<double>(v) * 0.001; }
+    constexpr double operator""_lbs(long double v) { return static_cast<double>(v) * 0.45359237; }
+    constexpr double operator""_lbs(unsigned long long v) { return static_cast<double>(v) * 0.45359237; }
+    constexpr double operator""_lb(long double v) { return static_cast<double>(v) * 0.45359237; }
+    constexpr double operator""_lb(unsigned long long v) { return static_cast<double>(v) * 0.45359237; }
+    constexpr double operator""_oz(long double v) { return static_cast<double>(v) * 0.028349523125; }
+    constexpr double operator""_oz(unsigned long long v) { return static_cast<double>(v) * 0.028349523125; }
+
+    // Angle
+    constexpr double operator""_rad(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_rad(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_deg(long double v) { return static_cast<double>(v) * (3.14159265358979323846 / 180.0); }
+    constexpr double operator""_deg(unsigned long long v) { return static_cast<double>(v) * (3.14159265358979323846 / 180.0); }
+    constexpr double operator""_rot(long double v) { return static_cast<double>(v) * (2.0 * 3.14159265358979323846); }
+    constexpr double operator""_rot(unsigned long long v) { return static_cast<double>(v) * (2.0 * 3.14159265358979323846); }
+
+    // Time
+    constexpr double operator""_s(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_s(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_ms(long double v) { return static_cast<double>(v) * 0.001; }
+    constexpr double operator""_ms(unsigned long long v) { return static_cast<double>(v) * 0.001; }
+    constexpr double operator""_min(long double v) { return static_cast<double>(v) * 60.0; }
+    constexpr double operator""_min(unsigned long long v) { return static_cast<double>(v) * 60.0; }
+
+    // Velocity
+    constexpr double operator""_mps(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_mps(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_fps(long double v) { return static_cast<double>(v) * 0.3048; }
+    constexpr double operator""_fps(unsigned long long v) { return static_cast<double>(v) * 0.3048; }
+    constexpr double operator""_ips(long double v) { return static_cast<double>(v) * 0.0254; }
+    constexpr double operator""_ips(unsigned long long v) { return static_cast<double>(v) * 0.0254; }
+    constexpr double operator""_mph(long double v) { return static_cast<double>(v) * 0.44704; }
+    constexpr double operator""_mph(unsigned long long v) { return static_cast<double>(v) * 0.44704; }
+
+    // Angular Velocity
+    constexpr double operator""_radps(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_radps(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_degps(long double v) { return static_cast<double>(v) * (3.14159265358979323846 / 180.0); }
+    constexpr double operator""_degps(unsigned long long v) { return static_cast<double>(v) * (3.14159265358979323846 / 180.0); }
+    constexpr double operator""_rpm(long double v) { return static_cast<double>(v) * (2.0 * 3.14159265358979323846 / 60.0); }
+    constexpr double operator""_rpm(unsigned long long v) { return static_cast<double>(v) * (2.0 * 3.14159265358979323846 / 60.0); }
+
+    // Force & Torque
+    constexpr double operator""_N(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_N(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_lbf(long double v) { return static_cast<double>(v) * 4.4482216152605; }
+    constexpr double operator""_lbf(unsigned long long v) { return static_cast<double>(v) * 4.4482216152605; }
+    constexpr double operator""_Nm(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_Nm(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_ftlb(long double v) { return static_cast<double>(v) * 1.3558179483314; }
+    constexpr double operator""_ftlb(unsigned long long v) { return static_cast<double>(v) * 1.3558179483314; }
+    constexpr double operator""_ftlbs(long double v) { return static_cast<double>(v) * 1.3558179483314; }
+    constexpr double operator""_ftlbs(unsigned long long v) { return static_cast<double>(v) * 1.3558179483314; }
+
+    // Electrical
+    constexpr double operator""_V(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_V(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_A(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_A(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_ohm(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_ohm(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_W(long double v) { return static_cast<double>(v); }
+    constexpr double operator""_W(unsigned long long v) { return static_cast<double>(v); }
+}
