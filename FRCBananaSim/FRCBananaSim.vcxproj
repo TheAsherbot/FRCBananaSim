@@ -71,20 +71,20 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(SolutionDir)Builds\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)Builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <OutDir>$(SolutionDir)Builds\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)Builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <OutDir>$(SolutionDir)Builds\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)Builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir)Builds\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)Builds\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Builds\Intermediates\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -93,13 +93,14 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)External;$(ProjectDir)External\glm;%(AdditionalIncludeDirectories);$(ProjectDir)External\glfw\include;$(ProjectDir)External\glad\include;$(ProjectDir)External\imgui\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glfw3.lib; opengl32.lib;Gdi32.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)External\glfw\bin;</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;Gdi32.lib;Jolt.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)External\glfw\bin\$(Configuration);$(SolutionDir)External\jolt\bin\$(Configuration)</AdditionalLibraryDirectories>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -114,13 +115,14 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)External;$(ProjectDir)External\glm;%(AdditionalIncludeDirectories);$(ProjectDir)External\glfw\include;$(ProjectDir)External\glad\include;$(ProjectDir)External\imgui\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glfw3.lib; opengl32.lib;Gdi32.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)External\glfw\bin;</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;Gdi32.lib;Jolt.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)External\glfw\bin\$(Configuration);$(SolutionDir)External\jolt\bin\$(Configuration)</AdditionalLibraryDirectories>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -133,13 +135,14 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)External;$(ProjectDir)External\glm;%(AdditionalIncludeDirectories);$(ProjectDir)External\glfw\include;$(ProjectDir)External\glad\include;$(ProjectDir)External\imgui\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glfw3.lib; opengl32.lib;Gdi32.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)External\glfw\bin;</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;Gdi32.lib;Jolt.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)External\glfw\bin\$(Configuration);$(SolutionDir)External\jolt\bin\$(Configuration)</AdditionalLibraryDirectories>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -154,27 +157,28 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)External;$(ProjectDir)External\glm;%(AdditionalIncludeDirectories);$(ProjectDir)External\glfw\include;$(ProjectDir)External\glad\include;$(ProjectDir)External\imgui\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glfw3.lib; opengl32.lib;Gdi32.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)External\glfw\bin;</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;Gdi32.lib;Jolt.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)External\glfw\bin\$(Configuration);$(SolutionDir)External\jolt\bin\$(Configuration)</AdditionalLibraryDirectories>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="External\glad\src\glad.c" />
-    <ClCompile Include="External\imgui\backend\imgui_impl_glfw.cpp" />
-    <ClCompile Include="External\imgui\backend\imgui_impl_opengl3.cpp" />
-    <ClCompile Include="External\imgui\imgui.cpp" />
-    <ClCompile Include="External\imgui\imgui_demo.cpp" />
-    <ClCompile Include="External\imgui\imgui_draw.cpp" />
-    <ClCompile Include="External\imgui\imgui_tables.cpp" />
-    <ClCompile Include="External\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="..\External\glad\src\glad.c" />
+    <ClCompile Include="..\External\imgui\include\imgui\backend\imgui_impl_glfw.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\backend\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui_demo.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui_widgets.cpp" />
     <ClCompile Include="Source\Core\ECS\Core\IComponentStorage.cpp" />
     <ClCompile Include="Source\Core\ECS\Core\Scene.cpp" />
     <ClCompile Include="Source\Core\ECS\Core\System.cpp" />
