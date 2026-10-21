@@ -90,7 +90,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;JPH_PROFILE_ENABLED;JPH_DEBUG_RENDERER;JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_OBJECT_STREAM;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include</AdditionalIncludeDirectories>
@@ -112,7 +112,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;JPH_PROFILE_ENABLED;JPH_DEBUG_RENDERER;JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_OBJECT_STREAM;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include</AdditionalIncludeDirectories>
@@ -132,7 +132,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;JPH_PROFILE_ENABLED;JPH_DEBUG_RENDERER;JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_OBJECT_STREAM;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include</AdditionalIncludeDirectories>
@@ -154,7 +154,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;JPH_PROFILE_ENABLED;JPH_DEBUG_RENDERER;JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_OBJECT_STREAM;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include</AdditionalIncludeDirectories>
@@ -185,6 +185,9 @@
     <ClCompile Include="Source\Core\ECS\Systems\TransformPropagationSystem.cpp" />
     <ClCompile Include="Source\Core\Engine.cpp" />
     <ClCompile Include="Source\Main.cpp" />
+    <ClCompile Include="Source\Physics\JoltContext.cpp" />
+    <ClCompile Include="Source\Physics\Systems\PhysicsDebugDrawSystem.cpp" />
+    <ClCompile Include="Source\Physics\Systems\PhysicsSystem.cpp" />
     <ClCompile Include="Source\Renderer\Camera.cpp" />
     <ClCompile Include="Source\Renderer\Input.cpp" />
     <ClCompile Include="Source\Renderer\Renderer.cpp" />
@@ -211,6 +214,12 @@
     <ClInclude Include="Source\Core\ECS\Core\System.h" />
     <ClInclude Include="Source\Core\ECS\Systems\TransformPropagationSystem.h" />
     <ClInclude Include="Source\Core\Engine.h" />
+    <ClInclude Include="Source\Physics\Components\ColliderComponent.h" />
+    <ClInclude Include="Source\Physics\Components\RigidBodyComponent.h" />
+    <ClInclude Include="Source\Physics\JoltContext.h" />
+    <ClInclude Include="Source\Physics\PhysicsConfig.h" />
+    <ClInclude Include="Source\Physics\Systems\PhysicsDebugDrawSystem.h" />
+    <ClInclude Include="Source\Physics\Systems\PhysicsSystem.h" />
     <ClInclude Include="Source\Renderer\Camera.h" />
     <ClInclude Include="Source\Renderer\Components\MeshComponent.h" />
     <ClInclude Include="Source\Renderer\Input.h" />

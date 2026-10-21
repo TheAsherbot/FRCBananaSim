@@ -28,7 +28,7 @@ namespace FRCBananaSim::Physics
         char buffer[1024];
         vsnprintf(buffer, sizeof(buffer), format, args);
         va_end(args);
-        SIM_LOG_DEBUG("[Jolt] %s", buffer);
+        SIM_LOG_DEBUG("[Jolt] " << buffer);
     }
 
 #ifdef JPH_ENABLE_ASSERTS

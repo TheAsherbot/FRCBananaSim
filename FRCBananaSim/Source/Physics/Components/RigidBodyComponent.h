@@ -33,7 +33,7 @@ namespace FRCBananaSim::Physics::Components
     struct RigidBodyComponent
     {
         JPH::BodyID bodyID;                                                       ///< Jolt handle. Default constructed as invalid.
-        BodyMotionType motionType{ BodyMotionType::Dynamic };                      ///< Motion behavior.
+        BodyMotionType motionType{ BodyMotionType::Dynamic };                     ///< Motion behavior.
         float mass{ 1.0f };                                                       ///< Mass in kilograms (used for Dynamic bodies).
         float friction{ 0.7f };                                                   ///< Coulomb friction coefficient.
         float restitution{ 0.1f };                                                ///< Coefficient of restitution (bounciness).

@@ -158,7 +158,7 @@ namespace FRCBananaSim::Utils
 
 #define SIM_LOG_IMPL(level, expr)                                            \
     do {                                                                     \
-        if (::FRCBananaSim::Utils::Log::IsLevelEnabled(level)) {            \
+        if (::FRCBananaSim::Utils::Log::IsLevelEnabled(level)) {             \
             std::ostringstream sim_log_stream;                               \
             sim_log_stream << expr;                                          \
             ::FRCBananaSim::Utils::Log::Write(level, __FILE__, __LINE__,     \

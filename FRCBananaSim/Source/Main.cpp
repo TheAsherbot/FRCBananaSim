@@ -1,6 +1,6 @@
 /**
  * @file Main.cpp
- * @brief Entry point and initial ECS, rendering, and telemetry integration demonstration.
+ * @brief Entry point and 200 Hz ECS physics integration demonstration with Jolt.
  */
 
 #include "Core/Engine.h"
@@ -8,6 +8,12 @@
 #include "Core/ECS/Components/TransformComponent.h"
 #include "Core/ECS/Components/HierarchyComponent.h"
 #include "Core/ECS/Systems/TransformPropagationSystem.h"
+#include "Physics/PhysicsConfig.h"
+#include "Physics/JoltContext.h"
+#include "Physics/Components/RigidBodyComponent.h"
+#include "Physics/Components/ColliderComponent.h"
+#include "Physics/Systems/PhysicsSystem.h"
+#include "Physics/Systems/PhysicsDebugDrawSystem.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/Components/MeshComponent.h"
 #include "Renderer/Systems/RenderSystem.h"
@@ -25,6 +31,7 @@
 
 #include <chrono>
 #include <memory>
+#include <vector>
 
 using FRCBananaSim::Core::Engine;
 using FRCBananaSim::Core::ECS::Scene;
@@ -32,6 +39,14 @@ using FRCBananaSim::Core::ECS::Entity;
 using FRCBananaSim::Core::ECS::Components::TransformComponent;
 using FRCBananaSim::Core::ECS::Components::WorldTransformComponent;
 using FRCBananaSim::Core::ECS::Systems::TransformPropagationSystem;
+using FRCBananaSim::Physics::PhysicsConfig;
+using FRCBananaSim::Physics::JoltContext;
+using FRCBananaSim::Physics::Components::RigidBodyComponent;
+using FRCBananaSim::Physics::Components::ColliderComponent;
+using FRCBananaSim::Physics::Components::BodyMotionType;
+using FRCBananaSim::Physics::Components::ColliderShape;
+using FRCBananaSim::Physics::Systems::PhysicsSystem;
+using FRCBananaSim::Physics::Systems::PhysicsDebugDrawSystem;
 using FRCBananaSim::Renderer::Renderer;
 using FRCBananaSim::Renderer::Components::MeshComponent;
 using FRCBananaSim::Renderer::Components::PrimitiveShape;
@@ -45,14 +60,14 @@ using FRCBananaSim::Utils::DebugDraw;
 
 int main()
 {
-    SIM_LOG_INFO("Starting FRC Banana Simulator - ECS & Renderer Test...");
+    SIM_LOG_INFO("Starting FRC Banana Simulator - Jolt Physics & ECS Integration...");
 
     // 1. Initialize Telemetry Logging
     TelemetryManager::Get().Initialize();
-    TelemetryManager::Get().SetMode(TelemetryMode::Minimal); // Start with HUD active
+    TelemetryManager::Get().SetMode(TelemetryMode::Minimal); // Start with HUD overlay active
 
     // 2. Initialize Renderer (OpenGL 3.3 Core Window)
-    Renderer renderer(1280, 720, "FRC Banana Simulator - ECS & Renderer Test");
+    Renderer renderer(1280, 720, "FRC Banana Simulator - 200 Hz Physics Demo");
     if (!renderer.IsValid())
     {
         SIM_LOG_FATAL("Failed to initialize Renderer subsystem");
@@ -60,67 +75,92 @@ int main()
         return -1;
     }
 
-    // 3. Telemetry Visualizers
+    // 3. Initialize Jolt Physics Subsystem
+    JoltContext joltContext;
+    if (!joltContext.Initialize())
+    {
+        SIM_LOG_FATAL("Failed to initialize Jolt Physics subsystem");
+        TelemetryManager::Get().Shutdown();
+        return -1;
+    }
+
+    
+    // 4. Telemetry Visualizers
     TelemetryOverlay telemetryOverlay;
     ProfilerWindow profilerWindow;
 
-    // 4. Instantiate ECS Scene and register core systems
+    // 5. Instantiate ECS Scene and register systems
     Scene scene;
+    scene.SetFixedDeltaTime(PhysicsConfig::fixedDeltaTime);
+
+    // Physics fixed-step execution
+    scene.AddSystem(std::make_unique<PhysicsSystem>(scene, joltContext));
+    // Transform propagation
     scene.AddSystem(std::make_unique<TransformPropagationSystem>(scene));
+    // Visual debug drawing of colliders
+    scene.AddSystem(std::make_unique<PhysicsDebugDrawSystem>(scene));
+    // Render presentation
     scene.AddSystem(std::make_unique<RenderSystem>(scene, renderer));
 
-    // 5. Create Scene Entities
+    // 6. Build Demonstration Scene
 
-    // Ground Plane Entity
+    // A. Static Ground Field Carpet
     Entity groundEntity = scene.CreateEntity();
     {
         TransformComponent transform;
         transform.position = glm::vec3(0.0f, -0.05f, 0.0f);
-        transform.scale = glm::vec3(30.0f, 1.0f, 30.0f);
+        transform.scale = glm::vec3(30.0f, 0.1f, 30.0f);
         scene.AddComponent(groundEntity, transform);
 
         MeshComponent mesh;
         mesh.shape = PrimitiveShape::Plane;
-        mesh.color = glm::vec3(0.25f, 0.35f, 0.25f); // Field carpet green
+        mesh.color = glm::vec3(0.25f, 0.35f, 0.25f); // Carpet green
         scene.AddComponent(groundEntity, mesh);
+
+        RigidBodyComponent rigidBody;
+        rigidBody.motionType = BodyMotionType::Static;
+        rigidBody.friction = 0.8f;
+        rigidBody.restitution = 0.05f;
+        scene.AddComponent(groundEntity, rigidBody);
+
+        ColliderComponent collider;
+        collider.shape = ColliderShape::Box;
+        collider.boxHalfExtents = glm::vec3(15.0f, 0.05f, 15.0f);
+        scene.AddComponent(groundEntity, collider);
     }
 
-    // Parent Entity (Robot Chassis)
-    Entity robotChassis = scene.CreateEntity();
+    // B. Dynamic Stacked Boxes (Simulating robot chassis / battery / weight)
+    for (int i = 0; i < 3; ++i)
     {
+        Entity boxEntity = scene.CreateEntity();
         TransformComponent transform;
-        transform.position = glm::vec3(0.0f, 0.5f, 0.0f);
-        transform.scale = glm::vec3(1.6f, 0.6f, 1.6f);
-        scene.AddComponent(robotChassis, transform);
+        transform.position = glm::vec3(0.0f, 1.0f + static_cast<float>(i) * 1.2f, 0.0f);
+        transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
+        scene.AddComponent(boxEntity, transform);
 
         MeshComponent mesh;
         mesh.shape = PrimitiveShape::Cube;
         mesh.color = glm::vec3(0.95f, 0.85f, 0.15f); // Banana yellow
-        scene.AddComponent(robotChassis, mesh);
+        scene.AddComponent(boxEntity, mesh);
+
+        RigidBodyComponent rigidBody;
+        rigidBody.motionType = BodyMotionType::Dynamic;
+        rigidBody.mass = 10.0f + static_cast<float>(i) * 5.0f; // 10 kg, 15 kg, 20 kg
+        rigidBody.friction = 0.7f;
+        rigidBody.restitution = 0.1f;
+        scene.AddComponent(boxEntity, rigidBody);
+
+        ColliderComponent collider;
+        collider.shape = ColliderShape::Box;
+        collider.boxHalfExtents = glm::vec3(0.5f, 0.5f, 0.5f);
+        scene.AddComponent(boxEntity, collider);
     }
 
-    // Child Entity (Turret / Intake mounted on Robot Chassis)
-    Entity turretEntity = scene.CreateEntity();
-    {
-        TransformComponent transform;
-        transform.position = glm::vec3(0.0f, 0.7f, 0.4f); // Local offset relative to chassis
-        transform.scale = glm::vec3(0.5f, 0.5f, 0.5f);
-        scene.AddComponent(turretEntity, transform);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Sphere;
-        mesh.color = glm::vec3(0.2f, 0.6f, 0.95f); // Accent blue
-        scene.AddComponent(turretEntity, mesh);
-
-        // Bind parent-child relationship in ECS scene graph
-        scene.SetParent(turretEntity, robotChassis);
-    }
-
-    // Static Field Obstacle / Game Piece
+    // C. Bouncing Dynamic Game Piece (High restitution sphere)
     Entity gamePiece = scene.CreateEntity();
     {
         TransformComponent transform;
-        transform.position = glm::vec3(3.5f, 0.4f, 2.0f);
+        transform.position = glm::vec3(2.5f, 4.0f, 1.0f);
         transform.scale = glm::vec3(0.8f, 0.8f, 0.8f);
         scene.AddComponent(gamePiece, transform);
 
@@ -128,21 +168,84 @@ int main()
         mesh.shape = PrimitiveShape::Sphere;
         mesh.color = glm::vec3(0.95f, 0.45f, 0.1f); // Note orange
         scene.AddComponent(gamePiece, mesh);
+
+        RigidBodyComponent rigidBody;
+        rigidBody.motionType = BodyMotionType::Dynamic;
+        rigidBody.mass = 0.25f; // 250 grams
+        rigidBody.friction = 0.6f;
+        rigidBody.restitution = 0.65f; // Bouncy
+        scene.AddComponent(gamePiece, rigidBody);
+
+        ColliderComponent collider;
+        collider.shape = ColliderShape::Sphere;
+        collider.radius = 0.4f;
+        scene.AddComponent(gamePiece, collider);
     }
 
-    // 6. Configure Engine Loop (60 Hz physics update, 144 max FPS)
-    Engine engine(60.0, 0);
+    // D. Rolling Dynamic Wheel/Cylinder
+    Entity wheelEntity = scene.CreateEntity();
+    {
+        TransformComponent transform;
+        transform.position = glm::vec3(-2.5f, 3.0f, 0.5f);
+        transform.scale = glm::vec3(0.8f, 0.8f, 0.8f);
+        scene.AddComponent(wheelEntity, transform);
 
-    float rotationAngleDegrees = 0.0f;
+        MeshComponent mesh;
+        mesh.shape = PrimitiveShape::Cube;
+        mesh.color = glm::vec3(0.2f, 0.6f, 0.95f); // Accent blue
+        scene.AddComponent(wheelEntity, mesh);
+
+        RigidBodyComponent rigidBody;
+        rigidBody.motionType = BodyMotionType::Dynamic;
+        rigidBody.mass = 1.5f;
+        rigidBody.friction = 0.85f;
+        rigidBody.restitution = 0.1f;
+        scene.AddComponent(wheelEntity, rigidBody);
+
+        ColliderComponent collider;
+        collider.shape = ColliderShape::Cylinder;
+        collider.radius = 0.4f;
+        collider.halfHeight = 0.2f;
+        scene.AddComponent(wheelEntity, collider);
+    }
+
+    // E. Kinematic Rotating Sweeper (Moves unstoppable by code control)
+    Entity kinematicSweeper = scene.CreateEntity();
+    {
+        TransformComponent transform;
+        transform.position = glm::vec3(0.0f, 0.5f, -3.0f);
+        transform.scale = glm::vec3(4.0f, 0.4f, 0.4f);
+        scene.AddComponent(kinematicSweeper, transform);
+
+        MeshComponent mesh;
+        mesh.shape = PrimitiveShape::Cube;
+        mesh.color = glm::vec3(0.8f, 0.2f, 0.2f); // Red sweeper bar
+        scene.AddComponent(kinematicSweeper, mesh);
+
+        RigidBodyComponent rigidBody;
+        rigidBody.motionType = BodyMotionType::Kinematic; // Kinematic!
+        scene.AddComponent(kinematicSweeper, rigidBody);
+
+        ColliderComponent collider;
+        collider.shape = ColliderShape::Box;
+        collider.boxHalfExtents = glm::vec3(2.0f, 0.2f, 0.2f);
+        scene.AddComponent(kinematicSweeper, collider);
+    }
+
+    // 7. Configure Engine Loop (200 Hz fixed physics, uncapped FPS)
+    Engine engine(200.0, 0.0);
+    float sweeperAngleDegrees = 0.0f;
     double accumulatedPhysicsMs = 0.0;
     double currentUpdateMs = 0.0;
+    int spawnedCount = 0;
 
-    // Fixed-step simulation hook (physics, kinematics)
+    // Fixed-step simulation hook (200 Hz)
     engine.SetFixedUpdateCallback([&](double fixedDeltaTime)
         {
             SIM_PROFILE_SCOPE("FixedUpdate");
             auto start = std::chrono::high_resolution_clock::now();
 
+            scene.SetFixedDeltaTime(fixedDeltaTime);
             scene.FixedUpdateSystems();
 
             auto end = std::chrono::high_resolution_clock::now();
@@ -155,7 +258,7 @@ int main()
             SIM_PROFILE_SCOPE("Update");
             auto start = std::chrono::high_resolution_clock::now();
 
-            // Window exit request check
+            // Window close request
             if (renderer.ShouldClose())
             {
                 engine.RequestExit();
@@ -192,22 +295,60 @@ int main()
                 TelemetryManager::Get().SetMode(next);
             }
 
-            // Animate robot rotation to test hierarchy transform propagation
-            rotationAngleDegrees += static_cast<float>(deltaTime) * 45.0f;
-            auto* chassisTransform = scene.GetComponent<TransformComponent>(robotChassis);
-            if (chassisTransform)
+            // SPACE: Interactively spawn a new dynamic falling object from above!
+            if (renderer.GetInput().WasKeyPressed(GLFW_KEY_SPACE))
             {
-                float radians = glm::radians(rotationAngleDegrees);
-                chassisTransform->rotation = glm::angleAxis(radians, glm::vec3(0.0f, 1.0f, 0.0f));
+                ++spawnedCount;
+                Entity dropEntity = scene.CreateEntity();
+
+                TransformComponent transform;
+                // Randomize horizontal offset slightly
+                float offsetX = static_cast<float>((spawnedCount % 5) - 2) * 0.6f;
+                float offsetZ = static_cast<float>((spawnedCount % 3) - 1) * 0.6f;
+                transform.position = glm::vec3(offsetX, 6.0f, offsetZ);
+                transform.scale = glm::vec3(0.6f, 0.6f, 0.6f);
+                scene.AddComponent(dropEntity, transform);
+
+                MeshComponent mesh;
+                mesh.shape = (spawnedCount % 2 == 0) ? PrimitiveShape::Cube : PrimitiveShape::Sphere;
+                mesh.color = glm::vec3(0.3f, 0.8f, 0.9f);
+                scene.AddComponent(dropEntity, mesh);
+
+                RigidBodyComponent rigidBody;
+                rigidBody.motionType = BodyMotionType::Dynamic;
+                rigidBody.mass = 2.0f;
+                rigidBody.friction = 0.7f;
+                rigidBody.restitution = 0.3f;
+                scene.AddComponent(dropEntity, rigidBody);
+
+                ColliderComponent collider;
+                if (mesh.shape == PrimitiveShape::Cube)
+                {
+                    collider.shape = ColliderShape::Box;
+                    collider.boxHalfExtents = glm::vec3(0.3f, 0.3f, 0.3f);
+                }
+                else
+                {
+                    collider.shape = ColliderShape::Sphere;
+                    collider.radius = 0.3f;
+                }
+                scene.AddComponent(dropEntity, collider);
+
+                SIM_LOG_INFO("Spawned dynamic physics body #%d at height Y=6.0m", spawnedCount);
             }
 
-            // Diagnostic visual overlays via DebugDraw
-            // Origin coordinate crosshairs
+            // Animate Kinematic Sweeper Bar (moves unstoppable via direct rotation)
+            sweeperAngleDegrees += static_cast<float>(deltaTime) * 60.0f;
+            auto* sweeperTransform = scene.GetComponent<TransformComponent>(kinematicSweeper);
+            if (sweeperTransform)
+            {
+                float radians = glm::radians(sweeperAngleDegrees);
+                sweeperTransform->rotation = glm::angleAxis(radians, glm::vec3(0.0f, 1.0f, 0.0f));
+            }
+
+            // Diagnostic origin crosshairs
             DebugDraw::Line(glm::vec3(-10.0f, 0.0f, 0.0f), glm::vec3(10.0f, 0.0f, 0.0f), glm::vec3(0.8f, 0.2f, 0.2f));
             DebugDraw::Line(glm::vec3(0.0f, 0.0f, -10.0f), glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(0.2f, 0.2f, 0.8f));
-
-            // Wireframe indicator over target piece
-            DebugDraw::Sphere(glm::vec3(3.5f, 0.4f, 2.0f), 0.5f, glm::vec3(1.0f, 1.0f, 0.0f), 16, true);
 
             // Advance all registered ECS logic systems
             scene.UpdateSystems();
@@ -217,14 +358,14 @@ int main()
         });
 
     // Presentation render callback
-    engine.SetRenderCallback([&](double /*alpha*/)
+    engine.SetRenderCallback([&](double alpha)
         {
             SIM_PROFILE_SCOPE("Render");
             auto start = std::chrono::high_resolution_clock::now();
 
             renderer.BeginFrame();
 
-            // RenderSystem draws active meshes and flushes DebugDraw geometry
+            // RenderSystem draws meshes and flushes wireframe debug lines
             scene.RenderUpdateSystems();
 
             // Render on-screen HUD (Mode 1 / Minimal)
@@ -241,7 +382,7 @@ int main()
             auto end = std::chrono::high_resolution_clock::now();
             double renderMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-            // Feed live subsystem metrics into the rolling frame history buffer
+            // Feed live subsystem metrics into telemetry rolling buffer
             FrameSummary summary;
             summary.physicsMs = accumulatedPhysicsMs;
             summary.updateMs = currentUpdateMs;
@@ -252,15 +393,16 @@ int main()
             accumulatedPhysicsMs = 0.0;
         });
 
-    // 7. Run the engine loop
+    // 8. Run the engine loop
     engine.Run();
 
-    // 8. Clean shutdown
+    // 9. Clean teardown in reverse order
     if (profilerWindow.IsOpen())
     {
         profilerWindow.Close(renderer.GetWindow());
     }
 
+    joltContext.Shutdown();
     TelemetryManager::Get().Shutdown();
 
     SIM_LOG_INFO("FRC Banana Simulator shut down cleanly.");
