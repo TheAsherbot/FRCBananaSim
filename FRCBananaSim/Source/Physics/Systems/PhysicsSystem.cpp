@@ -183,7 +183,7 @@ namespace FRCBananaSim::Physics::Systems
 
             if (!shape)
             {
-                SIM_LOG_ERROR("Failed to construct Jolt collision shape for Entity %u", entity.GetId());
+                SIM_LOG_ERROR("Failed to construct Jolt collision shape for Entity " << entity);
                 continue;
             }
 
@@ -245,7 +245,7 @@ namespace FRCBananaSim::Physics::Systems
             JPH::Body* body = bodyInterface.CreateBody(bodySettings);
             if (!body)
             {
-                SIM_LOG_ERROR("Failed to allocate Jolt body for Entity %u", entity.GetId());
+                SIM_LOG_ERROR("Failed to allocate Jolt body for Entity " << entity);
                 continue;
             }
 

@@ -129,7 +129,7 @@ namespace FRCBananaSim::Core::Units
         if (unit == "ohm" || unit == "ohms") return Ohms(value);
         if (unit == "w" || unit == "watt" || unit == "watts") return Watts(value);
 
-        SIM_LOG_WARN("Unrecognized unit string '%s'. Returning raw value.", unitString.c_str());
+        SIM_LOG_WARN("Unrecognized unit string '" << unitString.c_str() << "'. Returning raw value.");
         return value;
     }
 
@@ -185,7 +185,7 @@ namespace FRCBananaSim::Core::Units
         if (unit == "ohm") return siValue;
         if (unit == "w") return siValue;
 
-        SIM_LOG_WARN("Unrecognized unit string '%s' in FromSI. Returning SI value.", unitString.c_str());
+        SIM_LOG_WARN("Unrecognized unit string '" << unitString.c_str() << "' in FromSI. Returning SI value.");
         return siValue;
     }
 

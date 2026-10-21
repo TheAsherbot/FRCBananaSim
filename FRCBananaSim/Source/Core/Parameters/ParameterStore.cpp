@@ -13,7 +13,7 @@
 
 namespace FRCBananaSim::Core::Parameters
 {
-    using Units::Units;
+    using FRCBananaSim::Core::Units::Units;
 
     ParameterStore::ParameterStore()
     {}
@@ -28,7 +28,7 @@ namespace FRCBananaSim::Core::Parameters
         std::ifstream file(filepath);
         if (!file.is_open())
         {
-            SIM_LOG_ERROR("Failed to open parameter file '%s'", filepath.c_str());
+            SIM_LOG_ERROR("Failed to open parameter file '" << filepath.c_str() << "'");
             return false;
         }
 
@@ -49,7 +49,7 @@ namespace FRCBananaSim::Core::Parameters
         }
         catch (const nlohmann::json::exception& e)
         {
-            SIM_LOG_ERROR("JSON parse error in ParameterStore: %s", e.what());
+            SIM_LOG_ERROR("JSON parse error in ParameterStore: " << e.what());
             return false;
         }
     }
