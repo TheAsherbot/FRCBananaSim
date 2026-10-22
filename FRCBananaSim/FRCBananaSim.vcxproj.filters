@@ -117,16 +117,13 @@
     <ClCompile Include="Source\Core\Parameters\ParameterStore.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Tests\TestFramework.cpp">
+    <ClCompile Include="Source\Actuation\DCMotorModel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Tests\UnitsTest.cpp">
+    <ClCompile Include="Source\Actuation\BatteryModel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Tests\ParameterStoreTest.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Tests\PhysicsDeterminismTest.cpp">
+    <ClCompile Include="Source\Actuation\ServoModel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -239,19 +236,22 @@
     <ClInclude Include="Source\Core\Parameters\ParameterStore.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Tests\TestFramework.h">
+    <ClInclude Include="Source\Actuation\DCMotorModel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Tests\UnitsTest.h">
+    <ClInclude Include="Source\Actuation\BatteryModel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Tests\ParameterStoreTest.h">
+    <ClInclude Include="Source\Actuation\Components\MotorComponent.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Tests\PhysicsDeterminismTest.h">
+    <ClInclude Include="Source\Actuation\Components\BatteryComponent.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Tests\MainTests.cpp">
+    <ClInclude Include="Source\Actuation\ServoModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Actuation\Components\ServoComponent.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

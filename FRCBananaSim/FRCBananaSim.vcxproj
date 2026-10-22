@@ -179,6 +179,9 @@
     <ClCompile Include="..\External\imgui\include\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\External\imgui\include\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\External\imgui\include\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="Source\Actuation\BatteryModel.cpp" />
+    <ClCompile Include="Source\Actuation\DCMotorModel.cpp" />
+    <ClCompile Include="Source\Actuation\ServoModel.cpp" />
     <ClCompile Include="Source\Core\ECS\Core\IComponentStorage.cpp" />
     <ClCompile Include="Source\Core\ECS\Core\Scene.cpp" />
     <ClCompile Include="Source\Core\ECS\Core\System.cpp" />
@@ -207,6 +210,12 @@
     <ClCompile Include="Source\Utils\Log.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\Actuation\BatteryModel.h" />
+    <ClInclude Include="Source\Actuation\Components\BatteryComponent.h" />
+    <ClInclude Include="Source\Actuation\Components\MotorComponent.h" />
+    <ClInclude Include="Source\Actuation\Components\ServoComponent.h" />
+    <ClInclude Include="Source\Actuation\DCMotorModel.h" />
+    <ClInclude Include="Source\Actuation\ServoModel.h" />
     <ClInclude Include="Source\Core\ECS\Components\HierarchyComponent.h" />
     <ClInclude Include="Source\Core\ECS\Components\TransformComponent.h" />
     <ClInclude Include="Source\Core\ECS\Core\ComponentStorage.h" />

@@ -334,7 +334,7 @@ int main()
                 }
                 scene.AddComponent(dropEntity, collider);
 
-                SIM_LOG_INFO("Spawned dynamic physics body #%d at height Y=6.0m", spawnedCount);
+                SIM_LOG_INFO("Spawned dynamic physics body #" << spawnedCount << " at height Y = 6.0m" );
             }
 
             // Animate Kinematic Sweeper Bar (moves unstoppable via direct rotation)

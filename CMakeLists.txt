@@ -35,6 +35,9 @@ include_directories(
 
 # Common core simulation sources
 set(ENGINE_SOURCES
+    FRCBananaSim/Source/Actuation/ServoModel.cpp
+    FRCBananaSim/Source/Actuation/DCMotorModel.cpp
+    FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Core/Engine.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
@@ -92,6 +95,9 @@ target_link_libraries(FRCBananaSim PRIVATE
 enable_testing()
 
 set(TEST_SOURCES
+    FRCBananaSim/Source/Actuation/ServoModel.cpp
+    FRCBananaSim/Source/Actuation/DCMotorModel.cpp
+    FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
     FRCBananaSim/Source/Core/ECS/Core/System.cpp
@@ -110,6 +116,7 @@ set(TEST_SOURCES
     Tests/UnitsTest.cpp
     Tests/ParameterStoreTest.cpp
     Tests/PhysicsDeterminismTest.cpp
+    Tests/MotorBatteryTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -129,4 +136,5 @@ target_link_libraries(FRCBananaSim_Tests PRIVATE
 add_test(NAME UnitsTest COMMAND FRCBananaSim_Tests --units)
 add_test(NAME ParameterStoreTest COMMAND FRCBananaSim_Tests --params)
 add_test(NAME PhysicsDeterminismTest COMMAND FRCBananaSim_Tests --determinism)
+add_test(NAME MotorBatteryTest COMMAND FRCBananaSim_Tests --motor-battery)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

@@ -1,12 +1,13 @@
 /**
  * @file MainTests.cpp
- * @brief Entry point for headless CTest suites (Units, Parameters, Determinism).
+ * @brief Entry point for headless CTest suites (Units, Parameters, Determinism, Motor & Battery).
  */
 
 #include "TestFramework.h"
 #include "UnitsTest.h"
 #include "ParameterStoreTest.h"
 #include "PhysicsDeterminismTest.h"
+#include "MotorBatteryTest.h"
 
 #include <iostream>
 #include <string>
@@ -15,6 +16,7 @@ using FRCBananaSim::Tests::TestContext;
 using FRCBananaSim::Tests::RunUnitsTest;
 using FRCBananaSim::Tests::RunParameterStoreTest;
 using FRCBananaSim::Tests::RunPhysicsDeterminismTest;
+using FRCBananaSim::Tests::RunMotorBatteryTest;
 
 int main(int argc, char* argv[])
 {
@@ -43,6 +45,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunPhysicsDeterminismTest(ctx);
         }
+        else if (arg == "--motor-battery")
+        {
+            runAll = false;
+            RunMotorBatteryTest(ctx);
+        }
     }
 
     if (runAll)
@@ -50,6 +57,7 @@ int main(int argc, char* argv[])
         RunUnitsTest(ctx);
         RunParameterStoreTest(ctx);
         RunPhysicsDeterminismTest(ctx);
+        RunMotorBatteryTest(ctx);
     }
 
     std::cout << "======================================\n";

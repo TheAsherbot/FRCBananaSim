@@ -166,6 +166,8 @@ namespace FRCBananaSim::Core::Units::Literals
     constexpr double operator""_degps(unsigned long long v) { return static_cast<double>(v) * (3.14159265358979323846 / 180.0); }
     constexpr double operator""_rpm(long double v) { return static_cast<double>(v) * (2.0 * 3.14159265358979323846 / 60.0); }
     constexpr double operator""_rpm(unsigned long long v) { return static_cast<double>(v) * (2.0 * 3.14159265358979323846 / 60.0); }
+    constexpr double operator""_sp60deg(long double v) { return (static_cast<double>(v) > 1e-6) ? ((3.14159265358979323846 / 3.0) / static_cast<double>(v)) : 0.0; }
+    constexpr double operator""_sp60deg(unsigned long long v) { return (static_cast<double>(v) > 1e-6) ? ((3.14159265358979323846 / 3.0) / static_cast<double>(v)) : 0.0; }
 
     // Force & Torque
     constexpr double operator""_N(long double v) { return static_cast<double>(v); }
@@ -178,12 +180,20 @@ namespace FRCBananaSim::Core::Units::Literals
     constexpr double operator""_ftlb(unsigned long long v) { return static_cast<double>(v) * 1.3558179483314; }
     constexpr double operator""_ftlbs(long double v) { return static_cast<double>(v) * 1.3558179483314; }
     constexpr double operator""_ftlbs(unsigned long long v) { return static_cast<double>(v) * 1.3558179483314; }
+    constexpr double operator""_ozin(long double v) { return static_cast<double>(v) * 0.00706155183333; }
+    constexpr double operator""_ozin(unsigned long long v) { return static_cast<double>(v) * 0.00706155183333; }
+    constexpr double operator""_kgm(long double v) { return static_cast<double>(v) * 9.80665; }
+    constexpr double operator""_kgm(unsigned long long v) { return static_cast<double>(v) * 9.80665; }
+    constexpr double operator""_kgcm(long double v) { return static_cast<double>(v) * 0.0980665; }
+    constexpr double operator""_kgcm(unsigned long long v) { return static_cast<double>(v) * 0.0980665; }
 
     // Electrical
     constexpr double operator""_V(long double v) { return static_cast<double>(v); }
     constexpr double operator""_V(unsigned long long v) { return static_cast<double>(v); }
     constexpr double operator""_A(long double v) { return static_cast<double>(v); }
     constexpr double operator""_A(unsigned long long v) { return static_cast<double>(v); }
+    constexpr double operator""_mA(long double v) { return static_cast<double>(v) / 1000.0; }
+    constexpr double operator""_mA(unsigned long long v) { return static_cast<double>(v) / 1000.0; }
     constexpr double operator""_ohm(long double v) { return static_cast<double>(v); }
     constexpr double operator""_ohm(unsigned long long v) { return static_cast<double>(v); }
     constexpr double operator""_W(long double v) { return static_cast<double>(v); }
