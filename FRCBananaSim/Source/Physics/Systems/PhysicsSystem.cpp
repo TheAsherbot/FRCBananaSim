@@ -224,6 +224,8 @@ namespace FRCBananaSim::Physics::Systems
             bodySettings.mRestitution = rigidBody->restitution;
             bodySettings.mLinearDamping = rigidBody->linearDamping;
             bodySettings.mAngularDamping = rigidBody->angularDamping;
+            bodySettings.mMaxAngularVelocity = rigidBody->maxAngularVelocity;
+
             bodySettings.mIsSensor = rigidBody->isSensor;
 
             if (motionType == JPH::EMotionType::Dynamic)

@@ -135,8 +135,10 @@ namespace FRCBananaSim::Actuation
         double minAngle;
         double maxAngle;
         double targetAngle;
+        double profiledAngle;
         double commandedSpeed;
         double positionGainKp;
+        double velocityGainKd;
         double lastAppliedVoltage;
     };
 }

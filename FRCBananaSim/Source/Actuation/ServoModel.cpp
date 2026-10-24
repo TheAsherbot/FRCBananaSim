@@ -18,33 +18,38 @@ namespace FRCBananaSim::Actuation
     ServoModel::ServoModel(double nominalVoltage, double stallTorque, double secPer60Deg,
         double stallCurrent, double freeCurrent, double totalTravelRange, ServoMode mode)
         : motorModel(nominalVoltage, stallTorque, stallCurrent,
-            secPer60Deg * 1_sp60deg, freeCurrent,
+            (secPer60Deg > 1e-6) ? ((3.14159265358979323846 / 3.0) / secPer60Deg) : 0.0, freeCurrent,
             1.0e-5, 1.0, 1.0),
         mode(mode),
         supplyVoltage(nominalVoltage),
         minAngle(-totalTravelRange * 0.5),
         maxAngle(totalTravelRange * 0.5),
         targetAngle(0.0_rad),
+        profiledAngle(0.0_rad),
         commandedSpeed(0.0),
         positionGainKp(0.0),
+        velocityGainKd(0.0),
         lastAppliedVoltage(0.0_V)
     {
         // Internal proportional gain: reaches full motor voltage at ~8 degrees of tracking error
         constexpr double errorForFullVoltage = 8.0_deg;
         positionGainKp = nominalVoltage / errorForFullVoltage;
+
+        // Active derivative damping opposes velocity near target to eliminate ringing
+        double freeSpeed = motorModel.GetFreeSpeed();
+        velocityGainKd = (freeSpeed > 1e-6) ? (nominalVoltage / freeSpeed) : 0.1;
     }
 
     ServoModel ServoModel::GoBildaTorque(ServoMode mode)
     {
         // goBILDA 2000 Series Dual Mode Servo (Torque)
-        // 7.4V, 21.6 kg*cm, 0.20 s/60 deg, 3.8A stall, 300 deg range
+        // 6.0V, 21.6 kg*cm, 0.20 s/60 deg, 2.5A stall, 300 deg range
         return ServoModel(6.0_V, 21.6_kgcm, 0.20, 2.5_A, 160_mA, 300.0_deg, mode);
     }
 
     ServoModel ServoModel::GoBildaSpeed(ServoMode mode)
     {
         // goBILDA 2000 Series Dual Mode Servo (Speed)
-        // 7.4V, 13.5 kg*cm (1.32 Nm), 0.08 s/60 deg, 3.8A stall, 300 deg range
         return ServoModel(6.0_V, 9.3_kgcm, 0.09, 2.5_A, 200_mA, 300.0_deg, mode);
     }
 
@@ -119,14 +124,30 @@ namespace FRCBananaSim::Actuation
         }
         else
         {
-            // Positional mode: seek target angle with proportional drive and mechanical limits
-            double angleError = targetAngle - currentAngle;
-            double rawVoltage = angleError * positionGainKp;
+            // 1. Slew-rate limiter: advance the internal setpoint at the catalog speed
+            // If running at 4.8V on a 6.0V servo, max speed scales proportionally
+            double ratedFreeSpeed = motorModel.GetFreeSpeed() * (supplyVoltage / motorModel.GetNominalVoltage());
+            double maxStepThisTick = ratedFreeSpeed * deltaTime;
 
-            // Clamp voltage to actual operating supply rail (e.g. 4.8V or 5.0V)
-            lastAppliedVoltage = std::clamp(rawVoltage, -supplyVoltage, supplyVoltage);
+            double trajectoryError = targetAngle - profiledAngle;
+            profiledAngle += std::clamp(trajectoryError, -maxStepThisTick, maxStepThisTick);
 
-            // Inhibit drive if pushed against travel limit
+            // 2. Deadband: if within 0.3 degrees of target, cut motor voltage to prevent hunting/buzzing
+            double trackingError = profiledAngle - currentAngle;
+            constexpr double deadband = 0.3_deg;
+
+            if (std::abs(trackingError) < deadband)
+            {
+                lastAppliedVoltage = 0.0_V;
+            }
+            else
+            {
+                // Active PD drive tracking the moving profile
+                double rawVoltage = (trackingError * positionGainKp) - (currentAngularVelocity * velocityGainKd);
+                lastAppliedVoltage = std::clamp(rawVoltage, -supplyVoltage, supplyVoltage);
+            }
+
+            // Inhibit drive if pushed against travel limits
             if (currentAngle <= minAngle && lastAppliedVoltage < 0.0)
             {
                 lastAppliedVoltage = 0.0_V;
@@ -137,12 +158,18 @@ namespace FRCBananaSim::Actuation
             }
         }
 
-        return motorModel.CalculateTorque(lastAppliedVoltage, currentAngularVelocity, externalInertia, deltaTime);
+        // Available stall torque scaled by actual supply voltage rail
+        double availableTorque = motorModel.GetStallTorque() * (supplyVoltage / motorModel.GetNominalVoltage());
+        double rawTorque = motorModel.CalculateTorque(lastAppliedVoltage, currentAngularVelocity, externalInertia, deltaTime);
+
+        return std::clamp(rawTorque, -availableTorque, availableTorque);
     }
 
     double ServoModel::CalculateCurrent(double currentAngularVelocity) const
     {
-        return std::abs(motorModel.CalculateCurrent(lastAppliedVoltage, currentAngularVelocity));
+        double rawCurrent = std::abs(motorModel.CalculateCurrent(lastAppliedVoltage, currentAngularVelocity));
+        // Physical servos are powered via internal H-bridges limited to stall current
+        return std::min(rawCurrent, motorModel.GetStallCurrent());
     }
 
     ServoMode ServoModel::GetMode() const { return mode; }

@@ -108,7 +108,9 @@ namespace FRCBananaSim::Actuation
         double denominator = 1.0 + ((electricalDamping * deltaTime) / effectiveInertia);
         double outputTorque = (commandedStallTorque - (electricalDamping * currentAngularVelocity)) / denominator;
 
-        return outputTorque;
+        // Physical clamp: output torque cannot exceed the gearbox mechanical stall rating
+        double maxOutputStall = gearRatio * gearboxEfficiency * stallTorque;
+        return std::clamp(outputTorque, -maxOutputStall, maxOutputStall);
     }
 
     double DCMotorModel::CalculateCurrent(double appliedVoltage, double currentAngularVelocity) const
@@ -117,7 +119,8 @@ namespace FRCBananaSim::Actuation
         double backEmf = backEmfConstantKe * motorAngularVelocity;
         double armatureCurrent = (appliedVoltage - backEmf) / resistance;
 
-        return armatureCurrent;
+        // Clamp current to physical stall limit to prevent unbounded calculation under extreme backdrive
+        return std::clamp(armatureCurrent, -stallCurrent, stallCurrent);
     }
 
     double DCMotorModel::GetReflectedInertia(double externalInertia) const

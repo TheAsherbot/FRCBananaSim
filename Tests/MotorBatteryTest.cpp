@@ -208,11 +208,12 @@ namespace FRCBananaSim::Tests
         // 7. Servo Datasheet Conversions & Tracking
         // -------------------------------------------------------------
         {
-            // goBILDA Torque Preset
+            // goBILDA Torque Preset: 0.20 s/60 deg -> (pi / 3) / 0.20 = 5.236 rad/s (~50 RPM)
             ServoModel servo = ServoModel::GoBildaTorque();
             TEST_EXPECT_NEAR(ctx, servo.GetNominalVoltage(), 6.0_V, tolerance);
             TEST_EXPECT_NEAR(ctx, servo.GetStallTorque(), 21.6_kgcm, 0.01);
-            TEST_EXPECT_NEAR(ctx, servo.GetStallCurrent(),2.5_A, tolerance);
+            TEST_EXPECT_NEAR(ctx, servo.GetStallCurrent(), 2.5_A, tolerance);
+            TEST_EXPECT_NEAR(ctx, servo.GetFreeSpeed(), 5.2359877_radps, 0.01);
 
             // Positional target setting: normalized 0.5 = center (0 rad)
             servo.SetTargetNormalized(0.5);
@@ -220,11 +221,19 @@ namespace FRCBananaSim::Tests
 
             // Target at +45 degrees from 0 rad produces positive voltage & torque
             servo.SetTargetAngle(45.0_deg);
-            double torque = servo.CalculateTorque(0.0_rad, 0.0_radps, 0.0001, 0.005);
+
+            // Step the locked rotor (currentAngle = 0 rad) for 10 ticks (50 ms) so the internal
+            // trajectory profile advances past the 8-degree full-voltage saturation threshold
+            double torque = 0.0;
+            for (int tick = 0; tick < 10; ++tick)
+            {
+                torque = servo.CalculateTorque(0.0_rad, 0.0_radps, 0.0001, 0.005);
+            }
+
             TEST_EXPECT_TRUE(ctx, torque > 0.0);
             TEST_EXPECT_NEAR(ctx, servo.GetLastAppliedVoltage(), 6.0_V, tolerance); // saturated to full volts
 
-            // Stall current at stall with full voltage
+            // Stall current under locked-rotor condition with full voltage
             double current = servo.CalculateCurrent(0.0_radps);
             TEST_EXPECT_NEAR(ctx, current, 2.5_A, 0.05);
         }

@@ -39,6 +39,7 @@ namespace FRCBananaSim::Physics::Components
         float restitution{ 0.1f };                                                ///< Coefficient of restitution (bounciness).
         float linearDamping{ PhysicsConfig::defaultLinearDamping };               ///< Linear drag (strictly 0.0 per project rules).
         float angularDamping{ PhysicsConfig::defaultAngularDamping };             ///< Angular drag (strictly 0.0 per project rules).
+        float maxAngularVelocity{ 2000.0f };                                      ///< Max angular velocity in rad/s (~19,000 RPM).
         glm::vec3 linearVelocity{ 0.0f, 0.0f, 0.0f };                             ///< Current linear velocity in m/s.
         glm::vec3 angularVelocity{ 0.0f, 0.0f, 0.0f };                            ///< Current rotational velocity in rad/s.
         bool isSensor{ false };                                                   ///< If true, triggers contact events without impulse.

@@ -235,6 +235,7 @@ namespace FRCBananaSim::Physics::Systems
 
     void JointSystem::UpdateMotors()
     {
+        JPH::BodyInterface& bodyInterface = joltContext.GetBodyInterface();
         auto entities = scene.Query<JointComponent>();
 
         for (auto entity : entities)
@@ -243,6 +244,16 @@ namespace FRCBananaSim::Physics::Systems
             if (!joint || !joint->isCreated || !joint->constraint)
             {
                 continue;
+            }
+
+            // Wake up child body if motor is active so Jolt evaluates the drive
+            if (joint->motorMode != JointMotorMode::Off)
+            {
+                auto* childRigidBody = scene.GetComponent<RigidBodyComponent>(joint->childEntity);
+                if (childRigidBody && childRigidBody->isCreated && !childRigidBody->bodyID.IsInvalid())
+                {
+                    bodyInterface.ActivateBody(childRigidBody->bodyID);
+                }
             }
 
             auto* hinge = static_cast<JPH::HingeConstraint*>(joint->constraint.GetPtr());
