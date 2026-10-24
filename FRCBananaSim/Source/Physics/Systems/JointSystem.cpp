@@ -1,0 +1,330 @@
+/**
+ * @file JointSystem.cpp
+ * @brief Implementation of physical joint creation, motor synchronization, and deflection measurement.
+ */
+
+#include "Physics/Systems/JointSystem.h"
+#include "Physics/Components/JointComponent.h"
+#include "Physics/Components/RigidBodyComponent.h"
+#include "Actuation/Components/MotorComponent.h"
+#include "Core/ECS/Core/Scene.h"
+#include "Telemetry/TelemetryMacros.h"
+#include "Utils/Log.h"
+
+#include <Jolt/Physics/Body/BodyLockMulti.h>
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
+#include <glm/geometric.hpp>
+
+namespace FRCBananaSim::Physics::Components
+{
+    void JointComponent::SetWorldSpace(const glm::vec3& worldPivot, const glm::vec3& worldHingeAxis)
+    {
+        constraintSpace = JointConstraintSpace::WorldSpace;
+        parentAnchor = worldPivot;
+        childAnchor = worldPivot;
+        parentAxis = glm::normalize(worldHingeAxis);
+        childAxis = parentAxis;
+
+        // Compute stable perpendicular normal axis
+        if (std::abs(parentAxis.y) < 0.9f)
+        {
+            parentNormal = glm::normalize(glm::cross(parentAxis, glm::vec3(0.0f, 1.0f, 0.0f)));
+        }
+        else
+        {
+            parentNormal = glm::normalize(glm::cross(parentAxis, glm::vec3(1.0f, 0.0f, 0.0f)));
+        }
+        childNormal = parentNormal;
+    }
+
+    void JointComponent::SetLocalSpace(const glm::vec3& localPoint1, const glm::vec3& localAxis1,
+        const glm::vec3& localPoint2, const glm::vec3& localAxis2)
+    {
+        constraintSpace = JointConstraintSpace::LocalToBodyCOM;
+        parentAnchor = localPoint1;
+        childAnchor = localPoint2;
+        parentAxis = glm::normalize(localAxis1);
+        childAxis = glm::normalize(localAxis2);
+
+        if (std::abs(parentAxis.y) < 0.9f)
+        {
+            parentNormal = glm::normalize(glm::cross(parentAxis, glm::vec3(0.0f, 1.0f, 0.0f)));
+        }
+        else
+        {
+            parentNormal = glm::normalize(glm::cross(parentAxis, glm::vec3(1.0f, 0.0f, 0.0f)));
+        }
+
+        if (std::abs(childAxis.y) < 0.9f)
+        {
+            childNormal = glm::normalize(glm::cross(childAxis, glm::vec3(0.0f, 1.0f, 0.0f)));
+        }
+        else
+        {
+            childNormal = glm::normalize(glm::cross(childAxis, glm::vec3(1.0f, 0.0f, 0.0f)));
+        }
+    }
+}
+
+namespace FRCBananaSim::Physics::Systems
+{
+    using Components::JointComponent;
+    using Components::JointType;
+    using Components::JointMotorMode;
+    using Components::JointConstraintSpace;
+    using Components::RigidBodyComponent;
+    using Actuation::Components::MotorComponent;
+    using Core::ECS::Core::invalidEntity;
+
+    JointSystem::JointSystem(Core::ECS::Core::Scene& scene, JoltContext& context)
+        : ISystem(scene),
+        joltContext(context)
+    {}
+
+    JointSystem::~JointSystem()
+    {
+        if (!joltContext.IsInitialized())
+        {
+            return;
+        }
+
+        JPH::PhysicsSystem& physicsSystem = joltContext.GetPhysicsSystem();
+        for (auto& constraint : createdConstraints)
+        {
+            if (constraint)
+            {
+                physicsSystem.RemoveConstraint(constraint);
+            }
+        }
+        createdConstraints.clear();
+    }
+
+    void JointSystem::FixedUpdate(double dt)
+    {
+        SIM_PROFILE_SCOPE("JointSystem::FixedUpdate");
+
+        if (!joltContext.IsInitialized())
+        {
+            return;
+        }
+
+        // 1. Instantiate any pending joints whose bodies are allocated
+        CreatePendingJoints();
+
+        // 2. Synchronize motor targets and torque limits
+        UpdateMotors();
+
+        // 3. Read back live angle, angular velocity, and deflection telemetry
+        ReadbackTelemetry();
+    }
+
+    void JointSystem::DestroyJoint(Core::ECS::Core::Entity entity)
+    {
+        auto* joint = scene.GetComponent<JointComponent>(entity);
+        if (!joint || !joint->isCreated || !joint->constraint)
+        {
+            return;
+        }
+
+        if (joltContext.IsInitialized())
+        {
+            joltContext.GetPhysicsSystem().RemoveConstraint(joint->constraint);
+        }
+
+        joint->constraint = nullptr;
+        joint->isCreated = false;
+    }
+
+    void JointSystem::CreatePendingJoints()
+    {
+        JPH::PhysicsSystem& physicsSystem = joltContext.GetPhysicsSystem();
+        auto entities = scene.Query<JointComponent>();
+
+        for (auto entity : entities)
+        {
+            auto* joint = scene.GetComponent<JointComponent>(entity);
+            if (!joint || joint->isCreated)
+            {
+                continue;
+            }
+
+            // Ensure child entity has a valid, created rigid body
+            auto* childRigidBody = scene.GetComponent<RigidBodyComponent>(joint->childEntity);
+            if (!childRigidBody || !childRigidBody->isCreated || childRigidBody->bodyID.IsInvalid())
+            {
+                continue;
+            }
+
+            // Check parent entity: can be an existing rigid body, or invalidEntity for static world
+            JPH::BodyID parentBodyID;
+            if (joint->parentEntity != invalidEntity)
+            {
+                auto* parentRigidBody = scene.GetComponent<RigidBodyComponent>(joint->parentEntity);
+                if (!parentRigidBody || !parentRigidBody->isCreated || parentRigidBody->bodyID.IsInvalid())
+                {
+                    continue; // Wait until parent body is initialized
+                }
+                parentBodyID = parentRigidBody->bodyID;
+            }
+
+            // Setup Hinge Constraint Settings
+            JPH::HingeConstraintSettings settings;
+            settings.mSpace = (joint->constraintSpace == JointConstraintSpace::WorldSpace)
+                ? JPH::EConstraintSpace::WorldSpace
+                : JPH::EConstraintSpace::LocalToBodyCOM;
+
+            settings.mPoint1 = JPH::RVec3(joint->parentAnchor.x, joint->parentAnchor.y, joint->parentAnchor.z);
+            settings.mPoint2 = JPH::RVec3(joint->childAnchor.x, joint->childAnchor.y, joint->childAnchor.z);
+            settings.mHingeAxis1 = JPH::Vec3(joint->parentAxis.x, joint->parentAxis.y, joint->parentAxis.z);
+            settings.mHingeAxis2 = JPH::Vec3(joint->childAxis.x, joint->childAxis.y, joint->childAxis.z);
+            settings.mNormalAxis1 = JPH::Vec3(joint->parentNormal.x, joint->parentNormal.y, joint->parentNormal.z);
+            settings.mNormalAxis2 = JPH::Vec3(joint->childNormal.x, joint->childNormal.y, joint->childNormal.z);
+
+            if (joint->hasLimits)
+            {
+                settings.mLimitsMin = joint->minLimit;
+                settings.mLimitsMax = joint->maxLimit;
+            }
+            else
+            {
+                settings.mLimitsMin = -JPH::JPH_PI;
+                settings.mLimitsMax = JPH::JPH_PI;
+            }
+
+            settings.mMaxFrictionTorque = joint->maxFrictionTorque;
+            settings.mMotorSettings.mSpringSettings.mFrequency = joint->springFrequency;
+            settings.mMotorSettings.mSpringSettings.mDamping = joint->springDamping;
+            settings.mMotorSettings.SetTorqueLimit(joint->maxMotorTorque);
+
+            // Create constraint under lock
+            JPH::TwoBodyConstraint* constraint = nullptr;
+            if (parentBodyID.IsInvalid())
+            {
+                // Attach child body directly to static world
+                JPH::BodyLockWrite lock(physicsSystem.GetBodyLockInterface(), childRigidBody->bodyID);
+                if (lock.Succeeded())
+                {
+                    constraint = settings.Create(JPH::Body::sFixedToWorld, lock.GetBody());
+                }
+            }
+            else
+            {
+                // Attach parent and child bodies
+                const JPH::BodyID ids[2] = { parentBodyID, childRigidBody->bodyID };
+                JPH::BodyLockMultiWrite lock(physicsSystem.GetBodyLockInterface(), ids, 2);
+                JPH::Body* body1 = lock.GetBody(0);
+                JPH::Body* body2 = lock.GetBody(1);
+                if (body1 && body2)
+                {
+                    constraint = settings.Create(*body1, *body2);
+                }
+            }
+
+            if (!constraint)
+            {
+                SIM_LOG_ERROR("Failed to allocate Jolt HingeConstraint for Entity " << entity);
+                continue;
+            }
+
+            physicsSystem.AddConstraint(constraint);
+            joint->constraint = constraint;
+            joint->isCreated = true;
+            createdConstraints.push_back(constraint);
+        }
+    }
+
+    void JointSystem::UpdateMotors()
+    {
+        auto entities = scene.Query<JointComponent>();
+
+        for (auto entity : entities)
+        {
+            auto* joint = scene.GetComponent<JointComponent>(entity);
+            if (!joint || !joint->isCreated || !joint->constraint)
+            {
+                continue;
+            }
+
+            auto* hinge = static_cast<JPH::HingeConstraint*>(joint->constraint.GetPtr());
+
+            // If an Actuation::MotorComponent exists on the same entity, sync torque limits
+            auto* motorComp = scene.GetComponent<MotorComponent>(entity);
+            if (motorComp)
+            {
+                joint->maxMotorTorque = static_cast<float>(std::abs(motorComp->outputTorque));
+            }
+
+            switch (joint->motorMode)
+            {
+            case JointMotorMode::Off:
+                hinge->SetMotorState(JPH::EMotorState::Off);
+                break;
+
+            case JointMotorMode::Velocity:
+                hinge->SetMotorState(JPH::EMotorState::Velocity);
+                hinge->SetTargetAngularVelocity(joint->targetVelocity);
+                hinge->GetMotorSettings().SetTorqueLimit(joint->maxMotorTorque);
+                break;
+
+            case JointMotorMode::Position:
+                hinge->SetMotorState(JPH::EMotorState::Position);
+                hinge->SetTargetAngle(joint->targetAngle);
+                hinge->GetMotorSettings().SetTorqueLimit(joint->maxMotorTorque);
+                hinge->GetMotorSettings().mSpringSettings.mFrequency = joint->springFrequency;
+                hinge->GetMotorSettings().mSpringSettings.mDamping = joint->springDamping;
+                break;
+            }
+        }
+    }
+
+    void JointSystem::ReadbackTelemetry()
+    {
+        JPH::BodyInterface& bodyInterface = joltContext.GetBodyInterface();
+        auto entities = scene.Query<JointComponent>();
+
+        for (auto entity : entities)
+        {
+            auto* joint = scene.GetComponent<JointComponent>(entity);
+            if (!joint || !joint->isCreated || !joint->constraint)
+            {
+                continue;
+            }
+
+            auto* hinge = static_cast<JPH::HingeConstraint*>(joint->constraint.GetPtr());
+
+            // Relative rotation angle and velocity
+            joint->currentAngle = hinge->GetCurrentAngle();
+
+            auto* childRigidBody = scene.GetComponent<RigidBodyComponent>(joint->childEntity);
+            if (!childRigidBody || childRigidBody->bodyID.IsInvalid())
+            {
+                continue;
+            }
+
+            // Deflection calculation: distance between anchor 1 and anchor 2 in world coordinates
+            JPH::RMat44 com1 = JPH::RMat44::sIdentity();
+            if (joint->parentEntity != invalidEntity)
+            {
+                auto* parentRigidBody = scene.GetComponent<RigidBodyComponent>(joint->parentEntity);
+                if (parentRigidBody && !parentRigidBody->bodyID.IsInvalid())
+                {
+                    com1 = bodyInterface.GetCenterOfMassTransform(parentRigidBody->bodyID);
+                }
+            }
+
+            JPH::RMat44 com2 = bodyInterface.GetCenterOfMassTransform(childRigidBody->bodyID);
+
+            JPH::RVec3 worldPoint1 = com1 * hinge->GetLocalSpacePoint1();
+            JPH::RVec3 worldPoint2 = com2 * hinge->GetLocalSpacePoint2();
+
+            joint->currentDeflection = static_cast<float>((worldPoint1 - worldPoint2).Length());
+
+            // If an Actuation::MotorComponent exists on the entity, forward kinematic readback
+            auto* motorComp = scene.GetComponent<MotorComponent>(entity);
+            if (motorComp)
+            {
+                motorComp->angularPosition = joint->currentAngle;
+            }
+        }
+    }
+}

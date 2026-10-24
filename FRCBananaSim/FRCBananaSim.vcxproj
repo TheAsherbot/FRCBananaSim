@@ -191,6 +191,7 @@
     <ClCompile Include="Source\Core\Units\Units.cpp" />
     <ClCompile Include="Source\Main.cpp" />
     <ClCompile Include="Source\Physics\JoltContext.cpp" />
+    <ClCompile Include="Source\Physics\Systems\JointSystem.cpp" />
     <ClCompile Include="Source\Physics\Systems\PhysicsDebugDrawSystem.cpp" />
     <ClCompile Include="Source\Physics\Systems\PhysicsSystem.cpp" />
     <ClCompile Include="Source\Renderer\Camera.cpp" />
@@ -229,9 +230,11 @@
     <ClInclude Include="Source\Core\Parameters\ParameterValue.h" />
     <ClInclude Include="Source\Core\Units\Units.h" />
     <ClInclude Include="Source\Physics\Components\ColliderComponent.h" />
+    <ClInclude Include="Source\Physics\Components\JointComponent.h" />
     <ClInclude Include="Source\Physics\Components\RigidBodyComponent.h" />
     <ClInclude Include="Source\Physics\JoltContext.h" />
     <ClInclude Include="Source\Physics\PhysicsConfig.h" />
+    <ClInclude Include="Source\Physics\Systems\JointSystem.h" />
     <ClInclude Include="Source\Physics\Systems\PhysicsDebugDrawSystem.h" />
     <ClInclude Include="Source\Physics\Systems\PhysicsSystem.h" />
     <ClInclude Include="Source\Renderer\Camera.h" />

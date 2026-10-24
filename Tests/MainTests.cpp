@@ -1,6 +1,6 @@
 /**
  * @file MainTests.cpp
- * @brief Entry point for headless CTest suites (Units, Parameters, Determinism, Motor & Battery).
+ * @brief Entry point for headless CTest suites (Units, Parameters, Determinism, Motor & Battery, Joint Stability).
  */
 
 #include "TestFramework.h"
@@ -8,6 +8,7 @@
 #include "ParameterStoreTest.h"
 #include "PhysicsDeterminismTest.h"
 #include "MotorBatteryTest.h"
+#include "JointStabilityTest.h"
 
 #include <iostream>
 #include <string>
@@ -17,6 +18,7 @@ using FRCBananaSim::Tests::RunUnitsTest;
 using FRCBananaSim::Tests::RunParameterStoreTest;
 using FRCBananaSim::Tests::RunPhysicsDeterminismTest;
 using FRCBananaSim::Tests::RunMotorBatteryTest;
+using FRCBananaSim::Tests::RunJointStabilityTest;
 
 int main(int argc, char* argv[])
 {
@@ -50,6 +52,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunMotorBatteryTest(ctx);
         }
+        else if (arg == "--joint-stability")
+        {
+            runAll = false;
+            RunJointStabilityTest(ctx);
+        }
     }
 
     if (runAll)
@@ -58,6 +65,7 @@ int main(int argc, char* argv[])
         RunParameterStoreTest(ctx);
         RunPhysicsDeterminismTest(ctx);
         RunMotorBatteryTest(ctx);
+        RunJointStabilityTest(ctx);
     }
 
     std::cout << "======================================\n";

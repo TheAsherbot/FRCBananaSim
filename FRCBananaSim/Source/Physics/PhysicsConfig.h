@@ -47,7 +47,7 @@ namespace FRCBananaSim::Physics
         static constexpr float defaultLinearDamping = 0.0f;             ///< Zero artificial linear drag.
         static constexpr float defaultAngularDamping = 0.0f;            ///< Zero artificial rotational drag.
         static constexpr uint32_t defaultVelocitySteps = 10;            ///< Solver velocity iterations.
-        static constexpr uint32_t defaultPositionSteps = 2;             ///< Solver position/relaxation iterations.
+        static constexpr uint32_t defaultPositionSteps = 4;             ///< Solver position/relaxation iterations.
         static constexpr float defaultBaumgarte = 0.2f;                 ///< Constraint stabilization factor.
         static constexpr uint32_t maxBodies = 10240;                    ///< Maximum rigid bodies supported.
         static constexpr uint32_t numBodyMutexes = 0;                   ///< 0 lets Jolt determine mutex count.

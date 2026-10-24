@@ -35,9 +35,9 @@ include_directories(
 
 # Common core simulation sources
 set(ENGINE_SOURCES
-    FRCBananaSim/Source/Actuation/ServoModel.cpp
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
+    FRCBananaSim/Source/Actuation/ServoModel.cpp
     FRCBananaSim/Source/Core/Engine.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
@@ -48,6 +48,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Physics/JoltContext.cpp
     FRCBananaSim/Source/Physics/Systems/PhysicsSystem.cpp
     FRCBananaSim/Source/Physics/Systems/PhysicsDebugDrawSystem.cpp
+    FRCBananaSim/Source/Physics/Systems/JointSystem.cpp
     FRCBananaSim/Source/Renderer/Camera.cpp
     FRCBananaSim/Source/Renderer/Input.cpp
     FRCBananaSim/Source/Renderer/Renderer.cpp
@@ -95,9 +96,9 @@ target_link_libraries(FRCBananaSim PRIVATE
 enable_testing()
 
 set(TEST_SOURCES
-    FRCBananaSim/Source/Actuation/ServoModel.cpp
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
+    FRCBananaSim/Source/Actuation/ServoModel.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
     FRCBananaSim/Source/Core/ECS/Core/System.cpp
@@ -106,6 +107,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Core/Parameters/ParameterStore.cpp
     FRCBananaSim/Source/Physics/JoltContext.cpp
     FRCBananaSim/Source/Physics/Systems/PhysicsSystem.cpp
+    FRCBananaSim/Source/Physics/Systems/JointSystem.cpp
     FRCBananaSim/Source/Telemetry/MemoryTracker.cpp
     FRCBananaSim/Source/Telemetry/TelemetryManager.cpp
     FRCBananaSim/Source/Telemetry/TelemetryTimer.cpp
@@ -117,6 +119,7 @@ set(TEST_SOURCES
     Tests/ParameterStoreTest.cpp
     Tests/PhysicsDeterminismTest.cpp
     Tests/MotorBatteryTest.cpp
+    Tests/JointStabilityTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -137,4 +140,5 @@ add_test(NAME UnitsTest COMMAND FRCBananaSim_Tests --units)
 add_test(NAME ParameterStoreTest COMMAND FRCBananaSim_Tests --params)
 add_test(NAME PhysicsDeterminismTest COMMAND FRCBananaSim_Tests --determinism)
 add_test(NAME MotorBatteryTest COMMAND FRCBananaSim_Tests --motor-battery)
+add_test(NAME JointStabilityTest COMMAND FRCBananaSim_Tests --joint-stability)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)
