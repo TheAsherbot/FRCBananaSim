@@ -10,7 +10,7 @@
 #include <array>
 #include <glm/vec2.hpp>
 
-namespace FRCBananaSim::Drivetrain::Components
+namespace FRCBananaSim::Robot::Drivetrain::Components
 {
     using namespace Core::Units::Literals;
 

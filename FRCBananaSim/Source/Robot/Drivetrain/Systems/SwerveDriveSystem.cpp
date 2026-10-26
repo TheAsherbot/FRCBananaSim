@@ -3,9 +3,9 @@
  * @brief Implementation of the physical swerve drive simulation system.
  */
 
-#include "Drivetrain/Systems/SwerveDriveSystem.h"
-#include "Drivetrain/Components/SwerveChassisComponent.h"
-#include "Drivetrain/Components/SwerveModuleComponent.h"
+#include "Robot/Drivetrain/Systems/SwerveDriveSystem.h"
+#include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
+#include "Robot/Drivetrain/Components/SwerveModuleComponent.h"
 #include "Actuation/Components/BatteryComponent.h"
 #include "Physics/Components/JointComponent.h"
 #include "Physics/Components/RigidBodyComponent.h"
@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace FRCBananaSim::Drivetrain::System
+namespace FRCBananaSim::Robot::Drivetrain::System
 {
     using namespace Control;
     using namespace Actuation;
@@ -116,6 +116,8 @@ namespace FRCBananaSim::Drivetrain::System
                 if (steerJoint)
                 {
                     const auto& steerCmd = currentInputs.motorCommands[i];
+                    constexpr double steerHousingInertia = 0.00036; // 0.45 kg, 0.04m radius cylinder
+                    double effectiveSteerInertia = module->steerMotor.GetReflectedInertia(steerHousingInertia);
 
                     if (currentInputs.robotEnabled && !isBrownedOut && steerCmd.mode != MotorControlMode::Disabled)
                     {
@@ -146,7 +148,6 @@ namespace FRCBananaSim::Drivetrain::System
                         double appliedVolts = batteryModel.ApplySupplyCurrentLimit(commandedVolts,
                             module->steerMotor.CalculateCurrent(commandedVolts, steerJoint->currentVelocity), terminalVoltage);
 
-                        constexpr double steerHousingInertia = 0.00036; // 0.45 kg, 0.04m radius cylinder
                         steerTorque = module->steerMotor.CalculateTorque(appliedVolts, steerJoint->currentVelocity, steerHousingInertia, dt);
                         double rawCurrent = module->steerMotor.CalculateCurrent(appliedVolts, steerJoint->currentVelocity);
 
@@ -157,9 +158,12 @@ namespace FRCBananaSim::Drivetrain::System
                         steerTorque = std::clamp(steerTorque, -maxStatorTorque, maxStatorTorque);
                         steerCurrent = std::clamp(std::abs(rawCurrent), 0.0, statorLimit);
 
+                        // Scale torque applied to Jolt link by load fraction to account for reflected rotor inertia
+                        double appliedSteerTorque = steerTorque * (steerHousingInertia / effectiveSteerInertia);
+
                         // Direct torque drive applied along steer hinge axis (+Y)
                         steerJoint->motorMode = JointMotorMode::Torque;
-                        steerJoint->appliedTorque = static_cast<float>(steerTorque);
+                        steerJoint->appliedTorque = static_cast<float>(appliedSteerTorque);
 
                         accumulatedSupplyCurrent += (steerCurrent * std::abs(appliedVolts)) / std::max(1.0, terminalVoltage);
                     }
@@ -168,10 +172,10 @@ namespace FRCBananaSim::Drivetrain::System
                         // Neutral mode handling (Brake vs. Coast)
                         if (steerCmd.neutralMode == NeutralMode::Brake)
                         {
-                            constexpr double steerHousingInertia = 0.00036;
                             steerTorque = module->steerMotor.CalculateTorque(0.0_V, steerJoint->currentVelocity, steerHousingInertia, dt);
+                            double appliedSteerTorque = steerTorque * (steerHousingInertia / effectiveSteerInertia);
                             steerJoint->motorMode = JointMotorMode::Torque;
-                            steerJoint->appliedTorque = static_cast<float>(steerTorque);
+                            steerJoint->appliedTorque = static_cast<float>(appliedSteerTorque);
                         }
                         else
                         {
@@ -188,6 +192,8 @@ namespace FRCBananaSim::Drivetrain::System
                 if (driveJoint)
                 {
                     const auto& driveCmd = currentInputs.motorCommands[4 + i];
+                    // True reflected load inertia under robot mass: J_load = J_wheel + (1/4 * M_chassis * r^2)
+                    constexpr double chassisLoadInertia = 0.00084 + (12.5 * 0.0508 * 0.0508); // ~0.0331 kg*m^2
 
                     if (currentInputs.robotEnabled && !isBrownedOut && driveCmd.mode != MotorControlMode::Disabled)
                     {
@@ -218,8 +224,6 @@ namespace FRCBananaSim::Drivetrain::System
                         double appliedVolts = batteryModel.ApplySupplyCurrentLimit(commandedVolts,
                             module->driveMotor.CalculateCurrent(commandedVolts, driveJoint->currentVelocity), terminalVoltage);
 
-                        // True reflected load inertia under robot mass: J_load = J_wheel + (1/4 * M_chassis * r^2)
-                        constexpr double chassisLoadInertia = 0.00084 + (12.5 * 0.0508 * 0.0508); // ~0.0331 kg*m^2
                         driveTorque = module->driveMotor.CalculateTorque(appliedVolts, driveJoint->currentVelocity, chassisLoadInertia, dt);
                         double rawCurrent = module->driveMotor.CalculateCurrent(appliedVolts, driveJoint->currentVelocity);
 
@@ -241,7 +245,6 @@ namespace FRCBananaSim::Drivetrain::System
                         // Neutral mode handling (Brake vs. Coast)
                         if (driveCmd.neutralMode == NeutralMode::Brake)
                         {
-                            constexpr double chassisLoadInertia = 0.00084 + (12.5 * 0.0508 * 0.0508);
                             driveTorque = module->driveMotor.CalculateTorque(0.0_V, driveJoint->currentVelocity, chassisLoadInertia, dt);
                             driveJoint->motorMode = JointMotorMode::Torque;
                             driveJoint->appliedTorque = static_cast<float>(driveTorque);

@@ -129,7 +129,10 @@
     <ClCompile Include="Source\Physics\Systems\JointSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Drivetrain\Systems\SwerveDriveSystem.cpp">
+    <ClCompile Include="Source\Robot\Drivetrain\Systems\SwerveDriveSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Robot\RobotSpawner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -269,13 +272,16 @@
     <ClInclude Include="Source\Control\SimControlBoundary.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Drivetrain\Components\SwerveModuleComponent.h">
+    <ClInclude Include="Source\Robot\Drivetrain\Components\SwerveModuleComponent.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Drivetrain\Systems\SwerveDriveSystem.h">
+    <ClInclude Include="Source\Robot\Drivetrain\Systems\SwerveDriveSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Drivetrain\Components\SwerveChassisComponent.h">
+    <ClInclude Include="Source\Robot\Drivetrain\Components\SwerveChassisComponent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\RobotSpawner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

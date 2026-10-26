@@ -1,56 +1,67 @@
 /**
  * @file PhysicsSystem.cpp
- * @brief Implementation of the ECS physics synchronization and Jolt simulation step.
+ * @brief Implementation of the Jolt physics integration system.
  */
 
-#include "PhysicsSystem.h"
+#include "Physics/Systems/PhysicsSystem.h"
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Physics/Components/ColliderComponent.h"
-#include "Core/ECS/Core/Scene.h"
 #include "Core/ECS/Components/TransformComponent.h"
-#include "Core/ECS/Components/HierarchyComponent.h"
+#include "Core/ECS/Core/Scene.h"
 #include "Telemetry/TelemetryMacros.h"
-#include "Utils/Log.h"
 
+#include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
-#include <Jolt/Physics/Body/BodyCreationSettings.h>
+
+#include <iostream>
+
+#define SIM_LOG_ERROR(msg) std::cerr << "[PhysicsSystem ERROR] " << msg << std::endl
 
 namespace FRCBananaSim::Physics::Systems
 {
-    using Components::RigidBodyComponent;
-    using Components::ColliderComponent;
-    using Components::BodyMotionType;
-    using Components::ColliderShape;
-    using Core::ECS::Components::TransformComponent;
-    using Core::ECS::Components::WorldTransformComponent;
-    using Core::ECS::Components::HierarchyComponent;
-    using Core::ECS::Core::invalidEntity;
+    using namespace Physics::Components;
+    using namespace Core::ECS::Components;
 
     PhysicsSystem::PhysicsSystem(Core::ECS::Core::Scene& scene, JoltContext& context)
         : ISystem(scene),
         joltContext(context)
-    {}
+    {
+        // Allocate collision group filter table with 32 sub-groups
+        groupFilterTable = new JPH::GroupFilterTable(32);
+
+        // Disable internal collisions between sub-groups of the same group
+        for (uint32_t i = 0; i < 32; ++i)
+        {
+            for (uint32_t j = i + 1; j < 32; ++j)
+            {
+                groupFilterTable->DisableCollision(i, j);
+            }
+        }
+    }
 
     PhysicsSystem::~PhysicsSystem()
     {
-        if (!joltContext.IsInitialized())
+        if (joltContext.IsInitialized())
         {
-            return;
-        }
-
-        JPH::BodyInterface& bodyInterface = joltContext.GetBodyInterface();
-        for (const JPH::BodyID& bodyID : createdBodies)
-        {
-            if (!bodyID.IsInvalid())
+            JPH::BodyInterface& bodyInterface = joltContext.GetBodyInterface();
+            for (const auto& bodyID : createdBodies)
             {
-                bodyInterface.RemoveBody(bodyID);
-                bodyInterface.DestroyBody(bodyID);
+                if (!bodyID.IsInvalid())
+                {
+                    bodyInterface.RemoveBody(bodyID);
+                    bodyInterface.DestroyBody(bodyID);
+                }
             }
         }
         createdBodies.clear();
+    }
+
+    JPH::GroupFilterTable* PhysicsSystem::GetGroupFilterTable() const
+    {
+        return groupFilterTable.GetPtr();
     }
 
     void PhysicsSystem::FixedUpdate(double dt)
@@ -228,6 +239,14 @@ namespace FRCBananaSim::Physics::Systems
 
             bodySettings.mIsSensor = rigidBody->isSensor;
 
+            // Configure Jolt collision group filtering
+            if (rigidBody->collisionGroupID != 0)
+            {
+                bodySettings.mCollisionGroup.SetGroupFilter(groupFilterTable);
+                bodySettings.mCollisionGroup.SetGroupID(rigidBody->collisionGroupID);
+                bodySettings.mCollisionGroup.SetSubGroupID(rigidBody->collisionSubGroupID);
+            }
+
             if (motionType == JPH::EMotionType::Dynamic)
             {
                 bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
@@ -272,18 +291,9 @@ namespace FRCBananaSim::Physics::Systems
             }
 
             auto* transform = scene.GetComponent<TransformComponent>(entity);
-            auto* collider = scene.GetComponent<ColliderComponent>(entity);
+            JPH::RVec3 joltPos(transform->position.x, transform->position.y, transform->position.z);
+            JPH::Quat joltRot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
 
-            glm::vec3 pos = transform->position;
-            glm::quat rot = transform->rotation;
-            if (collider)
-            {
-                pos += rot * collider->localOffset;
-                rot = rot * collider->localRotation;
-            }
-
-            JPH::RVec3 joltPos(pos.x, pos.y, pos.z);
-            JPH::Quat joltRot(rot.x, rot.y, rot.z, rot.w);
             bodyInterface.SetPositionAndRotation(rigidBody->bodyID, joltPos, joltRot, JPH::EActivation::Activate);
         }
     }
@@ -301,26 +311,29 @@ namespace FRCBananaSim::Physics::Systems
                 continue;
             }
 
+            JPH::RVec3 joltPos;
+            JPH::Quat joltRot;
+            bodyInterface.GetPositionAndRotation(rigidBody->bodyID, joltPos, joltRot);
+
             auto* transform = scene.GetComponent<TransformComponent>(entity);
             auto* collider = scene.GetComponent<ColliderComponent>(entity);
 
-            JPH::RVec3 joltPos = bodyInterface.GetPosition(rigidBody->bodyID);
-            JPH::Quat joltRot = bodyInterface.GetRotation(rigidBody->bodyID);
-            JPH::Vec3 joltLinVel = bodyInterface.GetLinearVelocity(rigidBody->bodyID);
-            JPH::Vec3 joltAngVel = bodyInterface.GetAngularVelocity(rigidBody->bodyID);
+            glm::quat rawRot(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
+            glm::vec3 rawPos(static_cast<float>(joltPos.GetX()), static_cast<float>(joltPos.GetY()), static_cast<float>(joltPos.GetZ()));
 
-            glm::vec3 worldPos(joltPos.GetX(), joltPos.GetY(), joltPos.GetZ());
-            glm::quat worldRot(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
-
-            // Reverse collider local offset to recover entity origin
             if (collider)
             {
-                worldRot = worldRot * glm::inverse(collider->localRotation);
-                worldPos -= worldRot * collider->localOffset;
+                transform->rotation = rawRot * glm::inverse(collider->localRotation);
+                transform->position = rawPos - (transform->rotation * collider->localOffset);
+            }
+            else
+            {
+                transform->position = rawPos;
+                transform->rotation = rawRot;
             }
 
-            transform->position = worldPos;
-            transform->rotation = worldRot;
+            JPH::Vec3 joltLinVel = bodyInterface.GetLinearVelocity(rigidBody->bodyID);
+            JPH::Vec3 joltAngVel = bodyInterface.GetAngularVelocity(rigidBody->bodyID);
 
             rigidBody->linearVelocity = glm::vec3(joltLinVel.GetX(), joltLinVel.GetY(), joltLinVel.GetZ());
             rigidBody->angularVelocity = glm::vec3(joltAngVel.GetX(), joltAngVel.GetY(), joltAngVel.GetZ());

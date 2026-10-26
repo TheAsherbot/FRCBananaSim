@@ -42,6 +42,8 @@ namespace FRCBananaSim::Physics::Components
         float maxAngularVelocity{ 2000.0f };                                      ///< Max angular velocity in rad/s (~19,000 RPM).
         glm::vec3 linearVelocity{ 0.0f, 0.0f, 0.0f };                             ///< Current linear velocity in m/s.
         glm::vec3 angularVelocity{ 0.0f, 0.0f, 0.0f };                            ///< Current rotational velocity in rad/s.
+        uint32_t collisionGroupID{ 0 };                                           ///< Collision group ID (0 = default/invalid group, >=1 = robot group).
+        uint32_t collisionSubGroupID{ 0 };                                        ///< Sub-group ID within collision group.
         bool isSensor{ false };                                                   ///< If true, triggers contact events without impulse.
         bool isCreated{ false };                                                  ///< Tracks whether the Jolt body has been allocated.
     };

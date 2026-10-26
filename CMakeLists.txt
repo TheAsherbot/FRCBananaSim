@@ -38,7 +38,8 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Actuation/ServoModel.cpp
-    FRCBananaSim/Source/Drivetrain/Systems/SwerveDriveSystem.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
+    FRCBananaSim/Source/Robot/RobotSpawner.cpp
     FRCBananaSim/Source/Core/Engine.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
@@ -100,7 +101,8 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Actuation/ServoModel.cpp
-    FRCBananaSim/Source/Drivetrain/Systems/SwerveDriveSystem.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
+    FRCBananaSim/Source/Robot/RobotSpawner.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
     FRCBananaSim/Source/Core/ECS/Core/System.cpp
@@ -123,6 +125,8 @@ set(TEST_SOURCES
     Tests/MotorBatteryTest.cpp
     Tests/JointStabilityTest.cpp
     Tests/SwervePhysicalDriveTest.cpp
+    Tests/RobotSpawnerTest.cpp
+    Tests/SwerveMassRatioTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -145,4 +149,6 @@ add_test(NAME PhysicsDeterminismTest COMMAND FRCBananaSim_Tests --determinism)
 add_test(NAME MotorBatteryTest COMMAND FRCBananaSim_Tests --motor-battery)
 add_test(NAME JointStabilityTest COMMAND FRCBananaSim_Tests --joint-stability)
 add_test(NAME SwervePhysicalDriveTest COMMAND FRCBananaSim_Tests --swerve-drive)
+add_test(NAME RobotSpawnerTest COMMAND FRCBananaSim_Tests --robot-spawner)
+add_test(NAME SwerveMassRatioTest COMMAND FRCBananaSim_Tests --mass-ratio)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

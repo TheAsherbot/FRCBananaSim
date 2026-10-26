@@ -9,6 +9,7 @@
 #include "Core/ECS/Core/Entity.h"
 #include "Physics/JoltContext.h"
 
+#include <Jolt/Physics/Collision/GroupFilterTable.h>
 #include <vector>
 
 namespace FRCBananaSim::Physics::Systems
@@ -44,6 +45,12 @@ namespace FRCBananaSim::Physics::Systems
          */
         void DestroyBody(Core::ECS::Core::Entity entity);
 
+        /**
+         * @brief Retrieves the shared collision group filter table.
+         * @return Raw pointer to JPH::GroupFilterTable.
+         */
+        JPH::GroupFilterTable* GetGroupFilterTable() const;
+
     private:
         /**
          * @brief Creates a Jolt body for any entity containing a RigidBodyComponent not yet initialized.
@@ -62,5 +69,6 @@ namespace FRCBananaSim::Physics::Systems
 
         JoltContext& joltContext;
         std::vector<JPH::BodyID> createdBodies;
+        JPH::Ref<JPH::GroupFilterTable> groupFilterTable;
     };
 }

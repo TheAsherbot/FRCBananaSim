@@ -1,0 +1,91 @@
+{
+  "name": "FRC_Swerve_Standard",
+  "version": "1.0.0",
+  "units": "SI",
+  "coordinates": {
+    "system": "RightHanded",
+    "forward": "+Z",
+    "right": "+X",
+    "up": "+Y"
+  },
+  "chassis": {
+    "mass_kg": 50.0,
+    "width_m": 0.70,
+    "height_m": 0.15,
+    "length_m": 0.70,
+    "wheelbase_m": 0.56,
+    "trackwidth_m": 0.56,
+    "friction": 0.7,
+    "restitution": 0.0
+  },
+  "battery": {
+    "nominalVoltage_V": 12.60,
+    "internalResistance_ohm": 0.023,
+    "quiescentCurrent_A": 1.5,
+    "statorCurrentLimit_A": 60.0,
+    "supplyCurrentLimit_A": 40.0,
+    "brownoutWarning_V": 6.8,
+    "brownoutCutoff_V": 6.3,
+    "brownoutRecovery_V": 7.5
+  },
+  "motors": {
+    "steer": {
+      "type": "KrakenX44",
+      "gearRatio": 21.43,
+      "efficiency": 0.92,
+      "statorCurrentLimit_A": 60.0
+    },
+    "drive": {
+      "type": "KrakenX60",
+      "gearRatio": 6.12,
+      "efficiency": 0.96,
+      "statorCurrentLimit_A": 60.0
+    }
+  },
+  "steerHousing": {
+    "mass_kg": 0.45,
+    "radius_m": 0.04,
+    "height_m": 0.06
+  },
+  "wheel": {
+    "mass_kg": 0.65,
+    "radius_m": 0.0508,
+    "width_m": 0.04,
+    "friction": 1.2,
+    "restitution": 0.05
+  },
+  "modules": [
+    {
+      "index": 0,
+      "name": "FrontLeft",
+      "location_m": [ -0.28, 0.28 ],
+      "steerCAN": 1,
+      "driveCAN": 2,
+      "canCoder": 1
+    },
+    {
+      "index": 1,
+      "name": "FrontRight",
+      "location_m": [ 0.28, 0.28 ],
+      "steerCAN": 3,
+      "driveCAN": 4,
+      "canCoder": 2
+    },
+    {
+      "index": 2,
+      "name": "BackLeft",
+      "location_m": [ -0.28, -0.28 ],
+      "steerCAN": 5,
+      "driveCAN": 6,
+      "canCoder": 3
+    },
+    {
+      "index": 3,
+      "name": "BackRight",
+      "location_m": [ 0.28, -0.28 ],
+      "steerCAN": 7,
+      "driveCAN": 8,
+      "canCoder": 4
+    }
+  ]
+}

@@ -8,7 +8,7 @@
 #include "Core/ECS/Core/System.h"
 #include "Control/SimControlBoundary.h"
 
-namespace FRCBananaSim::Drivetrain::System
+namespace FRCBananaSim::Robot::Drivetrain::System
 {
     /**
      * @class SwerveDriveSystem

@@ -6,9 +6,9 @@
 #include "SwervePhysicalDriveTest.h"
 #include "TestFramework.h"
 #include "Control/SimControlBoundary.h"
-#include "Drivetrain/Components/SwerveChassisComponent.h"
-#include "Drivetrain/Components/SwerveModuleComponent.h"
-#include "Drivetrain/Systems/SwerveDriveSystem.h"
+#include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
+#include "Robot/Drivetrain/Components/SwerveModuleComponent.h"
+#include "Robot/Drivetrain/Systems/SwerveDriveSystem.h"
 #include "Actuation/Components/BatteryComponent.h"
 #include "Physics/JoltContext.h"
 #include "Physics/PhysicsConfig.h"
@@ -27,8 +27,8 @@
 namespace FRCBananaSim::Tests
 {
     using namespace Control;
-    using namespace Drivetrain::Components;
-    using namespace Drivetrain::System;
+    using namespace Robot::Drivetrain::Components;
+    using namespace Robot::Drivetrain::System;
     using namespace Actuation;
     using namespace Actuation::Components;
     using namespace Physics;
@@ -284,7 +284,6 @@ namespace FRCBananaSim::Tests
             jointSystem.FixedUpdate(dt);
 
             // Command +12.0V on steer motor [index 0 = FL steer] for 150 steps (750 ms)
-            // Falcon 500 at 21.43:1 rotates at ~30 rad/s; in 0.75s it rotates ~22 rad (> 7*pi)
             SimInputs inputs;
             inputs.robotEnabled = true;
             inputs.motorCommands[0].mode = MotorControlMode::Voltage;
@@ -313,12 +312,9 @@ namespace FRCBananaSim::Tests
             BatteryModel battery = BatteryModel::FRCStandard();
             TEST_EXPECT_FALSE(ctx, battery.IsBrownoutCritical(12.0_V));
             TEST_EXPECT_FALSE(ctx, battery.IsBrownoutCritical(6.4_V));
-            // Drops below 6.3V -> trips critical brownout
             TEST_EXPECT_TRUE(ctx, battery.IsBrownoutCritical(6.2_V));
-            // Recovers voltage to 6.5V -> must STAY in brownout due to hysteresis (recovery requires > 7.5V)
             TEST_EXPECT_TRUE(ctx, battery.IsBrownoutCritical(6.5_V));
             TEST_EXPECT_TRUE(ctx, battery.IsBrownoutCritical(7.4_V));
-            // Exceeds 7.5V -> clears brownout
             TEST_EXPECT_FALSE(ctx, battery.IsBrownoutCritical(7.6_V));
 
             // B. Supply Current Limit Throttling
@@ -327,7 +323,7 @@ namespace FRCBananaSim::Tests
             double terminalVoltage = 11.5_V;
             double throttledVolts = battery.ApplySupplyCurrentLimit(commandedVolts, statorCurrent, terminalVoltage);
             TEST_EXPECT_TRUE(ctx, throttledVolts < commandedVolts);
-            TEST_EXPECT_NEAR(ctx, throttledVolts, 5.75_V, 0.05); // 40A * 11.5V / 80A
+            TEST_EXPECT_NEAR(ctx, throttledVolts, 5.75_V, 0.05);
         }
 
         // -------------------------------------------------------------
@@ -341,14 +337,11 @@ namespace FRCBananaSim::Tests
             Entity chassisEntity = scene.CreateEntity();
             TransformComponent chassisTransform;
             chassisTransform.position = glm::vec3(0.0f, 1.0f, 0.0f);
-            // Rotate chassis CCW by 45 degrees (turning forward +Z towards left -X)
-            // In right-handed coords, rotation around -Y turns +Z into -X
             chassisTransform.rotation = glm::angleAxis(glm::radians(45.0f), glm::vec3(0.0f, -1.0f, 0.0f));
             scene.AddComponent(chassisEntity, chassisTransform);
 
             RigidBodyComponent chassisRb;
             chassisRb.motionType = BodyMotionType::Dynamic;
-            // CCW angular velocity: -2.5 rad/s around +Y
             chassisRb.angularVelocity = glm::vec3(0.0f, -2.5f, 0.0f);
             scene.AddComponent(chassisEntity, chassisRb);
 
@@ -359,9 +352,7 @@ namespace FRCBananaSim::Tests
 
             const auto& outputs = swerveSystem.GetOutputs();
 
-            // Heading must reflect +45 degrees (+pi/4 radians) CCW
             TEST_EXPECT_NEAR(ctx, outputs.gyroYaw, 3.14159265358979323846 / 4.0, 0.01);
-            // Yaw rate must be positive CCW (+2.5 rad/s)
             TEST_EXPECT_NEAR(ctx, outputs.gyroYawRate, 2.5, tolerance);
         }
 

@@ -189,7 +189,7 @@
     <ClCompile Include="Source\Core\Engine.cpp" />
     <ClCompile Include="Source\Core\Parameters\ParameterStore.cpp" />
     <ClCompile Include="Source\Core\Units\Units.cpp" />
-    <ClCompile Include="Source\Drivetrain\Systems\SwerveDriveSystem.cpp" />
+    <ClCompile Include="Source\Robot\Drivetrain\Systems\SwerveDriveSystem.cpp" />
     <ClCompile Include="Source\Main.cpp" />
     <ClCompile Include="Source\Physics\JoltContext.cpp" />
     <ClCompile Include="Source\Physics\Systems\JointSystem.cpp" />
@@ -199,6 +199,7 @@
     <ClCompile Include="Source\Renderer\Input.cpp" />
     <ClCompile Include="Source\Renderer\Renderer.cpp" />
     <ClCompile Include="Source\Renderer\Systems\RenderSystem.cpp" />
+    <ClCompile Include="Source\Robot\RobotSpawner.cpp" />
     <ClCompile Include="Source\Telemetry\MemoryTracker.cpp" />
     <ClCompile Include="Source\Telemetry\ProfilerUI.cpp" />
     <ClCompile Include="Source\Telemetry\ProfilerWindow.cpp" />
@@ -231,9 +232,9 @@
     <ClInclude Include="Source\Core\Parameters\ParameterStore.h" />
     <ClInclude Include="Source\Core\Parameters\ParameterValue.h" />
     <ClInclude Include="Source\Core\Units\Units.h" />
-    <ClInclude Include="Source\Drivetrain\Components\SwerveChassisComponent.h" />
-    <ClInclude Include="Source\Drivetrain\Components\SwerveModuleComponent.h" />
-    <ClInclude Include="Source\Drivetrain\Systems\SwerveDriveSystem.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Components\SwerveChassisComponent.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Components\SwerveModuleComponent.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Systems\SwerveDriveSystem.h" />
     <ClInclude Include="Source\Physics\Components\ColliderComponent.h" />
     <ClInclude Include="Source\Physics\Components\JointComponent.h" />
     <ClInclude Include="Source\Physics\Components\RigidBodyComponent.h" />
@@ -247,6 +248,7 @@
     <ClInclude Include="Source\Renderer\Input.h" />
     <ClInclude Include="Source\Renderer\Renderer.h" />
     <ClInclude Include="Source\Renderer\Systems\RenderSystem.h" />
+    <ClInclude Include="Source\Robot\RobotSpawner.h" />
     <ClInclude Include="Source\Telemetry\MemoryTracker.h" />
     <ClInclude Include="Source\Telemetry\ProfileResult.h" />
     <ClInclude Include="Source\Telemetry\ProfilerUI.h" />

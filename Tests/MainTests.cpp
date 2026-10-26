@@ -1,6 +1,6 @@
 /**
  * @file MainTests.cpp
- * @brief Entry point for headless CTest suites (Units, Parameters, Determinism, Motor & Battery, Joint Stability, Swerve Physical Drive).
+ * @brief Entry point for headless CTest suites (Units, Parameters, Determinism, Motor & Battery, Joint Stability, Swerve Physical Drive, Robot Spawner, Swerve Mass Ratio).
  */
 
 #include "TestFramework.h"
@@ -10,6 +10,8 @@
 #include "MotorBatteryTest.h"
 #include "JointStabilityTest.h"
 #include "SwervePhysicalDriveTest.h"
+#include "RobotSpawnerTest.h"
+#include "SwerveMassRatioTest.h"
 
 #include <iostream>
 #include <string>
@@ -21,6 +23,8 @@ using FRCBananaSim::Tests::RunPhysicsDeterminismTest;
 using FRCBananaSim::Tests::RunMotorBatteryTest;
 using FRCBananaSim::Tests::RunJointStabilityTest;
 using FRCBananaSim::Tests::RunSwervePhysicalDriveTest;
+using FRCBananaSim::Tests::RunRobotSpawnerTest;
+using FRCBananaSim::Tests::RunSwerveMassRatioTest;
 
 int main(int argc, char* argv[])
 {
@@ -64,6 +68,16 @@ int main(int argc, char* argv[])
             runAll = false;
             RunSwervePhysicalDriveTest(ctx);
         }
+        else if (arg == "--robot-spawner")
+        {
+            runAll = false;
+            RunRobotSpawnerTest(ctx);
+        }
+        else if (arg == "--mass-ratio")
+        {
+            runAll = false;
+            RunSwerveMassRatioTest(ctx);
+        }
     }
 
     if (runAll)
@@ -74,6 +88,8 @@ int main(int argc, char* argv[])
         RunMotorBatteryTest(ctx);
         RunJointStabilityTest(ctx);
         RunSwervePhysicalDriveTest(ctx);
+        RunRobotSpawnerTest(ctx);
+        RunSwerveMassRatioTest(ctx);
     }
 
     std::cout << "======================================\n";
