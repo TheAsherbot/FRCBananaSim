@@ -1,6 +1,6 @@
 /**
  * @file MainTests.cpp
- * @brief Entry point for headless CTest suites (Units, Parameters, Determinism, Motor & Battery, Joint Stability).
+ * @brief Entry point for headless CTest suites (Units, Parameters, Determinism, Motor & Battery, Joint Stability, Swerve Physical Drive).
  */
 
 #include "TestFramework.h"
@@ -9,6 +9,7 @@
 #include "PhysicsDeterminismTest.h"
 #include "MotorBatteryTest.h"
 #include "JointStabilityTest.h"
+#include "SwervePhysicalDriveTest.h"
 
 #include <iostream>
 #include <string>
@@ -19,6 +20,7 @@ using FRCBananaSim::Tests::RunParameterStoreTest;
 using FRCBananaSim::Tests::RunPhysicsDeterminismTest;
 using FRCBananaSim::Tests::RunMotorBatteryTest;
 using FRCBananaSim::Tests::RunJointStabilityTest;
+using FRCBananaSim::Tests::RunSwervePhysicalDriveTest;
 
 int main(int argc, char* argv[])
 {
@@ -57,6 +59,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunJointStabilityTest(ctx);
         }
+        else if (arg == "--swerve-drive")
+        {
+            runAll = false;
+            RunSwervePhysicalDriveTest(ctx);
+        }
     }
 
     if (runAll)
@@ -66,6 +73,7 @@ int main(int argc, char* argv[])
         RunPhysicsDeterminismTest(ctx);
         RunMotorBatteryTest(ctx);
         RunJointStabilityTest(ctx);
+        RunSwervePhysicalDriveTest(ctx);
     }
 
     std::cout << "======================================\n";
