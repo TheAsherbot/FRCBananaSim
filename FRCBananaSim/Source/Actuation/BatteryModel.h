@@ -27,11 +27,12 @@ namespace FRCBananaSim::Actuation
          * @param supplyCurrentLimit Continuous battery bus supply current limit per branch (A).
          * @param brownoutWarningVoltage Threshold triggering brownout telemetry warning (V).
          * @param brownoutCutoffVoltage Threshold triggering motor output shutoff (V).
+         * @param brownoutRecoveryVoltage Threshold for exiting brownout state (V).
          */
         BatteryModel(double nominalVoltage = 12.60_V, double internalResistance = 0.023_ohm,
             double quiescentCurrent = 1.5_A, double statorCurrentLimit = 60.0_A,
             double supplyCurrentLimit = 40.0_A, double brownoutWarningVoltage = 6.8_V,
-            double brownoutCutoffVoltage = 6.3_V);
+            double brownoutCutoffVoltage = 6.3_V, double brownoutRecoveryVoltage = 7.5_V);
 
         // Standard presets
         static BatteryModel FRCStandard();
@@ -61,11 +62,22 @@ namespace FRCBananaSim::Actuation
         bool IsBrownoutWarning(double terminalVoltage) const;
 
         /**
-         * @brief Checks if terminal voltage has dropped below the hard motor cut-off threshold.
+         * @brief Evaluates brownout critical cutoff with Schmidt-trigger hysteresis.
          * @param terminalVoltage Current terminal voltage (V).
-         * @return True if terminal voltage is critically low.
+         * @return True if system is in brownout critical state.
          */
         bool IsBrownoutCritical(double terminalVoltage) const;
+
+        /**
+         * @brief Resets the internal brownout state machine.
+         */
+        void ResetBrownoutState();
+
+        /**
+         * @brief Queries whether brownout critical state is currently active.
+         * @return True if browned out.
+         */
+        bool IsBrownoutActive() const;
 
         // Accessors
         double GetNominalVoltage() const;
@@ -75,6 +87,7 @@ namespace FRCBananaSim::Actuation
         double GetSupplyCurrentLimit() const;
         double GetBrownoutWarningVoltage() const;
         double GetBrownoutCutoffVoltage() const;
+        double GetBrownoutRecoveryVoltage() const;
 
     private:
         double nominalVoltage;
@@ -84,5 +97,7 @@ namespace FRCBananaSim::Actuation
         double supplyCurrentLimit;
         double brownoutWarningVoltage;
         double brownoutCutoffVoltage;
+        double brownoutRecoveryVoltage;
+        mutable bool isBrownedOutState = false;
     };
 }

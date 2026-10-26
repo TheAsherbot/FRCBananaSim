@@ -95,6 +95,11 @@ namespace FRCBananaSim::Drivetrain::System
             for (uint32_t i = 0; i < 4; ++i)
             {
                 auto moduleEntity = chassis->moduleEntities[i];
+                if (moduleEntity == Core::ECS::Core::invalidEntity)
+                {
+                    continue;
+                }
+
                 auto* module = scene.GetComponent<SwerveModuleComponent>(moduleEntity);
                 if (!module)
                 {
@@ -108,103 +113,168 @@ namespace FRCBananaSim::Drivetrain::System
                 double steerTorque = 0.0_Nm;
                 double steerCurrent = 0.0_A;
 
-                if (steerJoint && currentInputs.robotEnabled && !isBrownedOut)
+                if (steerJoint)
                 {
                     const auto& steerCmd = currentInputs.motorCommands[i];
-                    double commandedVolts = 0.0_V;
 
-                    switch (steerCmd.mode)
+                    if (currentInputs.robotEnabled && !isBrownedOut && steerCmd.mode != MotorControlMode::Disabled)
                     {
-                    case MotorControlMode::Voltage:
-                        commandedVolts = std::clamp(steerCmd.demand, -terminalVoltage, terminalVoltage);
-                        break;
-                    case MotorControlMode::DutyCycle:
-                        commandedVolts = std::clamp(steerCmd.demand, -1.0, 1.0) * terminalVoltage;
-                        break;
-                    case MotorControlMode::TorqueCurrent:
+                        double commandedVolts = 0.0_V;
+
+                        switch (steerCmd.mode)
+                        {
+                        case MotorControlMode::Voltage:
+                            commandedVolts = std::clamp(steerCmd.demand, -terminalVoltage, terminalVoltage);
+                            break;
+                        case MotorControlMode::DutyCycle:
+                            commandedVolts = std::clamp(steerCmd.demand, -1.0, 1.0) * terminalVoltage;
+                            break;
+                        case MotorControlMode::TorqueCurrent:
+                        {
+                            double r = module->steerMotor.GetResistance();
+                            double ke = module->steerMotor.GetBackEmfConstantKe();
+                            double motorRadps = steerJoint->currentVelocity * module->steerMotor.GetGearRatio();
+                            commandedVolts = std::clamp(steerCmd.demand * r + ke * motorRadps, -terminalVoltage, terminalVoltage);
+                            break;
+                        }
+                        case MotorControlMode::Disabled:
+                            commandedVolts = 0.0_V;
+                            break;
+                        }
+
+                        // Apply supply current limit
+                        double appliedVolts = batteryModel.ApplySupplyCurrentLimit(commandedVolts,
+                            module->steerMotor.CalculateCurrent(commandedVolts, steerJoint->currentVelocity), terminalVoltage);
+
+                        constexpr double steerHousingInertia = 0.00036; // 0.45 kg, 0.04m radius cylinder
+                        steerTorque = module->steerMotor.CalculateTorque(appliedVolts, steerJoint->currentVelocity, steerHousingInertia, dt);
+                        double rawCurrent = module->steerMotor.CalculateCurrent(appliedVolts, steerJoint->currentVelocity);
+
+                        // Enforce stator current clamp on torque and reported current
+                        double statorLimit = steerCmd.statorCurrentLimit;
+                        double maxStatorTorque = module->steerMotor.GetGearRatio() * module->steerMotor.GetGearboxEfficiency()
+                            * module->steerMotor.GetTorqueConstantKt() * statorLimit;
+                        steerTorque = std::clamp(steerTorque, -maxStatorTorque, maxStatorTorque);
+                        steerCurrent = std::clamp(std::abs(rawCurrent), 0.0, statorLimit);
+
+                        // Direct torque drive applied along steer hinge axis (+Y)
+                        steerJoint->motorMode = JointMotorMode::Torque;
+                        steerJoint->appliedTorque = static_cast<float>(steerTorque);
+
+                        accumulatedSupplyCurrent += (steerCurrent * std::abs(appliedVolts)) / std::max(1.0, terminalVoltage);
+                    }
+                    else
                     {
-                        double kt = module->steerMotor.GetTorqueConstantKt();
-                        double r = module->steerMotor.GetResistance();
-                        double ke = module->steerMotor.GetBackEmfConstantKe();
-                        double motorRadps = steerJoint->currentVelocity * module->steerMotor.GetGearRatio();
-                        commandedVolts = std::clamp(steerCmd.demand * r + ke * motorRadps, -terminalVoltage, terminalVoltage);
-                        break;
+                        // Neutral mode handling (Brake vs. Coast)
+                        if (steerCmd.neutralMode == NeutralMode::Brake)
+                        {
+                            constexpr double steerHousingInertia = 0.00036;
+                            steerTorque = module->steerMotor.CalculateTorque(0.0_V, steerJoint->currentVelocity, steerHousingInertia, dt);
+                            steerJoint->motorMode = JointMotorMode::Torque;
+                            steerJoint->appliedTorque = static_cast<float>(steerTorque);
+                        }
+                        else
+                        {
+                            steerJoint->motorMode = JointMotorMode::Torque;
+                            steerJoint->appliedTorque = 0.0f;
+                        }
                     }
-                    case MotorControlMode::Disabled:
-                        commandedVolts = 0.0_V;
-                        break;
-                    }
-
-                    // Apply supply current limit
-                    double appliedVolts = batteryModel.ApplySupplyCurrentLimit(commandedVolts,
-                        module->steerMotor.CalculateCurrent(commandedVolts, steerJoint->currentVelocity), terminalVoltage);
-
-                    steerTorque = module->steerMotor.CalculateTorque(appliedVolts, steerJoint->currentVelocity, 0.001, dt);
-                    steerCurrent = std::abs(module->steerMotor.CalculateCurrent(appliedVolts, steerJoint->currentVelocity));
-
-                    // Direct torque drive applied along hinge axis
-                    steerJoint->motorMode = JointMotorMode::Torque;
-                    steerJoint->appliedTorque = static_cast<float>(steerTorque);
-
-                    accumulatedSupplyCurrent += (steerCurrent * std::abs(appliedVolts)) / std::max(1.0, terminalVoltage);
-                }
-                else if (steerJoint)
-                {
-                    steerJoint->motorMode = JointMotorMode::Torque;
-                    steerJoint->appliedTorque = 0.0f;
                 }
 
                 // --- DRIVE ACTUATION ---
                 double driveTorque = 0.0_Nm;
                 double driveCurrent = 0.0_A;
 
-                if (driveJoint && currentInputs.robotEnabled && !isBrownedOut)
+                if (driveJoint)
                 {
                     const auto& driveCmd = currentInputs.motorCommands[4 + i];
-                    double commandedVolts = 0.0_V;
 
-                    switch (driveCmd.mode)
+                    if (currentInputs.robotEnabled && !isBrownedOut && driveCmd.mode != MotorControlMode::Disabled)
                     {
-                    case MotorControlMode::Voltage:
-                        commandedVolts = std::clamp(driveCmd.demand, -terminalVoltage, terminalVoltage);
-                        break;
-                    case MotorControlMode::DutyCycle:
-                        commandedVolts = std::clamp(driveCmd.demand, -1.0, 1.0) * terminalVoltage;
-                        break;
-                    case MotorControlMode::TorqueCurrent:
+                        double commandedVolts = 0.0_V;
+
+                        switch (driveCmd.mode)
+                        {
+                        case MotorControlMode::Voltage:
+                            commandedVolts = std::clamp(driveCmd.demand, -terminalVoltage, terminalVoltage);
+                            break;
+                        case MotorControlMode::DutyCycle:
+                            commandedVolts = std::clamp(driveCmd.demand, -1.0, 1.0) * terminalVoltage;
+                            break;
+                        case MotorControlMode::TorqueCurrent:
+                        {
+                            double r = module->driveMotor.GetResistance();
+                            double ke = module->driveMotor.GetBackEmfConstantKe();
+                            double motorRadps = driveJoint->currentVelocity * module->driveMotor.GetGearRatio();
+                            commandedVolts = std::clamp(driveCmd.demand * r + ke * motorRadps, -terminalVoltage, terminalVoltage);
+                            break;
+                        }
+                        case MotorControlMode::Disabled:
+                            commandedVolts = 0.0_V;
+                            break;
+                        }
+
+                        // Apply supply current limit
+                        double appliedVolts = batteryModel.ApplySupplyCurrentLimit(commandedVolts,
+                            module->driveMotor.CalculateCurrent(commandedVolts, driveJoint->currentVelocity), terminalVoltage);
+
+                        // True reflected load inertia under robot mass: J_load = J_wheel + (1/4 * M_chassis * r^2)
+                        constexpr double chassisLoadInertia = 0.00084 + (12.5 * 0.0508 * 0.0508); // ~0.0331 kg*m^2
+                        driveTorque = module->driveMotor.CalculateTorque(appliedVolts, driveJoint->currentVelocity, chassisLoadInertia, dt);
+                        double rawCurrent = module->driveMotor.CalculateCurrent(appliedVolts, driveJoint->currentVelocity);
+
+                        // Enforce stator current clamp on torque and reported current
+                        double statorLimit = driveCmd.statorCurrentLimit;
+                        double maxStatorTorque = module->driveMotor.GetGearRatio() * module->driveMotor.GetGearboxEfficiency()
+                            * module->driveMotor.GetTorqueConstantKt() * statorLimit;
+                        driveTorque = std::clamp(driveTorque, -maxStatorTorque, maxStatorTorque);
+                        driveCurrent = std::clamp(std::abs(rawCurrent), 0.0, statorLimit);
+
+                        // Direct torque drive applied along wheel axle (+X)
+                        driveJoint->motorMode = JointMotorMode::Torque;
+                        driveJoint->appliedTorque = static_cast<float>(driveTorque);
+
+                        accumulatedSupplyCurrent += (driveCurrent * std::abs(appliedVolts)) / std::max(1.0, terminalVoltage);
+                    }
+                    else
                     {
-                        double r = module->driveMotor.GetResistance();
-                        double ke = module->driveMotor.GetBackEmfConstantKe();
-                        double motorRadps = driveJoint->currentVelocity * module->driveMotor.GetGearRatio();
-                        commandedVolts = std::clamp(driveCmd.demand * r + ke * motorRadps, -terminalVoltage, terminalVoltage);
-                        break;
+                        // Neutral mode handling (Brake vs. Coast)
+                        if (driveCmd.neutralMode == NeutralMode::Brake)
+                        {
+                            constexpr double chassisLoadInertia = 0.00084 + (12.5 * 0.0508 * 0.0508);
+                            driveTorque = module->driveMotor.CalculateTorque(0.0_V, driveJoint->currentVelocity, chassisLoadInertia, dt);
+                            driveJoint->motorMode = JointMotorMode::Torque;
+                            driveJoint->appliedTorque = static_cast<float>(driveTorque);
+                        }
+                        else
+                        {
+                            driveJoint->motorMode = JointMotorMode::Torque;
+                            driveJoint->appliedTorque = 0.0f;
+                        }
                     }
-                    case MotorControlMode::Disabled:
-                        commandedVolts = 0.0_V;
-                        break;
-                    }
-
-                    double appliedVolts = batteryModel.ApplySupplyCurrentLimit(commandedVolts,
-                        module->driveMotor.CalculateCurrent(commandedVolts, driveJoint->currentVelocity), terminalVoltage);
-
-                    driveTorque = module->driveMotor.CalculateTorque(appliedVolts, driveJoint->currentVelocity, 0.005, dt);
-                    driveCurrent = std::abs(module->driveMotor.CalculateCurrent(appliedVolts, driveJoint->currentVelocity));
-
-                    driveJoint->motorMode = JointMotorMode::Torque;
-                    driveJoint->appliedTorque = static_cast<float>(driveTorque);
-
-                    accumulatedSupplyCurrent += (driveCurrent * std::abs(appliedVolts)) / std::max(1.0, terminalVoltage);
-                }
-                else if (driveJoint)
-                {
-                    driveJoint->motorMode = JointMotorMode::Torque;
-                    driveJoint->appliedTorque = 0.0f;
                 }
 
                 // --- TELEMETRY READBACK ---
                 if (steerJoint)
                 {
-                    module->currentSteerAngle = steerJoint->currentAngle;
+                    // Continuous unwrapped steer angle tracking across [-pi, +pi] boundary
+                    double currentHingeAngle = steerJoint->currentAngle;
+                    double delta = currentHingeAngle - module->lastHingeAngle;
+                    constexpr double pi = 3.14159265358979323846;
+
+                    while (delta > pi)
+                    {
+                        delta -= 2.0 * pi;
+                    }
+                    while (delta < -pi)
+                    {
+                        delta += 2.0 * pi;
+                    }
+
+                    module->unwrappedSteerAngle += delta;
+                    module->lastHingeAngle = currentHingeAngle;
+
+                    module->currentSteerAngle = module->unwrappedSteerAngle;
                     module->currentSteerVelocity = steerJoint->currentVelocity;
                 }
 
@@ -226,26 +296,24 @@ namespace FRCBananaSim::Drivetrain::System
                 currentOutputs.motorCurrents[4 + i] = driveCurrent;
             }
 
-            // Chassis IMU readback (CTRE Pigeon 2: Yaw around vertical axis)
+            // Chassis IMU readback (CTRE Pigeon 2: CCW positive in X-Z plane, +X Right, +Y Up, +Z Forward)
             if (chassisTransform)
             {
                 const glm::quat& q = chassisTransform->rotation;
-                // Analytical yaw extraction from quaternion (counter-clockwise positive)
-                double sinyCosp = 2.0 * (q.w * q.y - q.x * q.z);
-                double cosyCosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
-                chassis->gyroYaw = std::atan2(sinyCosp, cosyCosp);
+                glm::vec3 forward = q * glm::vec3(0.0f, 0.0f, 1.0f);
+                glm::vec3 up = q * glm::vec3(0.0f, 1.0f, 0.0f);
+                glm::vec3 right = q * glm::vec3(1.0f, 0.0f, 0.0f);
 
-                double sinp = 2.0 * (q.w * q.x + q.y * q.z);
-                chassis->gyroPitch = (std::abs(sinp) >= 1.0) ? std::copysign(3.14159265358979323846 / 2.0, sinp) : std::asin(sinp);
-
-                double sinrCosp = 2.0 * (q.w * q.z - q.x * q.y);
-                double cosrCosp = 1.0 - 2.0 * (q.x * q.x + q.z * q.z);
-                chassis->gyroRoll = std::atan2(sinrCosp, cosrCosp);
+                // Yaw: 0 rad facing +Z forward, positive turning CCW towards -X (Left)
+                chassis->gyroYaw = std::atan2(-forward.x, forward.z);
+                chassis->gyroPitch = std::asin(std::clamp(forward.y, -1.0f, 1.0f));
+                chassis->gyroRoll = std::atan2(right.y, up.y);
             }
 
             if (chassisRb)
             {
-                chassis->gyroYawRate = chassisRb->angularVelocity.y;
+                // CCW yaw rate around vertical axis
+                chassis->gyroYawRate = -chassisRb->angularVelocity.y;
             }
 
             currentOutputs.gyroYaw = chassis->gyroYaw;
@@ -254,9 +322,15 @@ namespace FRCBananaSim::Drivetrain::System
             currentOutputs.gyroYawRate = chassis->gyroYawRate;
         }
 
-        lastTotalBusCurrent = accumulatedSupplyCurrent;
+        double totalBusCurrent = accumulatedSupplyCurrent;
+        if (batteryComp)
+        {
+            totalBusCurrent += batteryComp->batteryModel.GetQuiescentCurrent();
+        }
+
+        lastTotalBusCurrent = totalBusCurrent;
         currentOutputs.batteryTerminalVoltage = terminalVoltage;
-        currentOutputs.totalBusCurrent = accumulatedSupplyCurrent;
+        currentOutputs.totalBusCurrent = totalBusCurrent;
         currentOutputs.isBrownedOut = isBrownedOut;
     }
 }

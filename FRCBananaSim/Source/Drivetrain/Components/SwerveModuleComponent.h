@@ -21,7 +21,7 @@ namespace FRCBananaSim::Drivetrain::Components
     struct SwerveModuleComponent
     {
         uint32_t moduleIndex = 0;              ///< 0: FrontLeft, 1: FrontRight, 2: BackLeft, 3: BackRight.
-        glm::vec2 moduleLocation{ 0.0f, 0.0f }; ///< Offset from chassis center in meters (+X forward, +Y left).
+        glm::vec2 moduleLocation{ 0.0f, 0.0f }; ///< Offset from chassis center in meters (+X right, +Z forward).
 
         // Physical Entity References
         Core::ECS::Core::Entity steerEntity = Core::ECS::Core::invalidEntity;      ///< Steer housing rigid body entity.
@@ -42,11 +42,15 @@ namespace FRCBananaSim::Drivetrain::Components
         uint32_t canCoderId = 1;
 
         // Runtime Feedback Telemetry
-        double currentSteerAngle = 0.0_rad;         ///< Azimuth angle in radians.
+        double currentSteerAngle = 0.0_rad;         ///< Azimuth angle in radians (unwrapped continuous).
         double currentSteerVelocity = 0.0_radps;    ///< Azimuth angular rate in rad/s.
         double currentWheelPosition = 0.0_rad;      ///< Accumulated wheel axle rotation in radians.
         double currentWheelVelocity = 0.0_radps;    ///< Wheel axle angular rate in rad/s.
         double currentLinearVelocity = 0.0_mps;     ///< Ground tangential velocity in m/s (omega * r).
         double distanceTraveled = 0.0_m;            ///< Ground distance traveled in meters (theta * r).
+
+        // Continuous Angle Tracking State (Anti-Wrapping)
+        double unwrappedSteerAngle = 0.0_rad;       ///< Accumulated continuous steer angle without [-pi, +pi] wrapping.
+        double lastHingeAngle = 0.0_rad;            ///< Previous step raw hinge angle for delta tracking.
     };
 }

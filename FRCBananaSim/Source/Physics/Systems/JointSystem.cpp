@@ -25,15 +25,12 @@ namespace FRCBananaSim::Physics::Components
         parentAxis = glm::normalize(worldHingeAxis);
         childAxis = parentAxis;
 
-        // Compute stable perpendicular normal axis
-        if (std::abs(parentAxis.y) < 0.9f)
-        {
-            parentNormal = glm::normalize(glm::cross(parentAxis, glm::vec3(0.0f, 1.0f, 0.0f)));
-        }
-        else
-        {
-            parentNormal = glm::normalize(glm::cross(parentAxis, glm::vec3(1.0f, 0.0f, 0.0f)));
-        }
+        // Gram-Schmidt orthogonalization with right-handed basis alignment
+        glm::vec3 refVector = (std::abs(parentAxis.y) < 0.9f)
+            ? glm::vec3(0.0f, 1.0f, 0.0f)
+            : glm::vec3(0.0f, 0.0f, 1.0f);
+
+        parentNormal = glm::normalize(refVector - parentAxis * glm::dot(parentAxis, refVector));
         childNormal = parentNormal;
     }
 
@@ -46,23 +43,15 @@ namespace FRCBananaSim::Physics::Components
         parentAxis = glm::normalize(localAxis1);
         childAxis = glm::normalize(localAxis2);
 
-        if (std::abs(parentAxis.y) < 0.9f)
-        {
-            parentNormal = glm::normalize(glm::cross(parentAxis, glm::vec3(0.0f, 1.0f, 0.0f)));
-        }
-        else
-        {
-            parentNormal = glm::normalize(glm::cross(parentAxis, glm::vec3(1.0f, 0.0f, 0.0f)));
-        }
+        glm::vec3 refVector1 = (std::abs(parentAxis.y) < 0.9f)
+            ? glm::vec3(0.0f, 1.0f, 0.0f)
+            : glm::vec3(0.0f, 0.0f, 1.0f);
+        parentNormal = glm::normalize(refVector1 - parentAxis * glm::dot(parentAxis, refVector1));
 
-        if (std::abs(childAxis.y) < 0.9f)
-        {
-            childNormal = glm::normalize(glm::cross(childAxis, glm::vec3(0.0f, 1.0f, 0.0f)));
-        }
-        else
-        {
-            childNormal = glm::normalize(glm::cross(childAxis, glm::vec3(1.0f, 0.0f, 0.0f)));
-        }
+        glm::vec3 refVector2 = (std::abs(childAxis.y) < 0.9f)
+            ? glm::vec3(0.0f, 1.0f, 0.0f)
+            : glm::vec3(0.0f, 0.0f, 1.0f);
+        childNormal = glm::normalize(refVector2 - childAxis * glm::dot(childAxis, refVector2));
     }
 }
 

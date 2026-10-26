@@ -21,7 +21,12 @@ namespace FRCBananaSim::Drivetrain::Components
     struct SwerveChassisComponent
     {
         // 4 modules: [0] FrontLeft, [1] FrontRight, [2] BackLeft, [3] BackRight
-        std::array<Core::ECS::Core::Entity, 4> moduleEntities;
+        std::array<Core::ECS::Core::Entity, 4> moduleEntities{
+            Core::ECS::Core::invalidEntity,
+            Core::ECS::Core::invalidEntity,
+            Core::ECS::Core::invalidEntity,
+            Core::ECS::Core::invalidEntity
+        };
 
         // Battery linkage entity (for bus voltage sag calculation)
         Core::ECS::Core::Entity batteryEntity = Core::ECS::Core::invalidEntity;

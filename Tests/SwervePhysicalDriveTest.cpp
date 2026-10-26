@@ -55,6 +55,7 @@ namespace FRCBananaSim::Tests
             for (size_t i = 0; i < 8; ++i)
             {
                 TEST_EXPECT_EQ(ctx, static_cast<int>(inputs.motorCommands[i].mode), static_cast<int>(MotorControlMode::Voltage));
+                TEST_EXPECT_EQ(ctx, static_cast<int>(inputs.motorCommands[i].neutralMode), static_cast<int>(NeutralMode::Brake));
                 TEST_EXPECT_NEAR(ctx, inputs.motorCommands[i].demand, 0.0, tolerance);
                 TEST_EXPECT_NEAR(ctx, inputs.motorCommands[i].statorCurrentLimit, 60.0, tolerance);
             }
@@ -105,10 +106,11 @@ namespace FRCBananaSim::Tests
             SwerveChassisComponent chassisComp;
             chassisComp.batteryEntity = batteryEntity;
 
+            // Front-Left module position: X = -0.28m (Left), Z = +0.28m (Forward)
             // C. Steer Link Entity (0.45 kg)
             Entity steerEntity = scene.CreateEntity();
             TransformComponent steerTransform;
-            steerTransform.position = glm::vec3(0.28f, 0.9f, 0.28f);
+            steerTransform.position = glm::vec3(-0.28f, 0.9f, 0.28f);
             scene.AddComponent(steerEntity, steerTransform);
 
             RigidBodyComponent steerRb;
@@ -119,13 +121,13 @@ namespace FRCBananaSim::Tests
             ColliderComponent steerCol;
             steerCol.shape = ColliderShape::Cylinder;
             steerCol.radius = 0.04f;
-            steerCol.halfHeight = 0.05f;
+            steerCol.halfHeight = 0.03f;
             scene.AddComponent(steerEntity, steerCol);
 
             // D. Wheel Link Entity (0.65 kg)
             Entity wheelEntity = scene.CreateEntity();
             TransformComponent wheelTransform;
-            wheelTransform.position = glm::vec3(0.28f, 0.8f, 0.28f);
+            wheelTransform.position = glm::vec3(-0.28f, 0.8f, 0.28f);
             scene.AddComponent(wheelEntity, wheelTransform);
 
             RigidBodyComponent wheelRb;
@@ -137,23 +139,25 @@ namespace FRCBananaSim::Tests
             wheelCol.shape = ColliderShape::Cylinder;
             wheelCol.radius = 0.0508f;
             wheelCol.halfHeight = 0.02f;
+            // Rotate cylinder 90 degrees around Z so flat circular face aligns with X-axis axle
+            wheelCol.localRotation = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
             scene.AddComponent(wheelEntity, wheelCol);
 
-            // E. Vertical Steer Joint (Chassis <-> Steer Link)
+            // E. Vertical Steer Joint (Chassis <-> Steer Link along vertical +Y)
             Entity steerJointEntity = scene.CreateEntity();
             JointComponent steerJoint;
             steerJoint.parentEntity = chassisEntity;
             steerJoint.childEntity = steerEntity;
-            steerJoint.SetWorldSpace(glm::vec3(0.28f, 0.95f, 0.28f), glm::vec3(0.0f, 1.0f, 0.0f));
+            steerJoint.SetWorldSpace(glm::vec3(-0.28f, 0.95f, 0.28f), glm::vec3(0.0f, 1.0f, 0.0f));
             steerJoint.motorMode = JointMotorMode::Torque;
             scene.AddComponent(steerJointEntity, steerJoint);
 
-            // F. Horizontal Drive Axle Joint (Steer Link <-> Wheel Link)
+            // F. Horizontal Drive Axle Joint (Steer Link <-> Wheel Link along horizontal +X)
             Entity driveJointEntity = scene.CreateEntity();
             JointComponent driveJoint;
             driveJoint.parentEntity = steerEntity;
             driveJoint.childEntity = wheelEntity;
-            driveJoint.SetWorldSpace(glm::vec3(0.28f, 0.8f, 0.28f), glm::vec3(1.0f, 0.0f, 0.0f));
+            driveJoint.SetWorldSpace(glm::vec3(-0.28f, 0.8f, 0.28f), glm::vec3(1.0f, 0.0f, 0.0f));
             driveJoint.motorMode = JointMotorMode::Torque;
             scene.AddComponent(driveJointEntity, driveJoint);
 
@@ -161,7 +165,7 @@ namespace FRCBananaSim::Tests
             Entity moduleEntity = scene.CreateEntity();
             SwerveModuleComponent moduleComp;
             moduleComp.moduleIndex = 0;
-            moduleComp.moduleLocation = glm::vec2(0.28f, 0.28f);
+            moduleComp.moduleLocation = glm::vec2(-0.28f, 0.28f);
             moduleComp.steerEntity = steerEntity;
             moduleComp.wheelEntity = wheelEntity;
             moduleComp.steerJointEntity = steerJointEntity;
@@ -195,7 +199,7 @@ namespace FRCBananaSim::Tests
 
             const auto& outputs = swerveSystem.GetOutputs();
 
-            // Drive wheel angular velocity must be positive and accelerating
+            // Drive wheel angular velocity must be positive and accelerating around +X
             TEST_EXPECT_TRUE(ctx, outputs.encoderVelocities[4] > 0.0);
             TEST_EXPECT_TRUE(ctx, outputs.encoderPositions[4] > 0.0);
 
@@ -205,7 +209,7 @@ namespace FRCBananaSim::Tests
         }
 
         // -------------------------------------------------------------
-        // 3. Physical Steer Azimuth Rotation Test
+        // 3. Steer Azimuth Continuous Angle Unwrapping (Across +/- PI)
         // -------------------------------------------------------------
         {
             JoltContext context;
@@ -242,7 +246,7 @@ namespace FRCBananaSim::Tests
 
             Entity steerEntity = scene.CreateEntity();
             TransformComponent steerTransform;
-            steerTransform.position = glm::vec3(0.28f, 0.9f, 0.28f);
+            steerTransform.position = glm::vec3(-0.28f, 0.9f, 0.28f);
             scene.AddComponent(steerEntity, steerTransform);
 
             RigidBodyComponent steerRb;
@@ -253,14 +257,14 @@ namespace FRCBananaSim::Tests
             ColliderComponent steerCol;
             steerCol.shape = ColliderShape::Cylinder;
             steerCol.radius = 0.04f;
-            steerCol.halfHeight = 0.05f;
+            steerCol.halfHeight = 0.03f;
             scene.AddComponent(steerEntity, steerCol);
 
             Entity steerJointEntity = scene.CreateEntity();
             JointComponent steerJoint;
             steerJoint.parentEntity = chassisEntity;
             steerJoint.childEntity = steerEntity;
-            steerJoint.SetWorldSpace(glm::vec3(0.28f, 0.95f, 0.28f), glm::vec3(0.0f, 1.0f, 0.0f));
+            steerJoint.SetWorldSpace(glm::vec3(-0.28f, 0.95f, 0.28f), glm::vec3(0.0f, 1.0f, 0.0f));
             steerJoint.motorMode = JointMotorMode::Torque;
             scene.AddComponent(steerJointEntity, steerJoint);
 
@@ -279,14 +283,15 @@ namespace FRCBananaSim::Tests
             physicsSystem.FixedUpdate(dt);
             jointSystem.FixedUpdate(dt);
 
-            // Command +4.0V on steer motor [index 0 = FL steer]
+            // Command +12.0V on steer motor [index 0 = FL steer] for 150 steps (750 ms)
+            // Falcon 500 at 21.43:1 rotates at ~30 rad/s; in 0.75s it rotates ~22 rad (> 7*pi)
             SimInputs inputs;
             inputs.robotEnabled = true;
             inputs.motorCommands[0].mode = MotorControlMode::Voltage;
-            inputs.motorCommands[0].demand = 4.0;
+            inputs.motorCommands[0].demand = 12.0;
             swerveSystem.SetInputs(inputs);
 
-            for (int i = 0; i < 40; ++i)
+            for (int i = 0; i < 150; ++i)
             {
                 swerveSystem.FixedUpdate(dt);
                 jointSystem.FixedUpdate(dt);
@@ -295,32 +300,38 @@ namespace FRCBananaSim::Tests
 
             const auto& outputs = swerveSystem.GetOutputs();
 
-            // Steer angle and velocity must reflect positive azimuth rotation
+            // Continuous angle must exceed pi radians without discontinuous negative wrapping
+            TEST_EXPECT_TRUE(ctx, outputs.encoderPositions[0] > 3.14159265358979323846);
             TEST_EXPECT_TRUE(ctx, outputs.encoderVelocities[0] > 0.0);
-            TEST_EXPECT_TRUE(ctx, outputs.encoderPositions[0] > 0.0);
         }
 
         // -------------------------------------------------------------
-        // 4. Current Limiting under Locked-Rotor Stall
+        // 4. Stator Current Limiting Clamping & Brownout Hysteresis
         // -------------------------------------------------------------
         {
-            BatteryModel battery(12.60_V, 0.023_ohm, 1.5_A, 60.0_A, 30.0_A);
+            // A. Battery Model Hysteresis Test
+            BatteryModel battery = BatteryModel::FRCStandard();
+            TEST_EXPECT_FALSE(ctx, battery.IsBrownoutCritical(12.0_V));
+            TEST_EXPECT_FALSE(ctx, battery.IsBrownoutCritical(6.4_V));
+            // Drops below 6.3V -> trips critical brownout
+            TEST_EXPECT_TRUE(ctx, battery.IsBrownoutCritical(6.2_V));
+            // Recovers voltage to 6.5V -> must STAY in brownout due to hysteresis (recovery requires > 7.5V)
+            TEST_EXPECT_TRUE(ctx, battery.IsBrownoutCritical(6.5_V));
+            TEST_EXPECT_TRUE(ctx, battery.IsBrownoutCritical(7.4_V));
+            // Exceeds 7.5V -> clears brownout
+            TEST_EXPECT_FALSE(ctx, battery.IsBrownoutCritical(7.6_V));
 
-            // Stall condition: high demand at 12V
+            // B. Supply Current Limit Throttling
             double commandedVolts = 12.0_V;
-            double statorCurrent = 80.0_A; // Exceeds 30A supply limit
+            double statorCurrent = 80.0_A;
             double terminalVoltage = 11.5_V;
-
             double throttledVolts = battery.ApplySupplyCurrentLimit(commandedVolts, statorCurrent, terminalVoltage);
-
-            // P_demanded = 80A * 12V = 960W; P_allowed = 30A * 11.5V = 345W
-            // Scaled voltage = 12.0 * (345 / 960) = 4.3125V
             TEST_EXPECT_TRUE(ctx, throttledVolts < commandedVolts);
-            TEST_EXPECT_NEAR(ctx, throttledVolts, 4.3125_V, 0.05);
+            TEST_EXPECT_NEAR(ctx, throttledVolts, 5.75_V, 0.05); // 40A * 11.5V / 80A
         }
 
         // -------------------------------------------------------------
-        // 5. Chassis Yaw & Gyro IMU Tracking
+        // 5. Chassis Yaw & Gyro IMU Tracking (CCW Positive)
         // -------------------------------------------------------------
         {
             Scene scene;
@@ -330,13 +341,15 @@ namespace FRCBananaSim::Tests
             Entity chassisEntity = scene.CreateEntity();
             TransformComponent chassisTransform;
             chassisTransform.position = glm::vec3(0.0f, 1.0f, 0.0f);
-            // Rotate chassis by 45 degrees around Y-axis
-            chassisTransform.rotation = glm::angleAxis(glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            // Rotate chassis CCW by 45 degrees (turning forward +Z towards left -X)
+            // In right-handed coords, rotation around -Y turns +Z into -X
+            chassisTransform.rotation = glm::angleAxis(glm::radians(45.0f), glm::vec3(0.0f, -1.0f, 0.0f));
             scene.AddComponent(chassisEntity, chassisTransform);
 
             RigidBodyComponent chassisRb;
             chassisRb.motionType = BodyMotionType::Dynamic;
-            chassisRb.angularVelocity = glm::vec3(0.0f, 2.5f, 0.0f); // 2.5 rad/s yaw rate
+            // CCW angular velocity: -2.5 rad/s around +Y
+            chassisRb.angularVelocity = glm::vec3(0.0f, -2.5f, 0.0f);
             scene.AddComponent(chassisEntity, chassisRb);
 
             SwerveChassisComponent chassisComp;
@@ -346,8 +359,9 @@ namespace FRCBananaSim::Tests
 
             const auto& outputs = swerveSystem.GetOutputs();
 
-            // Heading must reflect +45 degrees (pi/4 radians)
+            // Heading must reflect +45 degrees (+pi/4 radians) CCW
             TEST_EXPECT_NEAR(ctx, outputs.gyroYaw, 3.14159265358979323846 / 4.0, 0.01);
+            // Yaw rate must be positive CCW (+2.5 rad/s)
             TEST_EXPECT_NEAR(ctx, outputs.gyroYawRate, 2.5, tolerance);
         }
 

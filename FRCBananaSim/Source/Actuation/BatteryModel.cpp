@@ -14,24 +14,26 @@ namespace FRCBananaSim::Actuation
     BatteryModel::BatteryModel(double nominalVoltage, double internalResistance,
         double quiescentCurrent, double statorCurrentLimit,
         double supplyCurrentLimit, double brownoutWarningVoltage,
-        double brownoutCutoffVoltage)
+        double brownoutCutoffVoltage, double brownoutRecoveryVoltage)
         : nominalVoltage(nominalVoltage),
         internalResistance(internalResistance),
         quiescentCurrent(quiescentCurrent),
         statorCurrentLimit(statorCurrentLimit),
         supplyCurrentLimit(supplyCurrentLimit),
         brownoutWarningVoltage(brownoutWarningVoltage),
-        brownoutCutoffVoltage(brownoutCutoffVoltage)
+        brownoutCutoffVoltage(brownoutCutoffVoltage),
+        brownoutRecoveryVoltage(brownoutRecoveryVoltage),
+        isBrownedOutState(false)
     {}
 
     BatteryModel BatteryModel::FRCStandard()
     {
-        return BatteryModel(12.60_V, 0.023_ohm, 1.5_A, 60.0_A, 40.0_A, 6.8_V, 6.3_V);
+        return BatteryModel(12.60_V, 0.023_ohm, 1.5_A, 60.0_A, 40.0_A, 6.8_V, 6.3_V, 7.5_V);
     }
 
     BatteryModel BatteryModel::FTCStandard()
     {
-        return BatteryModel(12.0_V, 0.15_ohm, 0.35_A, 20.0_A, 15.0_A, 7.5_V, 6.5_V);
+        return BatteryModel(12.0_V, 0.15_ohm, 0.35_A, 20.0_A, 15.0_A, 7.5_V, 6.5_V, 7.2_V);
     }
 
     double BatteryModel::CalculateTerminalVoltage(double totalMotorSupplyCurrent) const
@@ -72,7 +74,34 @@ namespace FRCBananaSim::Actuation
 
     bool BatteryModel::IsBrownoutCritical(double terminalVoltage) const
     {
-        return terminalVoltage < brownoutCutoffVoltage;
+        if (isBrownedOutState)
+        {
+            // Schmidt trigger recovery threshold: requires voltage to rise above recovery level
+            if (terminalVoltage > brownoutRecoveryVoltage)
+            {
+                isBrownedOutState = false;
+            }
+        }
+        else
+        {
+            // Schmidt trigger trip threshold: falls below critical cutoff
+            if (terminalVoltage < brownoutCutoffVoltage)
+            {
+                isBrownedOutState = true;
+            }
+        }
+
+        return isBrownedOutState;
+    }
+
+    void BatteryModel::ResetBrownoutState()
+    {
+        isBrownedOutState = false;
+    }
+
+    bool BatteryModel::IsBrownoutActive() const
+    {
+        return isBrownedOutState;
     }
 
     double BatteryModel::GetNominalVoltage() const { return nominalVoltage; }
@@ -82,4 +111,5 @@ namespace FRCBananaSim::Actuation
     double BatteryModel::GetSupplyCurrentLimit() const { return supplyCurrentLimit; }
     double BatteryModel::GetBrownoutWarningVoltage() const { return brownoutWarningVoltage; }
     double BatteryModel::GetBrownoutCutoffVoltage() const { return brownoutCutoffVoltage; }
+    double BatteryModel::GetBrownoutRecoveryVoltage() const { return brownoutRecoveryVoltage; }
 }
