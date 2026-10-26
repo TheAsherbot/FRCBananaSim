@@ -38,7 +38,8 @@ namespace FRCBananaSim::Physics::Components
     {
         Off = 0,      ///< Passive free-spinning joint with optional friction.
         Velocity = 1, ///< Velocity motor driving towards target angular velocity (wheel drive).
-        Position = 2  ///< Position servo motor driving towards target angle (swerve steer, arm).
+        Position = 2, ///< Position servo motor driving towards target angle (swerve steer, arm).
+        Torque = 3    ///< Direct torque drive applied along hinge axis.
     };
 
     /**
@@ -83,6 +84,7 @@ namespace FRCBananaSim::Physics::Components
         float targetVelocity = 0.0f;                 ///< Target angular velocity in rad/s (Velocity mode).
         float targetAngle = 0.0f;                    ///< Target angle in radians (Position mode).
         float maxMotorTorque = 1000.0f;              ///< Maximum torque limit in N*m.
+        float appliedTorque = 0.0f;                  ///< Direct torque in N*m applied to child 
         float springFrequency = 10.0f;               ///< Spring oscillation frequency for position mode (Hz).
         float springDamping = 1.0f;                  ///< Critical damping ratio for position mode.
         float maxFrictionTorque = 0.0f;              ///< Passive bearing friction torque (N*m).

@@ -284,6 +284,31 @@ namespace FRCBananaSim::Physics::Systems
                 hinge->GetMotorSettings().mSpringSettings.mFrequency = joint->springFrequency;
                 hinge->GetMotorSettings().mSpringSettings.mDamping = joint->springDamping;
                 break;
+
+            case JointMotorMode::Torque:
+                hinge->SetMotorState(JPH::EMotorState::Off);
+                if (std::abs(joint->appliedTorque) > 1e-5f)
+                {
+                    auto* childRb = scene.GetComponent<RigidBodyComponent>(joint->childEntity);
+                    if (childRb && childRb->isCreated && !childRb->bodyID.IsInvalid())
+                    {
+                        JPH::RMat44 com2 = bodyInterface.GetCenterOfMassTransform(childRb->bodyID);
+                        JPH::Vec3 worldHingeAxis = com2.Multiply3x3(hinge->GetLocalSpaceHingeAxis2()).Normalized();
+                        JPH::Vec3 torqueVec = worldHingeAxis * joint->appliedTorque;
+
+                        bodyInterface.AddTorque(childRb->bodyID, torqueVec);
+
+                        if (joint->parentEntity != invalidEntity)
+                        {
+                            auto* parentRb = scene.GetComponent<RigidBodyComponent>(joint->parentEntity);
+                            if (parentRb && parentRb->isCreated && !parentRb->bodyID.IsInvalid())
+                            {
+                                bodyInterface.AddTorque(parentRb->bodyID, -torqueVec);
+                            }
+                        }
+                    }
+                }
+                break;
             }
         }
     }
@@ -303,7 +328,7 @@ namespace FRCBananaSim::Physics::Systems
 
             auto* hinge = static_cast<JPH::HingeConstraint*>(joint->constraint.GetPtr());
 
-            // Relative rotation angle and velocity
+            // Relative rotation angle
             joint->currentAngle = hinge->GetCurrentAngle();
 
             auto* childRigidBody = scene.GetComponent<RigidBodyComponent>(joint->childEntity);
@@ -311,6 +336,25 @@ namespace FRCBananaSim::Physics::Systems
             {
                 continue;
             }
+
+            // Transform local hinge axis into world coordinates
+            JPH::RMat44 com2 = bodyInterface.GetCenterOfMassTransform(childRigidBody->bodyID);
+            JPH::Vec3 worldHingeAxis = com2.Multiply3x3(hinge->GetLocalSpaceHingeAxis2()).Normalized();
+
+            // Read dynamic angular velocities
+            JPH::Vec3 omega2 = bodyInterface.GetAngularVelocity(childRigidBody->bodyID);
+            JPH::Vec3 omega1 = JPH::Vec3::sZero();
+            if (joint->parentEntity != invalidEntity)
+            {
+                auto* parentRigidBody = scene.GetComponent<RigidBodyComponent>(joint->parentEntity);
+                if (parentRigidBody && !parentRigidBody->bodyID.IsInvalid())
+                {
+                    omega1 = bodyInterface.GetAngularVelocity(parentRigidBody->bodyID);
+                }
+            }
+
+            // Project relative rotational velocity onto the hinge axis
+            joint->currentVelocity = static_cast<float>((omega2 - omega1).Dot(worldHingeAxis));
 
             // Deflection calculation: distance between anchor 1 and anchor 2 in world coordinates
             JPH::RMat44 com1 = JPH::RMat44::sIdentity();
@@ -323,8 +367,6 @@ namespace FRCBananaSim::Physics::Systems
                 }
             }
 
-            JPH::RMat44 com2 = bodyInterface.GetCenterOfMassTransform(childRigidBody->bodyID);
-
             JPH::RVec3 worldPoint1 = com1 * hinge->GetLocalSpacePoint1();
             JPH::RVec3 worldPoint2 = com2 * hinge->GetLocalSpacePoint2();
 
@@ -335,6 +377,7 @@ namespace FRCBananaSim::Physics::Systems
             if (motorComp)
             {
                 motorComp->angularPosition = joint->currentAngle;
+                motorComp->angularVelocity = joint->currentVelocity;
             }
         }
     }

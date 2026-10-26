@@ -189,6 +189,7 @@
     <ClCompile Include="Source\Core\Engine.cpp" />
     <ClCompile Include="Source\Core\Parameters\ParameterStore.cpp" />
     <ClCompile Include="Source\Core\Units\Units.cpp" />
+    <ClCompile Include="Source\Drivetrain\Systems\SwerveDriveSystem.cpp" />
     <ClCompile Include="Source\Main.cpp" />
     <ClCompile Include="Source\Physics\JoltContext.cpp" />
     <ClCompile Include="Source\Physics\Systems\JointSystem.cpp" />
@@ -217,6 +218,7 @@
     <ClInclude Include="Source\Actuation\Components\ServoComponent.h" />
     <ClInclude Include="Source\Actuation\DCMotorModel.h" />
     <ClInclude Include="Source\Actuation\ServoModel.h" />
+    <ClInclude Include="Source\Control\SimControlBoundary.h" />
     <ClInclude Include="Source\Core\ECS\Components\HierarchyComponent.h" />
     <ClInclude Include="Source\Core\ECS\Components\TransformComponent.h" />
     <ClInclude Include="Source\Core\ECS\Core\ComponentStorage.h" />
@@ -229,6 +231,9 @@
     <ClInclude Include="Source\Core\Parameters\ParameterStore.h" />
     <ClInclude Include="Source\Core\Parameters\ParameterValue.h" />
     <ClInclude Include="Source\Core\Units\Units.h" />
+    <ClInclude Include="Source\Drivetrain\Components\SwerveChassisComponent.h" />
+    <ClInclude Include="Source\Drivetrain\Components\SwerveModuleComponent.h" />
+    <ClInclude Include="Source\Drivetrain\Systems\SwerveDriveSystem.h" />
     <ClInclude Include="Source\Physics\Components\ColliderComponent.h" />
     <ClInclude Include="Source\Physics\Components\JointComponent.h" />
     <ClInclude Include="Source\Physics\Components\RigidBodyComponent.h" />
