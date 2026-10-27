@@ -8,6 +8,7 @@
 #include "Utils/Log.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 
@@ -91,6 +92,13 @@ namespace FRCBananaSim::Telemetry
     {
         SIM_PROFILE_SCOPE("DrivetrainLogger::ExportToCsv");
 
+        std::filesystem::path p(filepath);
+        if (p.has_parent_path())
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(p.parent_path(), ec);
+        }
+
         std::ofstream file(filepath);
         if (!file.is_open())
         {
@@ -136,6 +144,13 @@ namespace FRCBananaSim::Telemetry
     bool DrivetrainLogger::ExportToFtcSchemaCsv(const std::string& filepath) const
     {
         SIM_PROFILE_SCOPE("DrivetrainLogger::ExportToFtcSchemaCsv");
+
+        std::filesystem::path p(filepath);
+        if (p.has_parent_path())
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(p.parent_path(), ec);
+        }
 
         std::ofstream file(filepath);
         if (!file.is_open())

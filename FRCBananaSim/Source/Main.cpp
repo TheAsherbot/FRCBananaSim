@@ -647,8 +647,14 @@ int main(int argc, char* argv[])
                     SIM_LOG_INFO("60-Second Real-Time Swerve Stress Test Complete!");
                 }
             }
+            else if (wsServer.IsClientConnected())
+            {
+                // Robot code is connected: use network demands and DriverStation enable state
+                swerveInputs.robotEnabled = wsServer.IsDriverStationEnabled();
+            }
             else
             {
+                // Standalone test bench: manual keyboard driving and heading hold
                 swerveInputs.robotEnabled = swerveEnabled;
                 NeutralMode nMode = (swerveNeutralModeIndex == 0) ? NeutralMode::Brake : NeutralMode::Coast;
 
@@ -1015,13 +1021,16 @@ int main(int argc, char* argv[])
                 // WPILIB HALSIM WEBSOCKET BRIDGE
                 // -------------------------------------------------------------
                 ImGui::TextColored(ImVec4(0.2f, 0.9f, 1.0f, 1.0f), "WPILIB HALSIM WEBSOCKET BRIDGE (:3300/wpilibws):");
+                auto stats = wsServer.GetStatistics();
                 if (wsServer.IsClientConnected())
                 {
-                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "● CONNECTED to Live Robot Code");
+                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f),
+                        "● CONNECTED (Packets In: %llu | Out: %llu)", stats.packetsReceived, stats.packetsSent);
                 }
                 else
                 {
-                    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "○ Waiting for ./gradlew simulateNative...");
+                    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f),
+                        "○ Waiting for ./gradlew simulateNative... (Packets In: %llu)", stats.packetsReceived);
                 }
 
                 bool isDsEnabled = wsServer.IsDriverStationEnabled();
@@ -1038,7 +1047,7 @@ int main(int argc, char* argv[])
 
                 if (ImGui::Button("Dump Discovered SimDevices to JSON"))
                 {
-                    wsServer.DumpSimDevices("Resources/Telemetry/sim_device_dump.json");
+                    wsServer.DumpSimDevices("sim_device_dump.json");
                 }
 
                 ImGui::Separator();
@@ -1068,12 +1077,12 @@ int main(int argc, char* argv[])
 
                 if (ImGui::Button("Export 6-DOF CSV"))
                 {
-                    drivetrainLogger.ExportToCsv("Resources/Telemetry/drivetrain_telemetry.csv");
+                    drivetrainLogger.ExportToCsv("drivetrain_telemetry.csv");
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Export FTC Schema CSV"))
                 {
-                    drivetrainLogger.ExportToFtcSchemaCsv("Resources/Telemetry/drivetrain_ftc_schema.csv");
+                    drivetrainLogger.ExportToFtcSchemaCsv("drivetrain_ftc_schema.csv");
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Clear Log"))

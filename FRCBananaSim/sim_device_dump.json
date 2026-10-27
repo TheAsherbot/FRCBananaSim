@@ -1,0 +1,2557 @@
+{
+    "deviceCount": 638,
+    "devices": [
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"46\",\"type\":\"CTREPCM\"}",
+            "name": "46"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"37\",\"type\":\"CTREPCM\"}",
+            "name": "37"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<outputs\":0,\"<rumble_left\":0,\"<rumble_right\":0,\">axes\":[],\">buttons\":[],\">povs\":[]},\"device\":\"0\",\"type\":\"Joystick\"}",
+            "name": "0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"25,1\",\"type\":\"Solenoid\"}",
+            "name": "25,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"49,3\",\"type\":\"Solenoid\"}",
+            "name": "49,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"47\",\"type\":\"CTREPCM\"}",
+            "name": "47"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"36\",\"type\":\"CTREPCM\"}",
+            "name": "36"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<outputs\":0,\"<rumble_left\":0,\"<rumble_right\":0,\">axes\":[],\">buttons\":[],\">povs\":[]},\"device\":\"1\",\"type\":\"Joystick\"}",
+            "name": "1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"25,0\",\"type\":\"Solenoid\"}",
+            "name": "25,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"49,2\",\"type\":\"Solenoid\"}",
+            "name": "49,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"44\",\"type\":\"CTREPCM\"}",
+            "name": "44"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"35\",\"type\":\"CTREPCM\"}",
+            "name": "35"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<outputs\":0,\"<rumble_left\":0,\"<rumble_right\":0,\">axes\":[],\">buttons\":[],\">povs\":[]},\"device\":\"2\",\"type\":\"Joystick\"}",
+            "name": "2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"25,3\",\"type\":\"Solenoid\"}",
+            "name": "25,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"49,1\",\"type\":\"Solenoid\"}",
+            "name": "49,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"45\",\"type\":\"CTREPCM\"}",
+            "name": "45"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"34\",\"type\":\"CTREPCM\"}",
+            "name": "34"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<outputs\":0,\"<rumble_left\":0,\"<rumble_right\":0,\">axes\":[],\">buttons\":[],\">povs\":[]},\"device\":\"3\",\"type\":\"Joystick\"}",
+            "name": "3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"25,2\",\"type\":\"Solenoid\"}",
+            "name": "25,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"49,0\",\"type\":\"Solenoid\"}",
+            "name": "49,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"42\",\"type\":\"CTREPCM\"}",
+            "name": "42"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"33\",\"type\":\"CTREPCM\"}",
+            "name": "33"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<outputs\":0,\"<rumble_left\":0,\"<rumble_right\":0,\">axes\":[],\">buttons\":[],\">povs\":[]},\"device\":\"4\",\"type\":\"Joystick\"}",
+            "name": "4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"25,5\",\"type\":\"Solenoid\"}",
+            "name": "25,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"49,7\",\"type\":\"Solenoid\"}",
+            "name": "49,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"43\",\"type\":\"CTREPCM\"}",
+            "name": "43"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"32\",\"type\":\"CTREPCM\"}",
+            "name": "32"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<outputs\":0,\"<rumble_left\":0,\"<rumble_right\":0,\">axes\":[],\">buttons\":[],\">povs\":[]},\"device\":\"5\",\"type\":\"Joystick\"}",
+            "name": "5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"25,4\",\"type\":\"Solenoid\"}",
+            "name": "25,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"49,6\",\"type\":\"Solenoid\"}",
+            "name": "49,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"40\",\"type\":\"CTREPCM\"}",
+            "name": "40"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"31\",\"type\":\"CTREPCM\"}",
+            "name": "31"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[4]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[4]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"6\",\"type\":\"PWM\"}",
+            "name": "6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"25,7\",\"type\":\"Solenoid\"}",
+            "name": "25,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"49,5\",\"type\":\"Solenoid\"}",
+            "name": "49,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[7]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[7]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"41\",\"type\":\"CTREPCM\"}",
+            "name": "41"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"30\",\"type\":\"DIO\"}",
+            "name": "30"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"7\",\"type\":\"PWM\"}",
+            "name": "7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"25,6\",\"type\":\"Solenoid\"}",
+            "name": "25,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"49,4\",\"type\":\"Solenoid\"}",
+            "name": "49,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"58\",\"type\":\"CTREPCM\"}",
+            "name": "58"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"29,0\",\"type\":\"Solenoid\"}",
+            "name": "29,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\">z\":0.0},\"device\":\"BuiltInAccel\",\"type\":\"Accel\"}",
+            "name": "BuiltInAccel"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"56,2\",\"type\":\"Solenoid\"}",
+            "name": "56,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"14\",\"type\":\"PWM\"}",
+            "name": "14"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"56,6\",\"type\":\"Solenoid\"}",
+            "name": "56,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"10\",\"type\":\"PWM\"}",
+            "name": "10"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"56,7\",\"type\":\"Solenoid\"}",
+            "name": "56,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[2]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[2]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"11\",\"type\":\"PWM\"}",
+            "name": "11"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"56,4\",\"type\":\"Solenoid\"}",
+            "name": "56,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"12\",\"type\":\"PWM\"}",
+            "name": "12"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"56,5\",\"type\":\"Solenoid\"}",
+            "name": "56,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"13\",\"type\":\"PWM\"}",
+            "name": "13"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"59\",\"type\":\"CTREPCM\"}",
+            "name": "59"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"29,1\",\"type\":\"Solenoid\"}",
+            "name": "29,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"56,3\",\"type\":\"Solenoid\"}",
+            "name": "56,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"15\",\"type\":\"PWM\"}",
+            "name": "15"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"56,0\",\"type\":\"Solenoid\"}",
+            "name": "56,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"16\",\"type\":\"PWM\"}",
+            "name": "16"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"56,1\",\"type\":\"Solenoid\"}",
+            "name": "56,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"17\",\"type\":\"PWM\"}",
+            "name": "17"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"54\",\"type\":\"CTREPCM\"}",
+            "name": "54"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"47,4\",\"type\":\"Solenoid\"}",
+            "name": "47,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"60,1\",\"type\":\"Solenoid\"}",
+            "name": "60,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"18\",\"type\":\"PWM\"}",
+            "name": "18"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"55\",\"type\":\"CTREPCM\"}",
+            "name": "55"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"47,5\",\"type\":\"Solenoid\"}",
+            "name": "47,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"60,0\",\"type\":\"Solenoid\"}",
+            "name": "60,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"19\",\"type\":\"PWM\"}",
+            "name": "19"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"20\",\"type\":\"DIO\"}",
+            "name": "20"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"21\",\"type\":\"DIO\"}",
+            "name": "21"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"22\",\"type\":\"DIO\"}",
+            "name": "22"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"23\",\"type\":\"DIO\"}",
+            "name": "23"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"24\",\"type\":\"DIO\"}",
+            "name": "24"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"25\",\"type\":\"DIO\"}",
+            "name": "25"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"26\",\"type\":\"DIO\"}",
+            "name": "26"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"27\",\"type\":\"DIO\"}",
+            "name": "27"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"35,6\",\"type\":\"Solenoid\"}",
+            "name": "35,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"28\",\"type\":\"DIO\"}",
+            "name": "28"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"35,7\",\"type\":\"Solenoid\"}",
+            "name": "35,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<input\":true},\"device\":\"29\",\"type\":\"DIO\"}",
+            "name": "29"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"49\",\"type\":\"CTREPCM\"}",
+            "name": "49"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"22,1\",\"type\":\"Solenoid\"}",
+            "name": "22,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"38\",\"type\":\"CTREPCM\"}",
+            "name": "38"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"48\",\"type\":\"CTREPCM\"}",
+            "name": "48"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"22,0\",\"type\":\"Solenoid\"}",
+            "name": "22,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"39\",\"type\":\"CTREPCM\"}",
+            "name": "39"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"50\",\"type\":\"CTREPCM\"}",
+            "name": "50"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"47,0\",\"type\":\"Solenoid\"}",
+            "name": "47,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"51\",\"type\":\"CTREPCM\"}",
+            "name": "51"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"47,1\",\"type\":\"Solenoid\"}",
+            "name": "47,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"52\",\"type\":\"CTREPCM\"}",
+            "name": "52"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"47,2\",\"type\":\"Solenoid\"}",
+            "name": "47,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"53\",\"type\":\"CTREPCM\"}",
+            "name": "53"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"47,3\",\"type\":\"Solenoid\"}",
+            "name": "47,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"56\",\"type\":\"CTREPCM\"}",
+            "name": "56"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"47,6\",\"type\":\"Solenoid\"}",
+            "name": "47,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"57\",\"type\":\"CTREPCM\"}",
+            "name": "57"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"47,7\",\"type\":\"Solenoid\"}",
+            "name": "47,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"45,3\",\"type\":\"Solenoid\"}",
+            "name": "45,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"60\",\"type\":\"CTREPCM\"}",
+            "name": "60"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"45,2\",\"type\":\"Solenoid\"}",
+            "name": "45,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"61\",\"type\":\"CTREPCM\"}",
+            "name": "61"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"45,1\",\"type\":\"Solenoid\"}",
+            "name": "45,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[12]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[12]"
+        },
+        {
+            "lastPayload": "{\"data\":{\">current\":0.0},\"device\":\"62\",\"type\":\"CTREPCM\"}",
+            "name": "62"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"51,0\",\"type\":\"Solenoid\"}",
+            "name": "51,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<zero_latch\":false},\"device\":\"8\",\"type\":\"PWM\"}",
+            "name": "8"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"51,1\",\"type\":\"Solenoid\"}",
+            "name": "51,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<period_scale\":3},\"device\":\"9\",\"type\":\"PWM\"}",
+            "name": "9"
+        },
+        {
+            "lastPayload": "{\"data\":{\">acceleration\":0.0},\"device\":\"Talon FX (v6)[11]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[11]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"27,7\",\"type\":\"Solenoid\"}",
+            "name": "27,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"Talon FX (v6)[4]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[4]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"6,6\",\"type\":\"Solenoid\"}",
+            "name": "6,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"0,0\",\"type\":\"Solenoid\"}",
+            "name": "0,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"27,6\",\"type\":\"Solenoid\"}",
+            "name": "27,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"6,7\",\"type\":\"Solenoid\"}",
+            "name": "6,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"0,1\",\"type\":\"Solenoid\"}",
+            "name": "0,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"27,5\",\"type\":\"Solenoid\"}",
+            "name": "27,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"6,4\",\"type\":\"Solenoid\"}",
+            "name": "6,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"0,2\",\"type\":\"Solenoid\"}",
+            "name": "0,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"27,4\",\"type\":\"Solenoid\"}",
+            "name": "27,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"6,5\",\"type\":\"Solenoid\"}",
+            "name": "6,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"0,3\",\"type\":\"Solenoid\"}",
+            "name": "0,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"27,3\",\"type\":\"Solenoid\"}",
+            "name": "27,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"6,2\",\"type\":\"Solenoid\"}",
+            "name": "6,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"0,4\",\"type\":\"Solenoid\"}",
+            "name": "0,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[10]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[10]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"27,2\",\"type\":\"Solenoid\"}",
+            "name": "27,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[5]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[5]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"6,3\",\"type\":\"Solenoid\"}",
+            "name": "6,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"0,5\",\"type\":\"Solenoid\"}",
+            "name": "0,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"27,1\",\"type\":\"Solenoid\"}",
+            "name": "27,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"6,0\",\"type\":\"Solenoid\"}",
+            "name": "6,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"0,6\",\"type\":\"Solenoid\"}",
+            "name": "0,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"27,0\",\"type\":\"Solenoid\"}",
+            "name": "27,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"6,1\",\"type\":\"Solenoid\"}",
+            "name": "6,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"0,7\",\"type\":\"Solenoid\"}",
+            "name": "0,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"1,0\",\"type\":\"Solenoid\"}",
+            "name": "1,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"1,1\",\"type\":\"Solenoid\"}",
+            "name": "1,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"1,2\",\"type\":\"Solenoid\"}",
+            "name": "1,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"1,3\",\"type\":\"Solenoid\"}",
+            "name": "1,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\">acceleration\":0.0},\"device\":\"Talon FX (v6)[14]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[14]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"1,4\",\"type\":\"Solenoid\"}",
+            "name": "1,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"1,5\",\"type\":\"Solenoid\"}",
+            "name": "1,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"1,6\",\"type\":\"Solenoid\"}",
+            "name": "1,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"1,7\",\"type\":\"Solenoid\"}",
+            "name": "1,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"10,0\",\"type\":\"Solenoid\"}",
+            "name": "10,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"10,1\",\"type\":\"Solenoid\"}",
+            "name": "10,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"10,2\",\"type\":\"Solenoid\"}",
+            "name": "10,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"10,3\",\"type\":\"Solenoid\"}",
+            "name": "10,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"10,4\",\"type\":\"Solenoid\"}",
+            "name": "10,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[1]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[1]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"10,5\",\"type\":\"Solenoid\"}",
+            "name": "10,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[11]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[11]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"10,6\",\"type\":\"Solenoid\"}",
+            "name": "10,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"10,7\",\"type\":\"Solenoid\"}",
+            "name": "10,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"11,0\",\"type\":\"Solenoid\"}",
+            "name": "11,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"21,1\",\"type\":\"Solenoid\"}",
+            "name": "21,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"11,1\",\"type\":\"Solenoid\"}",
+            "name": "11,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"21,0\",\"type\":\"Solenoid\"}",
+            "name": "21,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"11,2\",\"type\":\"Solenoid\"}",
+            "name": "11,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"21,3\",\"type\":\"Solenoid\"}",
+            "name": "21,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"11,3\",\"type\":\"Solenoid\"}",
+            "name": "11,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"21,2\",\"type\":\"Solenoid\"}",
+            "name": "21,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"11,4\",\"type\":\"Solenoid\"}",
+            "name": "11,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"21,5\",\"type\":\"Solenoid\"}",
+            "name": "21,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"11,5\",\"type\":\"Solenoid\"}",
+            "name": "11,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"21,4\",\"type\":\"Solenoid\"}",
+            "name": "21,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"11,6\",\"type\":\"Solenoid\"}",
+            "name": "11,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"21,7\",\"type\":\"Solenoid\"}",
+            "name": "21,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"11,7\",\"type\":\"Solenoid\"}",
+            "name": "11,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"21,6\",\"type\":\"Solenoid\"}",
+            "name": "21,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"12,0\",\"type\":\"Solenoid\"}",
+            "name": "12,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"12,1\",\"type\":\"Solenoid\"}",
+            "name": "12,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"12,2\",\"type\":\"Solenoid\"}",
+            "name": "12,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"12,3\",\"type\":\"Solenoid\"}",
+            "name": "12,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"12,4\",\"type\":\"Solenoid\"}",
+            "name": "12,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"12,5\",\"type\":\"Solenoid\"}",
+            "name": "12,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"12,6\",\"type\":\"Solenoid\"}",
+            "name": "12,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"12,7\",\"type\":\"Solenoid\"}",
+            "name": "12,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"18,3\",\"type\":\"Solenoid\"}",
+            "name": "18,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"13,0\",\"type\":\"Solenoid\"}",
+            "name": "13,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"18,2\",\"type\":\"Solenoid\"}",
+            "name": "18,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"13,1\",\"type\":\"Solenoid\"}",
+            "name": "13,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"18,1\",\"type\":\"Solenoid\"}",
+            "name": "18,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"13,2\",\"type\":\"Solenoid\"}",
+            "name": "13,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"18,0\",\"type\":\"Solenoid\"}",
+            "name": "18,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"13,3\",\"type\":\"Solenoid\"}",
+            "name": "13,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"18,7\",\"type\":\"Solenoid\"}",
+            "name": "18,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"13,4\",\"type\":\"Solenoid\"}",
+            "name": "13,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"18,6\",\"type\":\"Solenoid\"}",
+            "name": "18,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"13,5\",\"type\":\"Solenoid\"}",
+            "name": "13,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"18,5\",\"type\":\"Solenoid\"}",
+            "name": "18,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[9]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[9]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"13,6\",\"type\":\"Solenoid\"}",
+            "name": "13,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"18,4\",\"type\":\"Solenoid\"}",
+            "name": "18,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"13,7\",\"type\":\"Solenoid\"}",
+            "name": "13,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"14,0\",\"type\":\"Solenoid\"}",
+            "name": "14,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"44,7\",\"type\":\"Solenoid\"}",
+            "name": "44,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"14,1\",\"type\":\"Solenoid\"}",
+            "name": "14,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"44,6\",\"type\":\"Solenoid\"}",
+            "name": "44,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"14,2\",\"type\":\"Solenoid\"}",
+            "name": "14,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"44,5\",\"type\":\"Solenoid\"}",
+            "name": "44,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"14,3\",\"type\":\"Solenoid\"}",
+            "name": "14,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"44,4\",\"type\":\"Solenoid\"}",
+            "name": "44,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[14]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[14]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"14,4\",\"type\":\"Solenoid\"}",
+            "name": "14,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"44,3\",\"type\":\"Solenoid\"}",
+            "name": "44,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"14,5\",\"type\":\"Solenoid\"}",
+            "name": "14,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"44,2\",\"type\":\"Solenoid\"}",
+            "name": "44,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"14,6\",\"type\":\"Solenoid\"}",
+            "name": "14,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"44,1\",\"type\":\"Solenoid\"}",
+            "name": "44,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"14,7\",\"type\":\"Solenoid\"}",
+            "name": "14,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"44,0\",\"type\":\"Solenoid\"}",
+            "name": "44,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"50,1\",\"type\":\"Solenoid\"}",
+            "name": "50,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"15,0\",\"type\":\"Solenoid\"}",
+            "name": "15,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"50,0\",\"type\":\"Solenoid\"}",
+            "name": "50,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"15,1\",\"type\":\"Solenoid\"}",
+            "name": "15,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"50,3\",\"type\":\"Solenoid\"}",
+            "name": "50,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"15,2\",\"type\":\"Solenoid\"}",
+            "name": "15,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"50,2\",\"type\":\"Solenoid\"}",
+            "name": "50,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"15,3\",\"type\":\"Solenoid\"}",
+            "name": "15,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"50,5\",\"type\":\"Solenoid\"}",
+            "name": "50,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"15,4\",\"type\":\"Solenoid\"}",
+            "name": "15,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"50,4\",\"type\":\"Solenoid\"}",
+            "name": "50,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"15,5\",\"type\":\"Solenoid\"}",
+            "name": "15,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"50,7\",\"type\":\"Solenoid\"}",
+            "name": "50,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"15,6\",\"type\":\"Solenoid\"}",
+            "name": "15,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"50,6\",\"type\":\"Solenoid\"}",
+            "name": "50,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"15,7\",\"type\":\"Solenoid\"}",
+            "name": "15,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"39,1\",\"type\":\"Solenoid\"}",
+            "name": "39,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"5,2\",\"type\":\"Solenoid\"}",
+            "name": "5,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"16,0\",\"type\":\"Solenoid\"}",
+            "name": "16,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"39,0\",\"type\":\"Solenoid\"}",
+            "name": "39,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"5,3\",\"type\":\"Solenoid\"}",
+            "name": "5,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"16,1\",\"type\":\"Solenoid\"}",
+            "name": "16,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"39,3\",\"type\":\"Solenoid\"}",
+            "name": "39,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"5,0\",\"type\":\"Solenoid\"}",
+            "name": "5,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"16,2\",\"type\":\"Solenoid\"}",
+            "name": "16,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"39,2\",\"type\":\"Solenoid\"}",
+            "name": "39,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"5,1\",\"type\":\"Solenoid\"}",
+            "name": "5,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"16,3\",\"type\":\"Solenoid\"}",
+            "name": "16,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"39,5\",\"type\":\"Solenoid\"}",
+            "name": "39,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"5,6\",\"type\":\"Solenoid\"}",
+            "name": "5,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"16,4\",\"type\":\"Solenoid\"}",
+            "name": "16,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"39,4\",\"type\":\"Solenoid\"}",
+            "name": "39,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"5,7\",\"type\":\"Solenoid\"}",
+            "name": "5,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"16,5\",\"type\":\"Solenoid\"}",
+            "name": "16,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"39,7\",\"type\":\"Solenoid\"}",
+            "name": "39,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"5,4\",\"type\":\"Solenoid\"}",
+            "name": "5,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"16,6\",\"type\":\"Solenoid\"}",
+            "name": "16,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"39,6\",\"type\":\"Solenoid\"}",
+            "name": "39,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"5,5\",\"type\":\"Solenoid\"}",
+            "name": "5,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"16,7\",\"type\":\"Solenoid\"}",
+            "name": "16,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"17,0\",\"type\":\"Solenoid\"}",
+            "name": "17,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"17,1\",\"type\":\"Solenoid\"}",
+            "name": "17,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"17,2\",\"type\":\"Solenoid\"}",
+            "name": "17,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"17,3\",\"type\":\"Solenoid\"}",
+            "name": "17,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"17,4\",\"type\":\"Solenoid\"}",
+            "name": "17,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"17,5\",\"type\":\"Solenoid\"}",
+            "name": "17,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[6]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[6]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"17,6\",\"type\":\"Solenoid\"}",
+            "name": "17,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"17,7\",\"type\":\"Solenoid\"}",
+            "name": "17,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"19,0\",\"type\":\"Solenoid\"}",
+            "name": "19,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"41,7\",\"type\":\"Solenoid\"}",
+            "name": "41,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"34,3\",\"type\":\"Solenoid\"}",
+            "name": "34,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"19,1\",\"type\":\"Solenoid\"}",
+            "name": "19,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"41,6\",\"type\":\"Solenoid\"}",
+            "name": "41,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"34,2\",\"type\":\"Solenoid\"}",
+            "name": "34,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"19,2\",\"type\":\"Solenoid\"}",
+            "name": "19,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"41,5\",\"type\":\"Solenoid\"}",
+            "name": "41,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"34,1\",\"type\":\"Solenoid\"}",
+            "name": "34,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"19,3\",\"type\":\"Solenoid\"}",
+            "name": "19,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"41,4\",\"type\":\"Solenoid\"}",
+            "name": "41,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"34,0\",\"type\":\"Solenoid\"}",
+            "name": "34,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"19,4\",\"type\":\"Solenoid\"}",
+            "name": "19,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"41,3\",\"type\":\"Solenoid\"}",
+            "name": "41,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"34,7\",\"type\":\"Solenoid\"}",
+            "name": "34,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[14]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[14]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"19,5\",\"type\":\"Solenoid\"}",
+            "name": "19,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"41,2\",\"type\":\"Solenoid\"}",
+            "name": "41,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[1]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[1]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"34,6\",\"type\":\"Solenoid\"}",
+            "name": "34,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[7]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[7]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"19,6\",\"type\":\"Solenoid\"}",
+            "name": "19,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"41,1\",\"type\":\"Solenoid\"}",
+            "name": "41,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"34,5\",\"type\":\"Solenoid\"}",
+            "name": "34,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"19,7\",\"type\":\"Solenoid\"}",
+            "name": "19,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"41,0\",\"type\":\"Solenoid\"}",
+            "name": "41,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"34,4\",\"type\":\"Solenoid\"}",
+            "name": "34,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"2,0\",\"type\":\"Solenoid\"}",
+            "name": "2,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"58,7\",\"type\":\"Solenoid\"}",
+            "name": "58,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"23,1\",\"type\":\"Solenoid\"}",
+            "name": "23,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"2,1\",\"type\":\"Solenoid\"}",
+            "name": "2,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"58,6\",\"type\":\"Solenoid\"}",
+            "name": "58,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"23,0\",\"type\":\"Solenoid\"}",
+            "name": "23,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"2,2\",\"type\":\"Solenoid\"}",
+            "name": "2,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"58,5\",\"type\":\"Solenoid\"}",
+            "name": "58,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"23,3\",\"type\":\"Solenoid\"}",
+            "name": "23,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"2,3\",\"type\":\"Solenoid\"}",
+            "name": "2,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"58,4\",\"type\":\"Solenoid\"}",
+            "name": "58,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"23,2\",\"type\":\"Solenoid\"}",
+            "name": "23,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"2,4\",\"type\":\"Solenoid\"}",
+            "name": "2,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"58,3\",\"type\":\"Solenoid\"}",
+            "name": "58,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"23,5\",\"type\":\"Solenoid\"}",
+            "name": "23,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"2,5\",\"type\":\"Solenoid\"}",
+            "name": "2,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"58,2\",\"type\":\"Solenoid\"}",
+            "name": "58,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"23,4\",\"type\":\"Solenoid\"}",
+            "name": "23,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"2,6\",\"type\":\"Solenoid\"}",
+            "name": "2,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"58,1\",\"type\":\"Solenoid\"}",
+            "name": "58,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"23,7\",\"type\":\"Solenoid\"}",
+            "name": "23,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"2,7\",\"type\":\"Solenoid\"}",
+            "name": "2,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"58,0\",\"type\":\"Solenoid\"}",
+            "name": "58,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"23,6\",\"type\":\"Solenoid\"}",
+            "name": "23,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"20,0\",\"type\":\"Solenoid\"}",
+            "name": "20,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"20,1\",\"type\":\"Solenoid\"}",
+            "name": "20,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"20,2\",\"type\":\"Solenoid\"}",
+            "name": "20,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"20,3\",\"type\":\"Solenoid\"}",
+            "name": "20,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"20,4\",\"type\":\"Solenoid\"}",
+            "name": "20,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"20,5\",\"type\":\"Solenoid\"}",
+            "name": "20,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"20,6\",\"type\":\"Solenoid\"}",
+            "name": "20,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"20,7\",\"type\":\"Solenoid\"}",
+            "name": "20,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"22,2\",\"type\":\"Solenoid\"}",
+            "name": "22,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"22,3\",\"type\":\"Solenoid\"}",
+            "name": "22,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[15]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[15]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"22,4\",\"type\":\"Solenoid\"}",
+            "name": "22,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"22,5\",\"type\":\"Solenoid\"}",
+            "name": "22,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"22,6\",\"type\":\"Solenoid\"}",
+            "name": "22,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"22,7\",\"type\":\"Solenoid\"}",
+            "name": "22,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"7,3\",\"type\":\"Solenoid\"}",
+            "name": "7,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"53,2\",\"type\":\"Solenoid\"}",
+            "name": "53,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"55,4\",\"type\":\"Solenoid\"}",
+            "name": "55,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"61,1\",\"type\":\"Solenoid\"}",
+            "name": "61,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"24,0\",\"type\":\"Solenoid\"}",
+            "name": "24,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"7,2\",\"type\":\"Solenoid\"}",
+            "name": "7,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"53,3\",\"type\":\"Solenoid\"}",
+            "name": "53,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"55,5\",\"type\":\"Solenoid\"}",
+            "name": "55,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"61,0\",\"type\":\"Solenoid\"}",
+            "name": "61,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"24,1\",\"type\":\"Solenoid\"}",
+            "name": "24,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"7,1\",\"type\":\"Solenoid\"}",
+            "name": "7,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"53,0\",\"type\":\"Solenoid\"}",
+            "name": "53,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"55,6\",\"type\":\"Solenoid\"}",
+            "name": "55,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"61,3\",\"type\":\"Solenoid\"}",
+            "name": "61,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"24,2\",\"type\":\"Solenoid\"}",
+            "name": "24,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"7,0\",\"type\":\"Solenoid\"}",
+            "name": "7,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"53,1\",\"type\":\"Solenoid\"}",
+            "name": "53,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"55,7\",\"type\":\"Solenoid\"}",
+            "name": "55,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"61,2\",\"type\":\"Solenoid\"}",
+            "name": "61,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"24,3\",\"type\":\"Solenoid\"}",
+            "name": "24,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"7,7\",\"type\":\"Solenoid\"}",
+            "name": "7,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"53,6\",\"type\":\"Solenoid\"}",
+            "name": "53,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"55,0\",\"type\":\"Solenoid\"}",
+            "name": "55,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"61,5\",\"type\":\"Solenoid\"}",
+            "name": "61,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"24,4\",\"type\":\"Solenoid\"}",
+            "name": "24,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"7,6\",\"type\":\"Solenoid\"}",
+            "name": "7,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"53,7\",\"type\":\"Solenoid\"}",
+            "name": "53,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"55,1\",\"type\":\"Solenoid\"}",
+            "name": "55,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"61,4\",\"type\":\"Solenoid\"}",
+            "name": "61,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"24,5\",\"type\":\"Solenoid\"}",
+            "name": "24,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"7,5\",\"type\":\"Solenoid\"}",
+            "name": "7,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"53,4\",\"type\":\"Solenoid\"}",
+            "name": "53,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"55,2\",\"type\":\"Solenoid\"}",
+            "name": "55,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"61,7\",\"type\":\"Solenoid\"}",
+            "name": "61,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"24,6\",\"type\":\"Solenoid\"}",
+            "name": "24,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"7,4\",\"type\":\"Solenoid\"}",
+            "name": "7,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"53,5\",\"type\":\"Solenoid\"}",
+            "name": "53,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"55,3\",\"type\":\"Solenoid\"}",
+            "name": "55,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"61,6\",\"type\":\"Solenoid\"}",
+            "name": "61,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"24,7\",\"type\":\"Solenoid\"}",
+            "name": "24,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"26,0\",\"type\":\"Solenoid\"}",
+            "name": "26,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"26,1\",\"type\":\"Solenoid\"}",
+            "name": "26,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"Talon FX (v6)[0]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[0]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"26,2\",\"type\":\"Solenoid\"}",
+            "name": "26,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"26,3\",\"type\":\"Solenoid\"}",
+            "name": "26,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"26,4\",\"type\":\"Solenoid\"}",
+            "name": "26,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"26,5\",\"type\":\"Solenoid\"}",
+            "name": "26,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"26,6\",\"type\":\"Solenoid\"}",
+            "name": "26,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"26,7\",\"type\":\"Solenoid\"}",
+            "name": "26,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"28,0\",\"type\":\"Solenoid\"}",
+            "name": "28,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"54,1\",\"type\":\"Solenoid\"}",
+            "name": "54,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\">acceleration\":0.0},\"device\":\"Talon FX (v6)[10]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[10]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"28,1\",\"type\":\"Solenoid\"}",
+            "name": "28,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"54,0\",\"type\":\"Solenoid\"}",
+            "name": "54,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"28,2\",\"type\":\"Solenoid\"}",
+            "name": "28,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"54,3\",\"type\":\"Solenoid\"}",
+            "name": "54,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"28,3\",\"type\":\"Solenoid\"}",
+            "name": "28,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"54,2\",\"type\":\"Solenoid\"}",
+            "name": "54,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"28,4\",\"type\":\"Solenoid\"}",
+            "name": "28,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"54,5\",\"type\":\"Solenoid\"}",
+            "name": "54,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"28,5\",\"type\":\"Solenoid\"}",
+            "name": "28,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"54,4\",\"type\":\"Solenoid\"}",
+            "name": "54,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"28,6\",\"type\":\"Solenoid\"}",
+            "name": "28,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"54,7\",\"type\":\"Solenoid\"}",
+            "name": "54,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"28,7\",\"type\":\"Solenoid\"}",
+            "name": "28,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"54,6\",\"type\":\"Solenoid\"}",
+            "name": "54,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"29,2\",\"type\":\"Solenoid\"}",
+            "name": "29,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"29,3\",\"type\":\"Solenoid\"}",
+            "name": "29,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"29,4\",\"type\":\"Solenoid\"}",
+            "name": "29,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"29,5\",\"type\":\"Solenoid\"}",
+            "name": "29,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"29,6\",\"type\":\"Solenoid\"}",
+            "name": "29,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"29,7\",\"type\":\"Solenoid\"}",
+            "name": "29,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"3,0\",\"type\":\"Solenoid\"}",
+            "name": "3,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"57,1\",\"type\":\"Solenoid\"}",
+            "name": "57,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"CANcoder (v6)[22]\",\"type\":\"CANEncoder\"}",
+            "name": "CANcoder (v6)[22]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"3,1\",\"type\":\"Solenoid\"}",
+            "name": "3,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"57,0\",\"type\":\"Solenoid\"}",
+            "name": "57,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"3,2\",\"type\":\"Solenoid\"}",
+            "name": "3,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"57,3\",\"type\":\"Solenoid\"}",
+            "name": "57,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"3,3\",\"type\":\"Solenoid\"}",
+            "name": "3,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"57,2\",\"type\":\"Solenoid\"}",
+            "name": "57,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"3,4\",\"type\":\"Solenoid\"}",
+            "name": "3,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"57,5\",\"type\":\"Solenoid\"}",
+            "name": "57,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"3,5\",\"type\":\"Solenoid\"}",
+            "name": "3,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"57,4\",\"type\":\"Solenoid\"}",
+            "name": "57,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"3,6\",\"type\":\"Solenoid\"}",
+            "name": "3,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"57,7\",\"type\":\"Solenoid\"}",
+            "name": "57,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"3,7\",\"type\":\"Solenoid\"}",
+            "name": "3,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"57,6\",\"type\":\"Solenoid\"}",
+            "name": "57,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"30,0\",\"type\":\"Solenoid\"}",
+            "name": "30,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"30,1\",\"type\":\"Solenoid\"}",
+            "name": "30,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"30,2\",\"type\":\"Solenoid\"}",
+            "name": "30,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"30,3\",\"type\":\"Solenoid\"}",
+            "name": "30,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"30,4\",\"type\":\"Solenoid\"}",
+            "name": "30,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"30,5\",\"type\":\"Solenoid\"}",
+            "name": "30,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"30,6\",\"type\":\"Solenoid\"}",
+            "name": "30,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"30,7\",\"type\":\"Solenoid\"}",
+            "name": "30,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"31,0\",\"type\":\"Solenoid\"}",
+            "name": "31,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"37,6\",\"type\":\"Solenoid\"}",
+            "name": "37,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"31,1\",\"type\":\"Solenoid\"}",
+            "name": "31,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"37,7\",\"type\":\"Solenoid\"}",
+            "name": "37,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"31,2\",\"type\":\"Solenoid\"}",
+            "name": "31,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"37,4\",\"type\":\"Solenoid\"}",
+            "name": "37,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"31,3\",\"type\":\"Solenoid\"}",
+            "name": "31,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"37,5\",\"type\":\"Solenoid\"}",
+            "name": "37,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"31,4\",\"type\":\"Solenoid\"}",
+            "name": "31,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"37,2\",\"type\":\"Solenoid\"}",
+            "name": "37,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"31,5\",\"type\":\"Solenoid\"}",
+            "name": "31,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"37,3\",\"type\":\"Solenoid\"}",
+            "name": "37,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"31,6\",\"type\":\"Solenoid\"}",
+            "name": "31,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"37,0\",\"type\":\"Solenoid\"}",
+            "name": "37,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"31,7\",\"type\":\"Solenoid\"}",
+            "name": "31,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"37,1\",\"type\":\"Solenoid\"}",
+            "name": "37,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"32,0\",\"type\":\"Solenoid\"}",
+            "name": "32,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"32,1\",\"type\":\"Solenoid\"}",
+            "name": "32,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"32,2\",\"type\":\"Solenoid\"}",
+            "name": "32,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"32,3\",\"type\":\"Solenoid\"}",
+            "name": "32,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"32,4\",\"type\":\"Solenoid\"}",
+            "name": "32,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"32,5\",\"type\":\"Solenoid\"}",
+            "name": "32,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"32,6\",\"type\":\"Solenoid\"}",
+            "name": "32,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"32,7\",\"type\":\"Solenoid\"}",
+            "name": "32,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"33,0\",\"type\":\"Solenoid\"}",
+            "name": "33,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"33,1\",\"type\":\"Solenoid\"}",
+            "name": "33,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"33,2\",\"type\":\"Solenoid\"}",
+            "name": "33,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"33,3\",\"type\":\"Solenoid\"}",
+            "name": "33,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"33,4\",\"type\":\"Solenoid\"}",
+            "name": "33,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"33,5\",\"type\":\"Solenoid\"}",
+            "name": "33,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"33,6\",\"type\":\"Solenoid\"}",
+            "name": "33,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"33,7\",\"type\":\"Solenoid\"}",
+            "name": "33,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"35,0\",\"type\":\"Solenoid\"}",
+            "name": "35,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"35,1\",\"type\":\"Solenoid\"}",
+            "name": "35,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"35,2\",\"type\":\"Solenoid\"}",
+            "name": "35,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"35,3\",\"type\":\"Solenoid\"}",
+            "name": "35,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"35,4\",\"type\":\"Solenoid\"}",
+            "name": "35,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"35,5\",\"type\":\"Solenoid\"}",
+            "name": "35,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"36,0\",\"type\":\"Solenoid\"}",
+            "name": "36,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"36,1\",\"type\":\"Solenoid\"}",
+            "name": "36,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"36,2\",\"type\":\"Solenoid\"}",
+            "name": "36,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"36,3\",\"type\":\"Solenoid\"}",
+            "name": "36,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"36,4\",\"type\":\"Solenoid\"}",
+            "name": "36,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"36,5\",\"type\":\"Solenoid\"}",
+            "name": "36,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"36,6\",\"type\":\"Solenoid\"}",
+            "name": "36,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"36,7\",\"type\":\"Solenoid\"}",
+            "name": "36,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"38,0\",\"type\":\"Solenoid\"}",
+            "name": "38,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"38,1\",\"type\":\"Solenoid\"}",
+            "name": "38,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"38,2\",\"type\":\"Solenoid\"}",
+            "name": "38,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"38,3\",\"type\":\"Solenoid\"}",
+            "name": "38,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"38,4\",\"type\":\"Solenoid\"}",
+            "name": "38,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"38,5\",\"type\":\"Solenoid\"}",
+            "name": "38,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"38,6\",\"type\":\"Solenoid\"}",
+            "name": "38,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"38,7\",\"type\":\"Solenoid\"}",
+            "name": "38,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"4,0\",\"type\":\"Solenoid\"}",
+            "name": "4,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"52,3\",\"type\":\"Solenoid\"}",
+            "name": "52,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"4,1\",\"type\":\"Solenoid\"}",
+            "name": "4,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"52,2\",\"type\":\"Solenoid\"}",
+            "name": "52,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"4,2\",\"type\":\"Solenoid\"}",
+            "name": "4,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"52,1\",\"type\":\"Solenoid\"}",
+            "name": "52,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"4,3\",\"type\":\"Solenoid\"}",
+            "name": "4,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"52,0\",\"type\":\"Solenoid\"}",
+            "name": "52,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"4,4\",\"type\":\"Solenoid\"}",
+            "name": "4,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"52,7\",\"type\":\"Solenoid\"}",
+            "name": "52,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"4,5\",\"type\":\"Solenoid\"}",
+            "name": "4,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"52,6\",\"type\":\"Solenoid\"}",
+            "name": "52,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[3]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[3]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"4,6\",\"type\":\"Solenoid\"}",
+            "name": "4,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"52,5\",\"type\":\"Solenoid\"}",
+            "name": "52,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"4,7\",\"type\":\"Solenoid\"}",
+            "name": "4,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"52,4\",\"type\":\"Solenoid\"}",
+            "name": "52,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"40,0\",\"type\":\"Solenoid\"}",
+            "name": "40,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"46,6\",\"type\":\"Solenoid\"}",
+            "name": "46,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"40,1\",\"type\":\"Solenoid\"}",
+            "name": "40,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"46,7\",\"type\":\"Solenoid\"}",
+            "name": "46,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"40,2\",\"type\":\"Solenoid\"}",
+            "name": "40,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"46,4\",\"type\":\"Solenoid\"}",
+            "name": "46,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"40,3\",\"type\":\"Solenoid\"}",
+            "name": "40,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"46,5\",\"type\":\"Solenoid\"}",
+            "name": "46,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"40,4\",\"type\":\"Solenoid\"}",
+            "name": "40,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"46,2\",\"type\":\"Solenoid\"}",
+            "name": "46,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"40,5\",\"type\":\"Solenoid\"}",
+            "name": "40,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"46,3\",\"type\":\"Solenoid\"}",
+            "name": "46,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"40,6\",\"type\":\"Solenoid\"}",
+            "name": "40,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"46,0\",\"type\":\"Solenoid\"}",
+            "name": "46,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[5]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[5]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"40,7\",\"type\":\"Solenoid\"}",
+            "name": "40,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"46,1\",\"type\":\"Solenoid\"}",
+            "name": "46,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"42,0\",\"type\":\"Solenoid\"}",
+            "name": "42,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"42,1\",\"type\":\"Solenoid\"}",
+            "name": "42,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"42,2\",\"type\":\"Solenoid\"}",
+            "name": "42,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"42,3\",\"type\":\"Solenoid\"}",
+            "name": "42,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"42,4\",\"type\":\"Solenoid\"}",
+            "name": "42,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"42,5\",\"type\":\"Solenoid\"}",
+            "name": "42,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"42,6\",\"type\":\"Solenoid\"}",
+            "name": "42,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"Talon FX (v6)[3]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[3]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"42,7\",\"type\":\"Solenoid\"}",
+            "name": "42,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"43,0\",\"type\":\"Solenoid\"}",
+            "name": "43,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"43,1\",\"type\":\"Solenoid\"}",
+            "name": "43,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"43,2\",\"type\":\"Solenoid\"}",
+            "name": "43,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"43,3\",\"type\":\"Solenoid\"}",
+            "name": "43,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[9]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[9]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"43,4\",\"type\":\"Solenoid\"}",
+            "name": "43,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"43,5\",\"type\":\"Solenoid\"}",
+            "name": "43,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"43,6\",\"type\":\"Solenoid\"}",
+            "name": "43,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"43,7\",\"type\":\"Solenoid\"}",
+            "name": "43,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"45,0\",\"type\":\"Solenoid\"}",
+            "name": "45,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"45,4\",\"type\":\"Solenoid\"}",
+            "name": "45,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"45,5\",\"type\":\"Solenoid\"}",
+            "name": "45,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"45,6\",\"type\":\"Solenoid\"}",
+            "name": "45,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"45,7\",\"type\":\"Solenoid\"}",
+            "name": "45,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\">acceleration\":0.0},\"device\":\"Talon FX (v6)[13]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[13]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"48,0\",\"type\":\"Solenoid\"}",
+            "name": "48,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"48,1\",\"type\":\"Solenoid\"}",
+            "name": "48,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"48,2\",\"type\":\"Solenoid\"}",
+            "name": "48,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"48,3\",\"type\":\"Solenoid\"}",
+            "name": "48,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"48,4\",\"type\":\"Solenoid\"}",
+            "name": "48,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"48,5\",\"type\":\"Solenoid\"}",
+            "name": "48,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"48,6\",\"type\":\"Solenoid\"}",
+            "name": "48,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"48,7\",\"type\":\"Solenoid\"}",
+            "name": "48,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"51,2\",\"type\":\"Solenoid\"}",
+            "name": "51,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"51,3\",\"type\":\"Solenoid\"}",
+            "name": "51,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"51,4\",\"type\":\"Solenoid\"}",
+            "name": "51,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"51,5\",\"type\":\"Solenoid\"}",
+            "name": "51,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"51,6\",\"type\":\"Solenoid\"}",
+            "name": "51,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"51,7\",\"type\":\"Solenoid\"}",
+            "name": "51,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"59,0\",\"type\":\"Solenoid\"}",
+            "name": "59,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"59,1\",\"type\":\"Solenoid\"}",
+            "name": "59,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[0]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[0]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"59,2\",\"type\":\"Solenoid\"}",
+            "name": "59,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"59,3\",\"type\":\"Solenoid\"}",
+            "name": "59,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"59,4\",\"type\":\"Solenoid\"}",
+            "name": "59,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"59,5\",\"type\":\"Solenoid\"}",
+            "name": "59,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"59,6\",\"type\":\"Solenoid\"}",
+            "name": "59,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"59,7\",\"type\":\"Solenoid\"}",
+            "name": "59,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"60,2\",\"type\":\"Solenoid\"}",
+            "name": "60,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\">acceleration\":0.0},\"device\":\"Talon FX (v6)[12]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[12]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"60,3\",\"type\":\"Solenoid\"}",
+            "name": "60,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"60,4\",\"type\":\"Solenoid\"}",
+            "name": "60,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"60,5\",\"type\":\"Solenoid\"}",
+            "name": "60,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"60,6\",\"type\":\"Solenoid\"}",
+            "name": "60,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"60,7\",\"type\":\"Solenoid\"}",
+            "name": "60,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"62,0\",\"type\":\"Solenoid\"}",
+            "name": "62,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"62,1\",\"type\":\"Solenoid\"}",
+            "name": "62,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"62,2\",\"type\":\"Solenoid\"}",
+            "name": "62,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"62,3\",\"type\":\"Solenoid\"}",
+            "name": "62,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"62,4\",\"type\":\"Solenoid\"}",
+            "name": "62,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"62,5\",\"type\":\"Solenoid\"}",
+            "name": "62,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"62,6\",\"type\":\"Solenoid\"}",
+            "name": "62,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"62,7\",\"type\":\"Solenoid\"}",
+            "name": "62,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"8,0\",\"type\":\"Solenoid\"}",
+            "name": "8,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"8,1\",\"type\":\"Solenoid\"}",
+            "name": "8,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"8,2\",\"type\":\"Solenoid\"}",
+            "name": "8,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"8,3\",\"type\":\"Solenoid\"}",
+            "name": "8,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\">acceleration\":0.0},\"device\":\"Talon FX (v6)[8]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[8]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"8,4\",\"type\":\"Solenoid\"}",
+            "name": "8,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"8,5\",\"type\":\"Solenoid\"}",
+            "name": "8,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"8,6\",\"type\":\"Solenoid\"}",
+            "name": "8,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"8,7\",\"type\":\"Solenoid\"}",
+            "name": "8,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"9,0\",\"type\":\"Solenoid\"}",
+            "name": "9,0"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"9,1\",\"type\":\"Solenoid\"}",
+            "name": "9,1"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"9,2\",\"type\":\"Solenoid\"}",
+            "name": "9,2"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"9,3\",\"type\":\"Solenoid\"}",
+            "name": "9,3"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"9,4\",\"type\":\"Solenoid\"}",
+            "name": "9,4"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"9,5\",\"type\":\"Solenoid\"}",
+            "name": "9,5"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"9,6\",\"type\":\"Solenoid\"}",
+            "name": "9,6"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<output\":false},\"device\":\"9,7\",\"type\":\"Solenoid\"}",
+            "name": "9,7"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"Talon FX (v6)[1]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[1]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[1]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[1]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[0]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[0]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[0]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[0]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[3]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[3]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[3]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[3]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[2]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[2]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"Talon FX (v6)[2]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[2]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[2]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[2]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"CANcoder (v6)[23]\",\"type\":\"CANEncoder\"}",
+            "name": "CANcoder (v6)[23]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[5]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[5]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"Talon FX (v6)[5]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[5]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[4]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[4]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[4]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[4]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"CANcoder (v6)[21]\",\"type\":\"CANEncoder\"}",
+            "name": "CANcoder (v6)[21]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"Talon FX (v6)[7]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[7]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[7]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[7]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[6]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[6]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"Talon FX (v6)[6]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[6]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[6]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[6]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<position\":0.0},\"device\":\"CANcoder (v6)[20]\",\"type\":\"CANEncoder\"}",
+            "name": "CANcoder (v6)[20]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<yaw\":-2.0767532534966723e-18},\"device\":\"Pigeon 2 (v6)[24]\",\"type\":\"CANGyro\"}",
+            "name": "Pigeon 2 (v6)[24]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[13]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[13]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[13]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[13]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[13]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[13]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\">Connected\":true},\"device\":\"DutyCycleEncoder[0]\",\"type\":\"DutyCycle\"}",
+            "name": "DutyCycleEncoder[0]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[12]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[12]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[12]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[12]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[11]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[11]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[11]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[11]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[8]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[8]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[8]/Fwd Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[8]/Fwd Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[8]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[8]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\">acceleration\":0.0},\"device\":\"Talon FX (v6)[9]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[9]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[9]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[9]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[10]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[10]"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[10]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[10]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[15]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[15]"
+        },
+        {
+            "lastPayload": "{\"data\":{\">acceleration\":0.0},\"device\":\"Talon FX (v6)[15]/Rotor Sensor\",\"type\":\"CANEncoder\"}",
+            "name": "Talon FX (v6)[15]/Rotor Sensor"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<>value\":false},\"device\":\"Talon FX (v6)[15]/Rev Limit\",\"type\":\"CANDIO\"}",
+            "name": "Talon FX (v6)[15]/Rev Limit"
+        },
+        {
+            "lastPayload": "{\"data\":{\"<supplyCurrent\":0.0},\"device\":\" Talon FX (v6)[14]\",\"type\":\"CANMotor\"}",
+            "name": " Talon FX (v6)[14]"
+        }
+    ]
+}

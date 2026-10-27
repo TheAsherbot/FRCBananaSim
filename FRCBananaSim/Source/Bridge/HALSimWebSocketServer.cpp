@@ -21,6 +21,7 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -275,119 +276,185 @@ namespace FRCBananaSim::Bridge
 
     bool HALSimWebSocketServer::DispatchIncomingJson(std::string_view jsonText)
     {
-        nlohmann::json j;
+        nlohmann::json root;
         try
         {
-            j = nlohmann::json::parse(jsonText);
+            root = nlohmann::json::parse(jsonText);
         }
-        catch (...)
+        catch (const std::exception& e)
         {
+            SIM_LOG_WARN("Failed to parse incoming WebSocket JSON: " << e.what());
             return false;
         }
 
-        if (!j.is_object() || !j.contains("type") || !j.contains("data"))
+        auto processSingleMessage = [this](const nlohmann::json& j) -> bool
+            {
+                if (!j.is_object() || !j.contains("type"))
+                {
+                    return false;
+                }
+
+                std::string type;
+                if (j["type"].is_string())
+                {
+                    type = j["type"].get<std::string>();
+                }
+
+                // Extract device identifier (string, integer, or keyed under "name")
+                std::string device;
+                if (j.contains("device"))
+                {
+                    if (j["device"].is_string())
+                    {
+                        device = j["device"].get<std::string>();
+                    }
+                    else if (j["device"].is_number())
+                    {
+                        device = std::to_string(j["device"].get<int64_t>());
+                    }
+                }
+                else if (j.contains("name") && j["name"].is_string())
+                {
+                    device = j["name"].get<std::string>();
+                }
+
+                // Record any named/addressed device
+                if (!device.empty())
+                {
+                    std::lock_guard<std::mutex> lock(devicesMutex);
+                    discoveredDevices.insert(device);
+                    rawDeviceJson[device] = j.dump();
+                }
+
+                // Extract payload data (can be under "data" or "values")
+                nlohmann::json data;
+                if (j.contains("data") && j["data"].is_object())
+                {
+                    data = j["data"];
+                }
+                else if (j.contains("values") && j["values"].is_object())
+                {
+                    data = j["values"];
+                }
+                else
+                {
+                    return !device.empty();
+                }
+
+                std::lock_guard<std::mutex> lock(inputsMutex);
+
+                std::string lowerType = type;
+                std::transform(lowerType.begin(), lowerType.end(), lowerType.begin(), ::tolower);
+
+                if (lowerType == "pwm")
+                {
+                    int channel = -1;
+                    try
+                    {
+                        channel = std::stoi(device);
+                    }
+                    catch (...) {}
+
+                    if (channel >= 0 && channel < 8)
+                    {
+                        double demand = 0.0;
+                        if (data.contains(">speed"))
+                        {
+                            demand = data[">speed"].get<double>() * 12.0;
+                        }
+                        else if (data.contains(">voltage"))
+                        {
+                            demand = data[">voltage"].get<double>();
+                        }
+
+                        currentInputs.motorCommands[channel].mode = Control::MotorControlMode::Voltage;
+                        currentInputs.motorCommands[channel].demand = std::clamp(demand, -12.0, 12.0);
+                        hasNewInputs = true;
+                        return true;
+                    }
+                }
+                else if (lowerType == "canmotor" || lowerType == "simdevice" || lowerType == "simdevices")
+                {
+                    int canId = -1;
+                    size_t openBracket = device.find('[');
+                    size_t closeBracket = device.find(']');
+                    if (openBracket != std::string::npos && closeBracket != std::string::npos &&
+                        closeBracket > openBracket)
+                    {
+                        try
+                        {
+                            canId = std::stoi(device.substr(openBracket + 1, closeBracket - openBracket - 1));
+                        }
+                        catch (...) {}
+                    }
+
+                    // Map CTRE Swerve Motors: Drive (0, 2, 4, 6) & Steer (1, 3, 5, 7)
+                    if (canId >= 0 && canId <= 7)
+                    {
+                        int targetIdx = -1;
+                        if (canId % 2 == 1)
+                        {
+                            targetIdx = (canId - 1) / 2; // 1->0 (FL), 3->1 (FR), 5->2 (BL), 7->3 (BR) Steer
+                        }
+                        else
+                        {
+                            targetIdx = 4 + (canId / 2); // 0->4 (FL), 2->5 (FR), 4->6 (BL), 6->7 (BR) Drive
+                        }
+
+                        if (targetIdx >= 0 && targetIdx < 8)
+                        {
+                            double demand = 0.0;
+                            Control::MotorControlMode mode = Control::MotorControlMode::Voltage;
+
+                            if (data.contains(">motorVoltage"))
+                            {
+                                demand = data[">motorVoltage"].get<double>();
+                            }
+                            else if (data.contains(">motorOutputLead"))
+                            {
+                                demand = data[">motorOutputLead"].get<double>() * 12.0;
+                            }
+                            else if (data.contains(">Applied Output"))
+                            {
+                                demand = data[">Applied Output"].get<double>() * 12.0;
+                            }
+                            else if (data.contains(">dutyCycle"))
+                            {
+                                demand = data[">dutyCycle"].get<double>() * 12.0;
+                            }
+                            else if (data.contains(">torqueCurrent"))
+                            {
+                                demand = data[">torqueCurrent"].get<double>();
+                                mode = Control::MotorControlMode::TorqueCurrent;
+                            }
+
+                            currentInputs.motorCommands[targetIdx].mode = mode;
+                            currentInputs.motorCommands[targetIdx].demand = (mode == Control::MotorControlMode::Voltage) ?
+                                std::clamp(demand, -12.0, 12.0) : demand;
+                            hasNewInputs = true;
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            };
+
+        if (root.is_array())
         {
-            return false;
+            bool anyHandled = false;
+            for (const auto& item : root)
+            {
+                if (processSingleMessage(item))
+                {
+                    anyHandled = true;
+                }
+            }
+            return anyHandled;
         }
-
-        std::string type = j["type"].get<std::string>();
-        std::string device = j.value("device", "");
-        const auto& data = j["data"];
-
-        if (!device.empty())
+        else if (root.is_object())
         {
-            std::lock_guard<std::mutex> lock(devicesMutex);
-            discoveredDevices.insert(device);
-            rawDeviceJson[device] = j.dump();
-        }
-
-        std::lock_guard<std::mutex> lock(inputsMutex);
-
-        if (type == "PWM")
-        {
-            int channel = -1;
-            try
-            {
-                channel = std::stoi(device);
-            }
-            catch (...) {}
-
-            if (channel >= 0 && channel < 8)
-            {
-                double demand = 0.0;
-                if (data.contains(">speed"))
-                {
-                    demand = data[">speed"].get<double>() * 12.0;
-                }
-                else if (data.contains(">voltage"))
-                {
-                    demand = data[">voltage"].get<double>();
-                }
-
-                currentInputs.motorCommands[channel].mode = Control::MotorControlMode::Voltage;
-                currentInputs.motorCommands[channel].demand = std::clamp(demand, -12.0, 12.0);
-                hasNewInputs = true;
-                return true;
-            }
-        }
-        else if (type == "SimDevice")
-        {
-            int canId = -1;
-            size_t openBracket = device.find('[');
-            size_t closeBracket = device.find(']');
-            if (openBracket != std::string::npos && closeBracket != std::string::npos &&
-                closeBracket > openBracket)
-            {
-                try
-                {
-                    canId = std::stoi(device.substr(openBracket + 1, closeBracket - openBracket - 1));
-                }
-                catch (...) {}
-            }
-
-            if (canId > 0)
-            {
-                // Odd CAN IDs (1, 3, 5, 7) = Steer [0..3]; Even CAN IDs (2, 4, 6, 8) = Drive [4..7]
-                int targetIdx = -1;
-                if (canId % 2 == 1 && canId <= 7)
-                {
-                    targetIdx = (canId - 1) / 2;
-                }
-                else if (canId % 2 == 0 && canId <= 8)
-                {
-                    targetIdx = 4 + (canId / 2 - 1);
-                }
-
-                if (targetIdx >= 0 && targetIdx < 8)
-                {
-                    double demand = 0.0;
-                    Control::MotorControlMode mode = Control::MotorControlMode::Voltage;
-
-                    if (data.contains(">motorOutputLead"))
-                    {
-                        demand = data[">motorOutputLead"].get<double>() * 12.0;
-                    }
-                    else if (data.contains(">motorVoltage"))
-                    {
-                        demand = data[">motorVoltage"].get<double>();
-                    }
-                    else if (data.contains(">Applied Output"))
-                    {
-                        demand = data[">Applied Output"].get<double>() * 12.0;
-                    }
-                    else if (data.contains(">torqueCurrent"))
-                    {
-                        demand = data[">torqueCurrent"].get<double>();
-                        mode = Control::MotorControlMode::TorqueCurrent;
-                    }
-
-                    currentInputs.motorCommands[targetIdx].mode = mode;
-                    currentInputs.motorCommands[targetIdx].demand = (mode == Control::MotorControlMode::Voltage) ?
-                        std::clamp(demand, -12.0, 12.0) : demand;
-                    hasNewInputs = true;
-                    return true;
-                }
-            }
+            return processSingleMessage(root);
         }
 
         return false;
@@ -418,12 +485,21 @@ namespace FRCBananaSim::Bridge
             dump["devices"].push_back(item);
         }
 
+        std::filesystem::path p(filepath);
+        if (p.has_parent_path())
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(p.parent_path(), ec);
+        }
+
         std::ofstream out(filepath);
         if (!out.is_open())
         {
+            SIM_LOG_ERROR("Failed to open file for SimDevice dump: " << filepath);
             return false;
         }
         out << dump.dump(4);
+        SIM_LOG_INFO("Dumped " << discoveredDevices.size() << " SimDevices to: " << filepath);
         return true;
     }
 
@@ -570,6 +646,12 @@ namespace FRCBananaSim::Bridge
                     {
                         if (opcode == 0x01) // Text JSON frame
                         {
+                            static int packetLogCount = 0;
+                            if (packetLogCount < 5)
+                            {
+                                SIM_LOG_INFO("WS Incoming #" << packetLogCount << ": " << payload);
+                                ++packetLogCount;
+                            }
                             DispatchIncomingJson(payload);
                             std::lock_guard<std::mutex> sLock(statsMutex);
                             stats.packetsReceived++;
@@ -615,7 +697,7 @@ namespace FRCBananaSim::Bridge
                         stats.bytesSent += frame.size();
                     }
 
-                    // 4. Send 100 Hz Sensory Outputs (RoboRIO Battery, Encoders, Gyro)
+                    // 4. Send 100 Hz Sensory Outputs (RoboRIO Battery, Pigeon 2 Gyro, CANcoders, Rotor Sensors)
                     double pubElapsed = std::chrono::duration<double>(now - lastPublish).count();
                     if (pubElapsed >= (1.0 / config.publishRateHz))
                     {
@@ -626,32 +708,83 @@ namespace FRCBananaSim::Bridge
                             out = latestOutputs;
                         }
 
+                        auto sendJsonMsg = [&](const nlohmann::json& msg)
+                            {
+                                std::string s = msg.dump();
+                                std::vector<uint8_t> f = EncodeTextFrame(s);
+                                send(clientSock, reinterpret_cast<const char*>(f.data()),
+                                    static_cast<int>(f.size()), 0);
+                                std::lock_guard<std::mutex> sLock(statsMutex);
+                                stats.packetsSent++;
+                                stats.bytesSent += f.size();
+                            };
+
                         // A. Battery Voltage (prevents robot brownout cutoff)
-                        nlohmann::json rrioMsg = {
+                        sendJsonMsg({
                             { "type", "RoboRIO" },
                             { "device", "" },
                             { "data", { { ">vin_voltage", out.batteryTerminalVoltage } } }
-                        };
-                        std::string rrioStr = rrioMsg.dump();
-                        std::vector<uint8_t> rrioFrame = EncodeTextFrame(rrioStr);
-                        send(clientSock, reinterpret_cast<const char*>(rrioFrame.data()),
-                            static_cast<int>(rrioFrame.size()), 0);
-                    
-                        // B. Pigeon 2 Gyro Heading
-                        nlohmann::json p2Msg = {
-                            { "type", "SimDevice" },
-                            { "device", "Pigeon 2 (Gyro)[0]" },
+                            });
+
+                        // B. Pigeon 2 (v6) on CAN ID 24 (Yaw in degrees, AngularVelZ in deg/s)
+                        sendJsonMsg({
+                            { "type", "CANGyro" },
+                            { "device", "Pigeon 2 (v6)[24]" },
                             { "data", {
                                 { "<yaw", glm::degrees(out.gyroYaw) },
                                 { "<pitch", glm::degrees(out.gyroPitch) },
                                 { "<roll", glm::degrees(out.gyroRoll) },
-                                { "<angularVelocityZ", glm::degrees(out.gyroYawRate) }
+                                { "<angularVelZ", glm::degrees(out.gyroYawRate) }
                             } }
-                        };
-                        std::string pStr = p2Msg.dump();
-                        std::vector<uint8_t> pFrame = EncodeTextFrame(pStr);
-                        send(clientSock, reinterpret_cast<const char*>(pFrame.data()),
-                            static_cast<int>(pFrame.size()), 0);
+                            });
+
+                        // C. 4 Swerve Steer CANcoders (IDs 20, 21, 22, 23 in rotations: 1.0 rot = 360 deg)
+                        constexpr double k2Pi = 6.28318530717958647692;
+                        for (int i = 0; i < 4; ++i)
+                        {
+                            int cancoderId = 20 + i;
+                            double rot = out.encoderPositions[i] / k2Pi;
+                            double rps = out.encoderVelocities[i] / k2Pi;
+
+                            sendJsonMsg({
+                                { "type", "CANEncoder" },
+                                { "device", "CANcoder (v6)[" + std::to_string(cancoderId) + "]" },
+                                { "data", {
+                                    { "<position", rot },
+                                    { "<velocity", rps }
+                                } }
+                                });
+                        }
+
+                        // D. 8 Talon FX Rotor Sensors (Drive: 0, 2, 4, 6 | Steer: 1, 3, 5, 7)
+                        for (int i = 0; i < 4; ++i)
+                        {
+                            // Drive rotor sensor (6.12 gear reduction)
+                            int driveId = i * 2;
+                            double driveWheelRot = out.encoderPositions[4 + i] / k2Pi;
+                            double driveWheelRps = out.encoderVelocities[4 + i] / k2Pi;
+                            sendJsonMsg({
+                                { "type", "CANEncoder" },
+                                { "device", "Talon FX (v6)[" + std::to_string(driveId) + "]/Rotor Sensor" },
+                                { "data", {
+                                    { "<position", driveWheelRot * 6.12 },
+                                    { "<velocity", driveWheelRps * 6.12 }
+                                } }
+                                });
+
+                            // Steer rotor sensor (21.43 gear reduction)
+                            int steerId = i * 2 + 1;
+                            double steerWheelRot = out.encoderPositions[i] / k2Pi;
+                            double steerWheelRps = out.encoderVelocities[i] / k2Pi;
+                            sendJsonMsg({
+                                { "type", "CANEncoder" },
+                                { "device", "Talon FX (v6)[" + std::to_string(steerId) + "]/Rotor Sensor" },
+                                { "data", {
+                                    { "<position", steerWheelRot * 21.43 },
+                                    { "<velocity", steerWheelRps * 21.43 }
+                                } }
+                                });
+                        }
                     }
                 }
             }
