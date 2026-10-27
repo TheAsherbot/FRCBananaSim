@@ -506,8 +506,13 @@ namespace FRCBananaSim::Tests
                 std::cout << "   Drive Distance:   " << modComp->distanceTraveled << " m (" << finalOutputs.encoderPositions[4 + i] << " rad)\n";
                 std::cout << "   Drive Velocity:   " << modComp->currentLinearVelocity << " m/s (" << finalOutputs.encoderVelocities[4 + i] << " rad/s)\n";
                 std::cout << "   Drive Stator I:   " << finalOutputs.motorCurrents[4 + i] << " A\n";
-                std::cout << "   Joint Deflection: Steer=" << steerJoint->currentDeflection * 1000.0f << " mm, Drive=" << driveJoint->currentDeflection * 1000.0f << " mm\n";
-                std::cout << "   Wheel World Pos:  X=" << wheelT->position.x << " m, Y=" << wheelT->position.y << " m, Z=" << wheelT->position.z << " m\n";
+                float steerDef = steerJoint ? steerJoint->currentDeflection * 1000.0f : 0.0f;
+                float driveDef = driveJoint ? driveJoint->currentDeflection * 1000.0f : 0.0f;
+                std::cout << "   Joint Deflection: Steer=" << steerDef << " mm, Drive=" << driveDef << " mm\n";
+                if (wheelT)
+                {
+                    std::cout << "   Wheel World Pos:  X=" << wheelT->position.x << " m, Y=" << wheelT->position.y << " m, Z=" << wheelT->position.z << " m\n";
+                }
             }
             std::cout << "======================================================================\n\n";
         }

@@ -1,11 +1,12 @@
 /**
  * @file RobotSpawnerTest.cpp
- * @brief Test suite verifying declarative JSON robot spawner and collision group filtering.
+ * @brief Test suite verifying Schema v2 JSON robot spawner, single Jolt rigid body creation, and visual hierarchy.
  */
 
 #include "RobotSpawnerTest.h"
 #include "TestFramework.h"
 #include "Robot/RobotSpawner.h"
+#include "Robot/Drivetrain/Model/SwerveParams.h"
 #include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
 #include "Robot/Drivetrain/Components/SwerveModuleComponent.h"
 #include "Actuation/Components/BatteryComponent.h"
@@ -15,9 +16,9 @@
 #include "Physics/Components/ColliderComponent.h"
 #include "Physics/Components/JointComponent.h"
 #include "Physics/Systems/PhysicsSystem.h"
-#include "Physics/Systems/JointSystem.h"
 #include "Core/ECS/Core/Scene.h"
 #include "Core/ECS/Components/TransformComponent.h"
+#include "Core/ECS/Components/HierarchyComponent.h"
 #include "Core/Units/Units.h"
 
 #include <iostream>
@@ -26,6 +27,7 @@
 namespace FRCBananaSim::Tests
 {
     using namespace Robot;
+    using namespace Robot::Drivetrain::Model;
     using namespace Robot::Drivetrain::Components;
     using namespace Actuation::Components;
     using namespace Physics;
@@ -41,11 +43,13 @@ namespace FRCBananaSim::Tests
         constexpr double tolerance = 1e-4;
 
         // -------------------------------------------------------------
-        // 1. Spawning From JSON String Specification
+        // 1. Spawning From Schema v2 JSON Specification
         // -------------------------------------------------------------
         {
             Scene scene;
             const std::string jsonText = R"({
+                "name": "Test_Swerve_MK5n",
+                "version": "2.0.0",
                 "chassis": {
                     "mass_kg": 50.0,
                     "width_m": 0.70,
@@ -53,6 +57,13 @@ namespace FRCBananaSim::Tests
                     "length_m": 0.70,
                     "wheelbase_m": 0.56,
                     "trackwidth_m": 0.56,
+                    "cgHeight_m": 0.20,
+                    "cgOffset_m": [0.0, 0.0],
+                    "inertiaTensor_kgm2": [
+                        [ 2.1354, 0.0, 0.0 ],
+                        [ 0.0, 2.1354, 0.0 ],
+                        [ 0.0, 0.0, 4.0833 ]
+                    ],
                     "friction": 0.7
                 },
                 "battery": {
@@ -66,11 +77,30 @@ namespace FRCBananaSim::Tests
                     "brownoutRecovery_V": 7.5
                 },
                 "motors": {
-                    "steer": { "type": "Falcon500", "gearRatio": 21.43, "efficiency": 0.92 },
-                    "drive": { "type": "KrakenX60", "gearRatio": 6.12, "efficiency": 0.96 }
+                    "steer": { "type": "KrakenX44", "gearRatio": 26.0909, "efficiency": 0.92 },
+                    "drive": { "type": "KrakenX60", "gearRatio": 5.27, "efficiency": 0.96 }
                 },
                 "steerHousing": { "mass_kg": 0.45, "radius_m": 0.04, "height_m": 0.06 },
-                "wheel": { "mass_kg": 0.65, "radius_m": 0.0508, "width_m": 0.04, "friction": 1.2 },
+                "wheel": { "mass_kg": 0.65, "radius_m": 0.0508, "width_m": 0.0381, "axleInertia_kgm2": 0.00084, "friction": 1.2 },
+                "tire": {
+                    "radialStiffness_Npm": 120000.0,
+                    "radialDamping_Nspm": 1200.0,
+                    "preSlide_m": 0.001,
+                    "mu_static": 1.20,
+                    "mu_kinetic": 1.05,
+                    "stribeckVelocity_mps": 0.15,
+                    "loadSensitivityBeta": 0.08,
+                    "rollingResistance": 0.015,
+                    "lateralFrictionRatio": 1.0
+                },
+                "steerModule": {
+                    "steerHousingInertia_kgm2": 0.00036,
+                    "coulombFriction_Nm": 0.08,
+                    "viscousDamping_Nms": 0.002
+                },
+                "driveModule": {
+                    "coulombFriction_Nm": 1.8
+                },
                 "modules": [
                     { "index": 0, "name": "FL", "location_m": [-0.28,  0.28], "steerCAN": 1, "driveCAN": 2, "canCoder": 1 },
                     { "index": 1, "name": "FR", "location_m": [ 0.28,  0.28], "steerCAN": 3, "driveCAN": 4, "canCoder": 2 },
@@ -85,17 +115,26 @@ namespace FRCBananaSim::Tests
             TEST_EXPECT_TRUE(ctx, robot.chassisEntity != invalidEntity);
             TEST_EXPECT_TRUE(ctx, robot.batteryEntity != invalidEntity);
 
-            // Verify 4 modules, 4 steer housings, 4 wheels, and 8 joints were allocated
+            // Verify Exactly 1 RigidBodyComponent exists in the entire scene (Chassis)
+            auto allRigidBodies = scene.Query<RigidBodyComponent>();
+            TEST_EXPECT_EQ(ctx, allRigidBodies.size(), 1u);
+
+            // Verify 4 modules, 4 steer housings, 4 wheels were allocated
             for (uint32_t i = 0; i < 4; ++i)
             {
                 TEST_EXPECT_TRUE(ctx, robot.moduleEntities[i] != invalidEntity);
                 TEST_EXPECT_TRUE(ctx, robot.steerEntities[i] != invalidEntity);
                 TEST_EXPECT_TRUE(ctx, robot.wheelEntities[i] != invalidEntity);
-                TEST_EXPECT_TRUE(ctx, robot.steerJointEntities[i] != invalidEntity);
-                TEST_EXPECT_TRUE(ctx, robot.driveJointEntities[i] != invalidEntity);
+
+                // Joints no longer exist in the single-body analytic model
+                TEST_EXPECT_FALSE(ctx, scene.HasComponent<JointComponent>(robot.moduleEntities[i]));
+                TEST_EXPECT_FALSE(ctx, scene.HasComponent<RigidBodyComponent>(robot.steerEntities[i]));
+                TEST_EXPECT_FALSE(ctx, scene.HasComponent<RigidBodyComponent>(robot.wheelEntities[i]));
+                TEST_EXPECT_FALSE(ctx, scene.HasComponent<ColliderComponent>(robot.steerEntities[i]));
+                TEST_EXPECT_FALSE(ctx, scene.HasComponent<ColliderComponent>(robot.wheelEntities[i]));
             }
 
-            // Verify Chassis Components
+            // Verify Chassis RigidBody properties
             auto* chassisRb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
             TEST_EXPECT_TRUE(ctx, chassisRb != nullptr);
             if (chassisRb)
@@ -103,8 +142,17 @@ namespace FRCBananaSim::Tests
                 TEST_EXPECT_NEAR(ctx, chassisRb->mass, 50.0f, tolerance);
                 TEST_EXPECT_EQ(ctx, chassisRb->collisionGroupID, 1u);
                 TEST_EXPECT_EQ(ctx, chassisRb->collisionSubGroupID, 0u);
+                TEST_EXPECT_NEAR(ctx, chassisRb->gravityFactor, 0.0f, tolerance);
+                TEST_EXPECT_FALSE(ctx, chassisRb->allowSleeping);
+                TEST_EXPECT_TRUE(ctx, chassisRb->hasCustomInertia);
+
+                // Verify Jolt-mapped inertia tensor (Pitch around X, Yaw around Y, Roll around Z)
+                TEST_EXPECT_NEAR(ctx, chassisRb->inertiaTensor[0][0], 2.1354f, 1e-3f);
+                TEST_EXPECT_NEAR(ctx, chassisRb->inertiaTensor[1][1], 4.0833f, 1e-3f);
+                TEST_EXPECT_NEAR(ctx, chassisRb->inertiaTensor[2][2], 2.1354f, 1e-3f);
             }
 
+            // Verify Chassis Collider
             auto* chassisCol = scene.GetComponent<ColliderComponent>(robot.chassisEntity);
             TEST_EXPECT_TRUE(ctx, chassisCol != nullptr);
             if (chassisCol)
@@ -115,20 +163,51 @@ namespace FRCBananaSim::Tests
                 TEST_EXPECT_NEAR(ctx, chassisCol->boxHalfExtents.z, 0.35f, tolerance);
             }
 
-            // Verify Module 0 (Front-Left) components and coordinates
+            // Verify Hierarchy Link Graph
+            auto* chassisHierarchy = scene.GetComponent<HierarchyComponent>(robot.chassisEntity);
+            TEST_EXPECT_TRUE(ctx, chassisHierarchy != nullptr);
+            if (chassisHierarchy)
+            {
+                TEST_EXPECT_EQ(ctx, chassisHierarchy->parent, invalidEntity);
+                TEST_EXPECT_EQ(ctx, chassisHierarchy->children.size(), 4u);
+            }
+
+            for (uint32_t i = 0; i < 4; ++i)
+            {
+                auto* steerH = scene.GetComponent<HierarchyComponent>(robot.steerEntities[i]);
+                TEST_EXPECT_TRUE(ctx, steerH != nullptr);
+                if (steerH)
+                {
+                    TEST_EXPECT_EQ(ctx, steerH->parent, robot.chassisEntity);
+                    TEST_EXPECT_EQ(ctx, steerH->children.size(), 1u);
+                    TEST_EXPECT_EQ(ctx, steerH->children[0], robot.wheelEntities[i]);
+                }
+
+                auto* wheelH = scene.GetComponent<HierarchyComponent>(robot.wheelEntities[i]);
+                TEST_EXPECT_TRUE(ctx, wheelH != nullptr);
+                if (wheelH)
+                {
+                    TEST_EXPECT_EQ(ctx, wheelH->parent, robot.steerEntities[i]);
+                    TEST_EXPECT_TRUE(ctx, wheelH->children.empty());
+                }
+            }
+
+            // Verify Module 0
             auto* mod0 = scene.GetComponent<SwerveModuleComponent>(robot.moduleEntities[0]);
             TEST_EXPECT_TRUE(ctx, mod0 != nullptr);
             if (mod0)
             {
                 TEST_EXPECT_EQ(ctx, mod0->moduleIndex, 0u);
-                TEST_EXPECT_NEAR(ctx, mod0->moduleLocation.x, -0.28f, tolerance); // Left
-                TEST_EXPECT_NEAR(ctx, mod0->moduleLocation.y,  0.28f, tolerance); // Forward
+                TEST_EXPECT_NEAR(ctx, mod0->moduleLocation.x, -0.28f, tolerance);
+                TEST_EXPECT_NEAR(ctx, mod0->moduleLocation.y,  0.28f, tolerance);
                 TEST_EXPECT_EQ(ctx, mod0->steerCANId, 1u);
                 TEST_EXPECT_EQ(ctx, mod0->driveCANId, 2u);
                 TEST_EXPECT_EQ(ctx, mod0->canCoderId, 1u);
+                TEST_EXPECT_NEAR(ctx, mod0->steerMotor.GetGearRatio(), 26.0909, 1e-3);
+                TEST_EXPECT_NEAR(ctx, mod0->driveMotor.GetGearRatio(), 5.27, 1e-3);
             }
 
-            // Verify Battery Component
+            // Verify Battery
             auto* battery = scene.GetComponent<BatteryComponent>(robot.batteryEntity);
             TEST_EXPECT_TRUE(ctx, battery != nullptr);
             if (battery)
@@ -139,7 +218,7 @@ namespace FRCBananaSim::Tests
         }
 
         // -------------------------------------------------------------
-        // 2. Physical Instantiation & Stepping Stability Under Gravity
+        // 2. Physical Instantiation & Stability of Single Body in Jolt
         // -------------------------------------------------------------
         {
             JoltContext context;
@@ -149,7 +228,6 @@ namespace FRCBananaSim::Tests
             scene.SetFixedDeltaTime(PhysicsConfig::fixedDeltaTime);
 
             PhysicsSystem physicsSystem(scene, context);
-            JointSystem jointSystem(scene, context);
 
             SpawnedRobot robot = RobotSpawner::SpawnFromJsonFile(scene, "FRCBananaSim/Resources/Robots/robot_swerve.json", glm::vec3(0.0f, 1.5f, 0.0f));
 
@@ -157,12 +235,11 @@ namespace FRCBananaSim::Tests
 
             if (robot.isSuccess)
             {
-                // Step 50 ticks (250 ms) of gravity acceleration
+                // Step 50 ticks (250 ms) of simulation
                 constexpr double dt = PhysicsConfig::fixedDeltaTime;
                 for (int i = 0; i < 50; ++i)
                 {
                     physicsSystem.FixedUpdate(dt);
-                    jointSystem.FixedUpdate(dt);
                 }
 
                 auto* chassisTransform = scene.GetComponent<TransformComponent>(robot.chassisEntity);
@@ -173,28 +250,25 @@ namespace FRCBananaSim::Tests
 
                 if (chassisTransform && chassisRb)
                 {
-                    // Chassis should have fallen smoothly in -Y under gravity
-                    TEST_EXPECT_TRUE(ctx, chassisTransform->position.y < 1.5f);
-                    TEST_EXPECT_TRUE(ctx, chassisRb->linearVelocity.y < 0.0f);
+                    // With gravityFactor = 0.0, the chassis does NOT drop ballistically in Jolt
+                    TEST_EXPECT_NEAR(ctx, chassisTransform->position.y, 1.5f, 1e-3f);
+                    TEST_EXPECT_NEAR(ctx, chassisRb->linearVelocity.y, 0.0f, 1e-3f);
+                    TEST_EXPECT_FALSE(ctx, chassisRb->allowSleeping);
                 }
 
-                // Joint deflections across all 8 hinges must stay strictly < 5 mm
-                for (uint32_t i = 0; i < 4; ++i)
+                // Verify kinematic step: apply a linear velocity to the single body and verify smooth translation
+                if (chassisRb && !chassisRb->bodyID.IsInvalid())
                 {
-                    auto* steerJoint = scene.GetComponent<JointComponent>(robot.steerJointEntities[i]);
-                    auto* driveJoint = scene.GetComponent<JointComponent>(robot.driveJointEntities[i]);
+                    context.GetBodyInterface().SetLinearVelocity(chassisRb->bodyID, JPH::Vec3(0.0f, 0.0f, 2.0f));
 
-                    TEST_EXPECT_TRUE(ctx, steerJoint != nullptr);
-                    TEST_EXPECT_TRUE(ctx, driveJoint != nullptr);
+                    for (int i = 0; i < 20; ++i)
+                    {
+                        physicsSystem.FixedUpdate(dt);
+                    }
 
-                    if (steerJoint)
-                    {
-                        TEST_EXPECT_TRUE(ctx, steerJoint->currentDeflection < 0.005f);
-                    }
-                    if (driveJoint)
-                    {
-                        TEST_EXPECT_TRUE(ctx, driveJoint->currentDeflection < 0.005f);
-                    }
+                    // Over 20 ticks * 5 ms = 0.1 s at 2 m/s forward -> Delta Z ~ +0.20 m
+                    TEST_EXPECT_NEAR(ctx, chassisTransform->position.z, 0.20f, 0.02f);
+                    TEST_EXPECT_NEAR(ctx, chassisRb->linearVelocity.z, 2.0f, 1e-3f);
                 }
             }
         }

@@ -1,6 +1,6 @@
 /**
  * @file RigidBodyComponent.h
- * @brief Component representing a Jolt rigid body with physical material and kinematic properties.
+ * @brief Component representing a Jolt rigid body with physical material, kinematic properties, and inertia overrides.
  */
 
 #pragma once
@@ -10,6 +10,7 @@
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
 #include <glm/vec3.hpp>
+#include <glm/mat3x3.hpp>
 
 #include <cstdint>
 
@@ -40,6 +41,10 @@ namespace FRCBananaSim::Physics::Components
         float linearDamping{ PhysicsConfig::defaultLinearDamping };               ///< Linear drag (strictly 0.0 per project rules).
         float angularDamping{ PhysicsConfig::defaultAngularDamping };             ///< Angular drag (strictly 0.0 per project rules).
         float maxAngularVelocity{ 2000.0f };                                      ///< Max angular velocity in rad/s (~19,000 RPM).
+        float gravityFactor{ 1.0f };                                              ///< Gravity acceleration multiplier (0.0 for analytic drivetrain chassis).
+        bool allowSleeping{ true };                                               ///< Whether Jolt can put the body to sleep when stationary (false for chassis).
+        bool hasCustomInertia{ false };                                           ///< Whether custom rotational inertia tensor override is provided.
+        glm::mat3 inertiaTensor{ 1.0f };                                          ///< Custom 3x3 rotational inertia tensor in local body frame (kg*m^2).
         glm::vec3 linearVelocity{ 0.0f, 0.0f, 0.0f };                             ///< Current linear velocity in m/s.
         glm::vec3 angularVelocity{ 0.0f, 0.0f, 0.0f };                            ///< Current rotational velocity in rad/s.
         uint32_t collisionGroupID{ 0 };                                           ///< Collision group ID (0 = default/invalid group, >=1 = robot group).

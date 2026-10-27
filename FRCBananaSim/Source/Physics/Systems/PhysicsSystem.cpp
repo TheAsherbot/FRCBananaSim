@@ -1,29 +1,29 @@
 /**
  * @file PhysicsSystem.cpp
- * @brief Implementation of the Jolt physics integration system.
+ * @brief Implementation of the Jolt-backed physics simulation system with inertia tensor overrides.
  */
 
 #include "Physics/Systems/PhysicsSystem.h"
+#include "Physics/JoltContext.h"
+#include "Physics/PhysicsConfig.h"
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Physics/Components/ColliderComponent.h"
-#include "Core/ECS/Components/TransformComponent.h"
 #include "Core/ECS/Core/Scene.h"
+#include "Core/ECS/Components/TransformComponent.h"
 #include "Telemetry/TelemetryMacros.h"
+#include "Utils/Log.h"
 
+#include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 
-#include <iostream>
-
-#define SIM_LOG_ERROR(msg) std::cerr << "[PhysicsSystem ERROR] " << msg << std::endl
-
 namespace FRCBananaSim::Physics::Systems
 {
-    using namespace Physics::Components;
-    using namespace Core::ECS::Components;
+    using namespace Components;
+    using Core::ECS::Components::TransformComponent;
 
     PhysicsSystem::PhysicsSystem(Core::ECS::Core::Scene& scene, JoltContext& context)
         : ISystem(scene),
@@ -73,10 +73,10 @@ namespace FRCBananaSim::Physics::Systems
             return;
         }
 
-        // 1. Allocate Jolt bodies for new entities
+        // 1. Instantiate any newly added bodies
         CreatePendingBodies();
 
-        // 2. Push kinematic movements into Jolt
+        // 2. Synchronize kinematic transforms from ECS into Jolt
         PushKinematicTransforms();
 
         // 3. Step physics simulation
@@ -236,7 +236,8 @@ namespace FRCBananaSim::Physics::Systems
             bodySettings.mLinearDamping = rigidBody->linearDamping;
             bodySettings.mAngularDamping = rigidBody->angularDamping;
             bodySettings.mMaxAngularVelocity = rigidBody->maxAngularVelocity;
-
+            bodySettings.mGravityFactor = rigidBody->gravityFactor;
+            bodySettings.mAllowSleeping = rigidBody->allowSleeping;
             bodySettings.mIsSensor = rigidBody->isSensor;
 
             // Configure Jolt collision group filtering
@@ -249,8 +250,27 @@ namespace FRCBananaSim::Physics::Systems
 
             if (motionType == JPH::EMotionType::Dynamic)
             {
-                bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
-                bodySettings.mMassPropertiesOverride.mMass = rigidBody->mass;
+                if (rigidBody->hasCustomInertia)
+                {
+                    bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::MassAndInertiaProvided;
+                    bodySettings.mMassPropertiesOverride.mMass = rigidBody->mass;
+
+                    JPH::Mat44 joltInertia = JPH::Mat44::sZero();
+                    for (int row = 0; row < 3; ++row)
+                    {
+                        for (int col = 0; col < 3; ++col)
+                        {
+                            joltInertia(row, col) = static_cast<float>(rigidBody->inertiaTensor[col][row]);
+                        }
+                    }
+                    bodySettings.mMassPropertiesOverride.mInertia = joltInertia;
+                }
+                else
+                {
+                    bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+                    bodySettings.mMassPropertiesOverride.mMass = rigidBody->mass;
+                }
+
                 bodySettings.mLinearVelocity = JPH::Vec3(
                     rigidBody->linearVelocity.x,
                     rigidBody->linearVelocity.y,
@@ -291,8 +311,18 @@ namespace FRCBananaSim::Physics::Systems
             }
 
             auto* transform = scene.GetComponent<TransformComponent>(entity);
-            JPH::RVec3 joltPos(transform->position.x, transform->position.y, transform->position.z);
-            JPH::Quat joltRot(transform->rotation.x, transform->rotation.y, transform->rotation.z, transform->rotation.w);
+            auto* collider = scene.GetComponent<ColliderComponent>(entity);
+
+            glm::vec3 pos = transform->position;
+            glm::quat rot = transform->rotation;
+            if (collider)
+            {
+                pos += rot * collider->localOffset;
+                rot = rot * collider->localRotation;
+            }
+
+            JPH::RVec3 joltPos(pos.x, pos.y, pos.z);
+            JPH::Quat joltRot(rot.x, rot.y, rot.z, rot.w);
 
             bodyInterface.SetPositionAndRotation(rigidBody->bodyID, joltPos, joltRot, JPH::EActivation::Activate);
         }
@@ -300,7 +330,7 @@ namespace FRCBananaSim::Physics::Systems
 
     void PhysicsSystem::PullSimulatedTransforms()
     {
-        JPH::BodyInterface& bodyInterface = joltContext.GetBodyInterface();
+        const JPH::BodyLockInterface& lockInterface = joltContext.GetPhysicsSystem().GetBodyLockInterfaceNoLock();
         auto entities = scene.Query<RigidBodyComponent, TransformComponent>();
 
         for (auto entity : entities)
@@ -311,32 +341,45 @@ namespace FRCBananaSim::Physics::Systems
                 continue;
             }
 
-            JPH::RVec3 joltPos;
-            JPH::Quat joltRot;
-            bodyInterface.GetPositionAndRotation(rigidBody->bodyID, joltPos, joltRot);
+            const JPH::Body* body = lockInterface.TryGetBody(rigidBody->bodyID);
+            if (!body)
+            {
+                continue;
+            }
 
             auto* transform = scene.GetComponent<TransformComponent>(entity);
             auto* collider = scene.GetComponent<ColliderComponent>(entity);
 
-            glm::quat rawRot(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
-            glm::vec3 rawPos(static_cast<float>(joltPos.GetX()), static_cast<float>(joltPos.GetY()), static_cast<float>(joltPos.GetZ()));
+            JPH::RVec3 joltPos = body->GetPosition();
+            JPH::Quat joltRot = body->GetRotation();
 
+            glm::vec3 worldPos(
+                static_cast<float>(joltPos.GetX()),
+                static_cast<float>(joltPos.GetY()),
+                static_cast<float>(joltPos.GetZ())
+            );
+            glm::quat worldRot(
+                joltRot.GetW(),
+                joltRot.GetX(),
+                joltRot.GetY(),
+                joltRot.GetZ()
+            );
+
+            // Invert collider local offset if present
             if (collider)
             {
-                transform->rotation = rawRot * glm::inverse(collider->localRotation);
-                transform->position = rawPos - (transform->rotation * collider->localOffset);
-            }
-            else
-            {
-                transform->position = rawPos;
-                transform->rotation = rawRot;
+                worldRot = worldRot * glm::inverse(collider->localRotation);
+                worldPos -= worldRot * collider->localOffset;
             }
 
-            JPH::Vec3 joltLinVel = bodyInterface.GetLinearVelocity(rigidBody->bodyID);
-            JPH::Vec3 joltAngVel = bodyInterface.GetAngularVelocity(rigidBody->bodyID);
+            transform->position = worldPos;
+            transform->rotation = worldRot;
 
-            rigidBody->linearVelocity = glm::vec3(joltLinVel.GetX(), joltLinVel.GetY(), joltLinVel.GetZ());
-            rigidBody->angularVelocity = glm::vec3(joltAngVel.GetX(), joltAngVel.GetY(), joltAngVel.GetZ());
+            JPH::Vec3 linearVel = body->GetLinearVelocity();
+            JPH::Vec3 angularVel = body->GetAngularVelocity();
+
+            rigidBody->linearVelocity = glm::vec3(linearVel.GetX(), linearVel.GetY(), linearVel.GetZ());
+            rigidBody->angularVelocity = glm::vec3(angularVel.GetX(), angularVel.GetY(), angularVel.GetZ());
         }
     }
 }

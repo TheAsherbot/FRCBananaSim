@@ -1,6 +1,6 @@
 {
-  "name": "FRC_Swerve_Standard",
-  "version": "1.0.0",
+  "name": "FRC_Swerve_Standard_MK5n",
+  "version": "2.0.0",
   "units": "SI",
   "coordinates": {
     "system": "RightHanded",
@@ -15,6 +15,13 @@
     "length_m": 0.70,
     "wheelbase_m": 0.56,
     "trackwidth_m": 0.56,
+    "cgHeight_m": 0.20,
+    "cgOffset_m": [ 0.0, 0.0 ],
+    "inertiaTensor_kgm2": [
+      [ 2.1354, 0.0, 0.0 ],
+      [ 0.0, 2.1354, 0.0 ],
+      [ 0.0, 0.0, 4.0833 ]
+    ],
     "friction": 0.7,
     "restitution": 0.0
   },
@@ -31,13 +38,13 @@
   "motors": {
     "steer": {
       "type": "KrakenX44",
-      "gearRatio": 21.43,
+      "gearRatio": 26.0909,
       "efficiency": 0.92,
       "statorCurrentLimit_A": 60.0
     },
     "drive": {
       "type": "KrakenX60",
-      "gearRatio": 6.12,
+      "gearRatio": 5.27,
       "efficiency": 0.96,
       "statorCurrentLimit_A": 60.0
     }
@@ -50,9 +57,36 @@
   "wheel": {
     "mass_kg": 0.65,
     "radius_m": 0.0508,
-    "width_m": 0.04,
+    "width_m": 0.0381,
+    "axleInertia_kgm2": 0.00084,
     "friction": 1.2,
     "restitution": 0.05
+  },
+  "tire": {
+    "radialStiffness_Npm": 120000.0,
+    "radialDamping_Nspm": 1200.0,
+    "preSlide_m": 0.001,
+    "mu_static": 1.20,
+    "mu_kinetic": 1.05,
+    "stribeckVelocity_mps": 0.15,
+    "loadSensitivityBeta": 0.08,
+    "rollingResistance": 0.015,
+    "lateralFrictionRatio": 1.0
+  },
+  "steerModule": {
+    "steerHousingInertia_kgm2": 0.00036,
+    "coulombFriction_Nm": 0.08,
+    "viscousDamping_Nms": 0.002
+  },
+  "driveModule": {
+    "coulombFriction_Nm": 1.8
+  },
+  "carpet": {
+    "muRatioLateral": 1.0
+  },
+  "terrain": {
+    "probeRateHz": 200,
+    "maxSeparation_m": 0.005
   },
   "modules": [
     {

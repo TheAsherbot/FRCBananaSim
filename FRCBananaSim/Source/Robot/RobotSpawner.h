@@ -1,6 +1,6 @@
 /**
  * @file RobotSpawner.h
- * @brief Declarations for spawning complete physical robots from declarative JSON definitions.
+ * @brief Declarations for spawning complete physical robots into ECS with single-body dynamic physics and visual module hierarchies.
  */
 
 #pragma once
@@ -40,6 +40,8 @@ namespace FRCBananaSim::Robot
             Core::ECS::Core::invalidEntity,
             Core::ECS::Core::invalidEntity
         };
+
+        // Deprecated Jolt joint handles preserved as invalidEntity until Phase 5 test rewrite
         std::array<Core::ECS::Core::Entity, 4> steerJointEntities{
             Core::ECS::Core::invalidEntity,
             Core::ECS::Core::invalidEntity,
@@ -52,6 +54,7 @@ namespace FRCBananaSim::Robot
             Core::ECS::Core::invalidEntity,
             Core::ECS::Core::invalidEntity
         };
+
         bool isSuccess = false;
     };
 

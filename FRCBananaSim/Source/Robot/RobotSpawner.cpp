@@ -1,16 +1,17 @@
 /**
  * @file RobotSpawner.cpp
- * @brief Implementation of declarative JSON robot loader and physical robot spawner.
+ * @brief Implementation of declarative JSON robot loader and single-body physical robot spawner.
  */
 
 #include "Robot/RobotSpawner.h"
+#include "Robot/Drivetrain/Model/SwerveParams.h"
 #include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
 #include "Robot/Drivetrain/Components/SwerveModuleComponent.h"
 #include "Actuation/Components/BatteryComponent.h"
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Physics/Components/ColliderComponent.h"
-#include "Physics/Components/JointComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
+#include "Core/ECS/Components/HierarchyComponent.h"
 #include "Core/Units/Units.h"
 #include "Telemetry/TelemetryMacros.h"
 
@@ -21,6 +22,7 @@
 
 namespace FRCBananaSim::Robot
 {
+    using namespace Drivetrain::Model;
     using namespace Drivetrain::Components;
     using namespace Actuation;
     using namespace Actuation::Components;
@@ -35,9 +37,17 @@ namespace FRCBananaSim::Robot
         {
             return DCMotorModel::KrakenX60(gearRatio, efficiency);
         }
+        if (type == "KrakenX60FOC")
+        {
+            return DCMotorModel::KrakenX60FOC(gearRatio, efficiency);
+        }
         if (type == "KrakenX44")
         {
             return DCMotorModel::KrakenX44(gearRatio, efficiency);
+        }
+        if (type == "KrakenX44FOC")
+        {
+            return DCMotorModel::KrakenX44FOC(gearRatio, efficiency);
         }
         if (type == "Falcon500")
         {
@@ -68,7 +78,7 @@ namespace FRCBananaSim::Robot
             return DCMotorModel::GoBilda5202(gearRatio, efficiency);
         }
 
-        return DCMotorModel::Falcon500(gearRatio, efficiency);
+        return DCMotorModel::KrakenX60(gearRatio, efficiency);
     }
 
     SpawnedRobot RobotSpawner::SpawnFromJsonFile(Scene& scene, const std::string& jsonFilePath,
@@ -77,7 +87,6 @@ namespace FRCBananaSim::Robot
         std::ifstream file(jsonFilePath);
         if (!file.is_open())
         {
-            // Probe relative path if running from build/ or sub-directory
             file.open("../" + jsonFilePath);
         }
         if (!file.is_open())
@@ -114,17 +123,20 @@ namespace FRCBananaSim::Robot
             return result;
         }
 
-        // 1. Chassis Physical Parameters
+        // 1. Drivetrain Configuration Parser (Handles Schema v1 and Schema v2)
+        SwerveDrivetrainConfig drivetrainConfig = SwerveDrivetrainConfig::LoadFromJsonString(jsonString);
+
+        // 2. Chassis Physical Parameters
         const auto& chassisNode = root.value("chassis", nlohmann::json::object());
-        float chassisMass = chassisNode.value("mass_kg", 50.0f);
-        float width = chassisNode.value("width_m", 0.70f);
-        float height = chassisNode.value("height_m", 0.15f);
-        float length = chassisNode.value("length_m", 0.70f);
+        float chassisMass = chassisNode.value("mass_kg", static_cast<float>(drivetrainConfig.chassis.mass));
+        float width = chassisNode.value("width_m", static_cast<float>(drivetrainConfig.chassis.dimensions.y));
+        float height = chassisNode.value("height_m", static_cast<float>(drivetrainConfig.chassis.dimensions.z));
+        float length = chassisNode.value("length_m", static_cast<float>(drivetrainConfig.chassis.dimensions.x));
         float wheelbase = chassisNode.value("wheelbase_m", 0.56f);
         float trackwidth = chassisNode.value("trackwidth_m", 0.56f);
         float chassisFriction = chassisNode.value("friction", 0.7f);
 
-        // 2. Battery Parameters
+        // 3. Battery Parameters
         const auto& batteryNode = root.value("battery", nlohmann::json::object());
         double nominalV = batteryNode.value("nominalVoltage_V", 12.60);
         double internalR = batteryNode.value("internalResistance_ohm", 0.023);
@@ -135,31 +147,27 @@ namespace FRCBananaSim::Robot
         double brownoutCutoff = batteryNode.value("brownoutCutoff_V", 6.3);
         double brownoutRecovery = batteryNode.value("brownoutRecovery_V", 7.5);
 
-        // 3. Motor Configurations
-        const auto& motorsNode = root.value("motors", nlohmann::json::object());
-        const auto& steerMotorNode = motorsNode.value("steer", nlohmann::json::object());
-        const auto& driveMotorNode = motorsNode.value("drive", nlohmann::json::object());
-
-        std::string steerMotorType = steerMotorNode.value("type", "Falcon500");
-        double steerGearRatio = steerMotorNode.value("gearRatio", 21.43);
-        double steerEfficiency = steerMotorNode.value("efficiency", 0.92);
-
-        std::string driveMotorType = driveMotorNode.value("type", "KrakenX60");
-        double driveGearRatio = driveMotorNode.value("gearRatio", 6.12);
-        double driveEfficiency = driveMotorNode.value("efficiency", 0.96);
-
         // 4. Steer Housing & Wheel Geometry
         const auto& steerNode = root.value("steerHousing", nlohmann::json::object());
-        float steerMass = steerNode.value("mass_kg", 0.45f);
         float steerRadius = steerNode.value("radius_m", 0.04f);
         float steerHeight = steerNode.value("height_m", 0.06f);
 
         const auto& wheelNode = root.value("wheel", nlohmann::json::object());
-        float wheelMass = wheelNode.value("mass_kg", 0.65f);
-        double wheelRadius = wheelNode.value("radius_m", 0.0508);
-        float wheelWidth = wheelNode.value("width_m", 0.04f);
-        float wheelFriction = wheelNode.value("friction", 1.2f);
-        float wheelRestitution = wheelNode.value("restitution", 0.05f);
+        double wheelRadius = wheelNode.value("radius_m", drivetrainConfig.tire.wheelRadius);
+        float wheelWidth = wheelNode.value("width_m", static_cast<float>(drivetrainConfig.tire.wheelWidth));
+
+        // 5. Motor Types & Gearing
+        const auto& motorsNode = root.value("motors", nlohmann::json::object());
+        const auto& steerMotorNode = motorsNode.value("steer", nlohmann::json::object());
+        const auto& driveMotorNode = motorsNode.value("drive", nlohmann::json::object());
+
+        std::string steerMotorType = steerMotorNode.value("type", "KrakenX44");
+        double steerGearRatio = steerMotorNode.value("gearRatio", 26.0909);
+        double steerEfficiency = steerMotorNode.value("efficiency", 0.92);
+
+        std::string driveMotorType = driveMotorNode.value("type", "KrakenX60");
+        double driveGearRatio = driveMotorNode.value("gearRatio", 5.27);
+        double driveEfficiency = driveMotorNode.value("efficiency", 0.96);
 
         // A. Battery Entity
         Entity batteryEntity = scene.CreateEntity();
@@ -169,7 +177,7 @@ namespace FRCBananaSim::Robot
         scene.AddComponent(batteryEntity, batteryComp);
         result.batteryEntity = batteryEntity;
 
-        // B. Chassis Root Entity
+        // B. Chassis Root Entity (THE ONLY Dynamic Jolt Body)
         Entity chassisEntity = scene.CreateEntity();
         TransformComponent chassisTransform;
         chassisTransform.position = spawnPosition;
@@ -177,12 +185,23 @@ namespace FRCBananaSim::Robot
         chassisTransform.scale = glm::vec3(width, height, length);
         scene.AddComponent(chassisEntity, chassisTransform);
 
+        // WorldTransformComponent for immediate renderer visibility
+        WorldTransformComponent chassisWorld;
+        chassisWorld.worldPosition = spawnPosition;
+        chassisWorld.worldRotation = spawnRotation;
+        chassisWorld.worldScale = glm::vec3(width, height, length);
+        scene.AddComponent(chassisEntity, chassisWorld);
+
         RigidBodyComponent chassisRb;
         chassisRb.motionType = BodyMotionType::Dynamic;
         chassisRb.mass = chassisMass;
         chassisRb.friction = chassisFriction;
         chassisRb.collisionGroupID = robotGroupID;
-        chassisRb.collisionSubGroupID = 0; // SubGroupID 0 for chassis
+        chassisRb.collisionSubGroupID = 0;
+        chassisRb.gravityFactor = 0.0f; // Analytic drivetrain owns gravity
+        chassisRb.allowSleeping = false; // Drivetrain chassis must never sleep in Jolt
+        chassisRb.hasCustomInertia = true;
+        chassisRb.inertiaTensor = drivetrainConfig.chassis.GetJoltInertiaTensor();
         scene.AddComponent(chassisEntity, chassisRb);
 
         ColliderComponent chassisCol;
@@ -194,6 +213,10 @@ namespace FRCBananaSim::Robot
         chassisComp.batteryEntity = batteryEntity;
         chassisComp.trackWidth = trackwidth;
         chassisComp.wheelBase = wheelbase;
+        chassisComp.chassisMass = chassisMass;
+
+        HierarchyComponent chassisHierarchy;
+        chassisHierarchy.parent = invalidEntity;
 
         // C. Module Layout parsing
         std::array<glm::vec2, 4> defaultLocations = {
@@ -229,9 +252,7 @@ namespace FRCBananaSim::Robot
                 canCoder = modJson.value("canCoder", canCoder);
             }
 
-            // World spatial placements adhering strictly to: +X Right, +Y Up, +Z Forward
-            // Chassis sits on top; steer housing hangs below chassis; 10 mm air gap to wheel
-            constexpr float moduleAirGap = 0.010f; // 10 mm clearance between steer housing and wheel
+            constexpr float moduleAirGap = 0.010f; // 10 mm clearance
             float halfChassisH = height * 0.5f;
             float halfSteerH = steerHeight * 0.5f;
 
@@ -240,10 +261,8 @@ namespace FRCBananaSim::Robot
 
             glm::vec3 worldSteerPos = spawnPosition + spawnRotation * localSteerOffset;
             glm::vec3 worldWheelPos = spawnPosition + spawnRotation * localWheelOffset;
-            glm::vec3 worldSteerPivot = spawnPosition + spawnRotation * glm::vec3(modLoc.x, -halfChassisH, modLoc.y);
-            glm::vec3 worldDrivePivot = worldWheelPos;
 
-            // 1. Steer Link Entity
+            // 1. Steer Housing Entity (Visual Hierarchy Child - No RigidBody, No Collider, No Joints)
             Entity steerEntity = scene.CreateEntity();
             TransformComponent steerTransform;
             steerTransform.position = worldSteerPos;
@@ -251,20 +270,13 @@ namespace FRCBananaSim::Robot
             steerTransform.scale = glm::vec3(steerRadius * 2.0f, steerHeight, steerRadius * 2.0f);
             scene.AddComponent(steerEntity, steerTransform);
 
-            RigidBodyComponent steerRb;
-            steerRb.motionType = BodyMotionType::Dynamic;
-            steerRb.mass = steerMass;
-            steerRb.collisionGroupID = robotGroupID;
-            steerRb.collisionSubGroupID = 1 + i; // SubGroupID 1..4
-            scene.AddComponent(steerEntity, steerRb);
+            WorldTransformComponent steerWorld;
+            steerWorld.worldPosition = worldSteerPos;
+            steerWorld.worldRotation = spawnRotation;
+            steerWorld.worldScale = glm::vec3(steerRadius * 2.0f, steerHeight, steerRadius * 2.0f);
+            scene.AddComponent(steerEntity, steerWorld);
 
-            ColliderComponent steerCol;
-            steerCol.shape = ColliderShape::Cylinder;
-            steerCol.radius = steerRadius;
-            steerCol.halfHeight = steerHeight * 0.5f;
-            scene.AddComponent(steerEntity, steerCol);
-
-            // 2. Wheel Link Entity
+            // 2. Wheel Entity (Visual Hierarchy Child - No RigidBody, No Collider, No Joints)
             Entity wheelEntity = scene.CreateEntity();
             TransformComponent wheelTransform;
             wheelTransform.position = worldWheelPos;
@@ -272,48 +284,33 @@ namespace FRCBananaSim::Robot
             wheelTransform.scale = glm::vec3(wheelWidth, static_cast<float>(wheelRadius) * 2.0f, static_cast<float>(wheelRadius) * 2.0f);
             scene.AddComponent(wheelEntity, wheelTransform);
 
-            RigidBodyComponent wheelRb;
-            wheelRb.motionType = BodyMotionType::Dynamic;
-            wheelRb.mass = wheelMass;
-            wheelRb.friction = wheelFriction;
-            wheelRb.restitution = wheelRestitution;
-            wheelRb.collisionGroupID = robotGroupID;
-            wheelRb.collisionSubGroupID = 5 + i; // SubGroupID 5..8
-            scene.AddComponent(wheelEntity, wheelRb);
+            WorldTransformComponent wheelWorld;
+            wheelWorld.worldPosition = worldWheelPos;
+            wheelWorld.worldRotation = spawnRotation;
+            wheelWorld.worldScale = glm::vec3(wheelWidth, static_cast<float>(wheelRadius) * 2.0f, static_cast<float>(wheelRadius) * 2.0f);
+            scene.AddComponent(wheelEntity, wheelWorld);
 
-            // Wheel collision volume: Sphere matching wheel radius eliminates cylinder rim chatter
-            ColliderComponent wheelCol;
-            wheelCol.shape = ColliderShape::Sphere;
-            wheelCol.radius = static_cast<float>(wheelRadius);
-            scene.AddComponent(wheelEntity, wheelCol);
+            // Establish Visual Scene Graph Hierarchy
+            HierarchyComponent steerHierarchy;
+            steerHierarchy.parent = chassisEntity;
+            steerHierarchy.children.push_back(wheelEntity);
+            scene.AddComponent(steerEntity, steerHierarchy);
 
-            // 3. Vertical Steer Joint (Swivels around vertical +Y)
-            Entity steerJointEntity = scene.CreateEntity();
-            JointComponent steerJoint;
-            steerJoint.parentEntity = chassisEntity;
-            steerJoint.childEntity = steerEntity;
-            steerJoint.SetWorldSpace(worldSteerPivot, spawnRotation * glm::vec3(0.0f, 1.0f, 0.0f));
-            steerJoint.motorMode = JointMotorMode::Torque;
-            scene.AddComponent(steerJointEntity, steerJoint);
+            HierarchyComponent wheelHierarchy;
+            wheelHierarchy.parent = steerEntity;
+            scene.AddComponent(wheelEntity, wheelHierarchy);
 
-            // 4. Horizontal Drive Axle Joint (Rolls around horizontal +X)
-            Entity driveJointEntity = scene.CreateEntity();
-            JointComponent driveJoint;
-            driveJoint.parentEntity = steerEntity;
-            driveJoint.childEntity = wheelEntity;
-            driveJoint.SetWorldSpace(worldDrivePivot, spawnRotation * glm::vec3(1.0f, 0.0f, 0.0f));
-            driveJoint.motorMode = JointMotorMode::Torque;
-            scene.AddComponent(driveJointEntity, driveJoint);
+            chassisHierarchy.children.push_back(steerEntity);
 
-            // 5. Swerve Module Component
+            // 3. Swerve Module Component
             Entity moduleEntity = scene.CreateEntity();
             SwerveModuleComponent moduleComp;
             moduleComp.moduleIndex = i;
             moduleComp.moduleLocation = modLoc;
             moduleComp.steerEntity = steerEntity;
             moduleComp.wheelEntity = wheelEntity;
-            moduleComp.steerJointEntity = steerJointEntity;
-            moduleComp.driveJointEntity = driveJointEntity;
+            moduleComp.steerJointEntity = invalidEntity;
+            moduleComp.driveJointEntity = invalidEntity;
             moduleComp.steerMotor = CreateMotorModel(steerMotorType, steerGearRatio, steerEfficiency);
             moduleComp.driveMotor = CreateMotorModel(driveMotorType, driveGearRatio, driveEfficiency);
             moduleComp.wheelRadius = wheelRadius;
@@ -327,10 +324,9 @@ namespace FRCBananaSim::Robot
             result.moduleEntities[i] = moduleEntity;
             result.steerEntities[i] = steerEntity;
             result.wheelEntities[i] = wheelEntity;
-            result.steerJointEntities[i] = steerJointEntity;
-            result.driveJointEntities[i] = driveJointEntity;
         }
 
+        scene.AddComponent(chassisEntity, chassisHierarchy);
         scene.AddComponent(chassisEntity, chassisComp);
         result.chassisEntity = chassisEntity;
         result.isSuccess = true;

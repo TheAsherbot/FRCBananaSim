@@ -270,7 +270,17 @@ namespace FRCBananaSim::Physics
         return *physicsSystem;
     }
 
+    const JPH::PhysicsSystem& JoltContext::GetPhysicsSystem() const
+    {
+        return *physicsSystem;
+    }
+
     JPH::BodyInterface& JoltContext::GetBodyInterface()
+    {
+        return physicsSystem->GetBodyInterface();
+    }
+
+    const JPH::BodyInterface& JoltContext::GetBodyInterface() const
     {
         return physicsSystem->GetBodyInterface();
     }

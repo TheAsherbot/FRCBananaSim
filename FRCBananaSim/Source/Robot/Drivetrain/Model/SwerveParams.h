@@ -1,6 +1,6 @@
 /**
  * @file SwerveParams.h
- * @brief Configuration parameters and presets for 6-DOF swerve drivetrain mechanics, tire contacts, and motors.
+ * @brief Configuration parameters, JSON loader, and presets for 6-DOF swerve drivetrain mechanics, tire contacts, and motors.
  */
 
 #pragma once
@@ -24,7 +24,13 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         glm::vec3 dimensions{ 0.70, 0.70, 0.15 };                      ///< Width, Length, Height in meters (X=forward, Y=left, Z=up).
         glm::vec3 centerOfMassOffset{ 0.0, 0.0, 0.0 };                 ///< Center of mass offset from geometric hub center (m).
         double centerOfMassHeight = 0.20;                              ///< Height of CG above ground plane (m).
-        glm::mat3 inertiaTensor{ 1.0 };                                ///< 3x3 rotational inertia tensor about CG (kg*m^2).
+        glm::mat3 inertiaTensor{ 1.0 };                                ///< 3x3 rotational inertia tensor about CG in NWU frame (kg*m^2).
+
+        /**
+         * @brief Converts the NWU rotational inertia tensor to Jolt engine coordinate frame (+X Right, +Y Up, +Z Forward).
+         * @return 3x3 inertia tensor mapped to Jolt body coordinates.
+         */
+        glm::mat3 GetJoltInertiaTensor() const;
     };
 
     /**
@@ -54,10 +60,10 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
      */
     struct SteerModuleParams
     {
-        Actuation::DCMotorModel motor = Actuation::DCMotorModel::KrakenX44(26.09, 0.92); ///< MK5n steering motor.
-        double steerHousingInertia = 0.00036;                                            ///< Physical azimuth housing inertia (kg*m^2).
-        double coulombFrictionTorque = 0.08;                                             ///< Bearing and bevel gear static friction (N*m).
-        double viscousDamping = 0.002;                                                   ///< Viscous drag (N*m / (rad/s)).
+        Actuation::DCMotorModel motor = Actuation::DCMotorModel::KrakenX44(26.0909, 0.92); ///< MK5n steering motor.
+        double steerHousingInertia = 0.00036;                                               ///< Physical azimuth housing inertia (kg*m^2).
+        double coulombFrictionTorque = 0.08;                                                ///< Bearing and bevel gear static friction (N*m).
+        double viscousDamping = 0.002;                                                      ///< Viscous drag (N*m / (rad/s)).
     };
 
     /**
@@ -102,5 +108,20 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
          * @return Standard MK5n R3 configuration configured with reference mass and gearboxes.
          */
         static SwerveDrivetrainConfig CreateMK5nR3Reference();
+
+        /**
+         * @brief Deserializes a full swerve drivetrain configuration from a JSON configuration string.
+         * Supports both Schema v1 and Schema v2 declarative formats with robust fallbacks.
+         * @param jsonString Serialized JSON text.
+         * @return Parsed SwerveDrivetrainConfig struct.
+         */
+        static SwerveDrivetrainConfig LoadFromJsonString(const std::string& jsonString);
+
+        /**
+         * @brief Deserializes a full swerve drivetrain configuration from a filesystem JSON file.
+         * @param filePath Relative or absolute path to the robot JSON file.
+         * @return Parsed SwerveDrivetrainConfig struct.
+         */
+        static SwerveDrivetrainConfig LoadFromJsonFile(const std::string& filePath);
     };
 }

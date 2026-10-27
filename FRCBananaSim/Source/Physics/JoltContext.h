@@ -71,12 +71,14 @@ namespace FRCBananaSim::Physics
          * @return Reference to the JPH::PhysicsSystem.
          */
         JPH::PhysicsSystem& GetPhysicsSystem();
+        const JPH::PhysicsSystem& GetPhysicsSystem() const;
 
         /**
          * @brief Accesses the body interface for creating and manipulating bodies.
          * @return Reference to JPH::BodyInterface.
          */
         JPH::BodyInterface& GetBodyInterface();
+        const JPH::BodyInterface& GetBodyInterface() const;
 
         /**
          * @brief Checks whether the physics world has been successfully initialized.

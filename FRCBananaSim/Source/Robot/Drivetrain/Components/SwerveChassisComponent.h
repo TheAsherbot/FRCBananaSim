@@ -1,6 +1,6 @@
 /**
  * @file SwerveChassisComponent.h
- * @brief ECS component holding chassis dimensions, module entity handles, and battery linkage.
+ * @brief ECS component holding chassis dimensions, module entity handles, battery linkage, and simulation model instance.
  */
 
 #pragma once
@@ -8,7 +8,13 @@
 #include "Core/ECS/Core/Entity.h"
 #include "Core/Units/Units.h"
 #include <array>
+#include <memory>
 #include <glm/vec2.hpp>
+
+namespace FRCBananaSim::Robot::Drivetrain::Model
+{
+    class SwerveDrivetrainModel;
+}
 
 namespace FRCBananaSim::Robot::Drivetrain::Components
 {
@@ -28,15 +34,18 @@ namespace FRCBananaSim::Robot::Drivetrain::Components
             Core::ECS::Core::invalidEntity
         };
 
-        // Battery linkage entity (for bus voltage sag calculation)
+        // Battery linkage entity
         Core::ECS::Core::Entity batteryEntity = Core::ECS::Core::invalidEntity;
 
         // Chassis Geometry
-        double trackWidth = 0.56_m;  ///< Left-to-right wheel spacing in meters.
-        double wheelBase = 0.56_m;   ///< Front-to-back wheel spacing in meters.
+        double trackWidth = 0.56_m;   ///< Left-to-right wheel spacing in meters.
+        double wheelBase = 0.56_m;    ///< Front-to-back wheel spacing in meters.
         double chassisMass = 50.0_kg; ///< Total nominal robot mass in kg.
 
-        // Runtime IMU Telemetry (CTRE Pigeon 2)
+        // Model instance owned by this chassis
+        std::shared_ptr<Model::SwerveDrivetrainModel> drivetrainModel;
+
+        // Runtime IMU Telemetry (CTRE Pigeon 2 in NWU)
         double gyroYaw = 0.0_rad;
         double gyroPitch = 0.0_rad;
         double gyroRoll = 0.0_rad;

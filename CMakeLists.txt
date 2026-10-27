@@ -43,6 +43,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveModuleModel.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveChassisSolver.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveDrivetrainModel.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveTerrainProbe.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
     FRCBananaSim/Source/Core/Engine.cpp
@@ -111,6 +112,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveModuleModel.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveChassisSolver.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveDrivetrainModel.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveTerrainProbe.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
@@ -139,6 +141,7 @@ set(TEST_SOURCES
     Tests/RobotSpawnerTest.cpp
     Tests/SwerveMassRatioTest.cpp
     Tests/SwerveModelTest.cpp
+    Tests/SwerveAdapterTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -164,4 +167,5 @@ add_test(NAME SwervePhysicalDriveTest COMMAND FRCBananaSim_Tests --swerve-drive)
 add_test(NAME RobotSpawnerTest COMMAND FRCBananaSim_Tests --robot-spawner)
 add_test(NAME SwerveMassRatioTest COMMAND FRCBananaSim_Tests --mass-ratio)
 add_test(NAME SwerveModelTest COMMAND FRCBananaSim_Tests --swerve-model)
+add_test(NAME SwerveAdapterTest COMMAND FRCBananaSim_Tests --swerve-adapter)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

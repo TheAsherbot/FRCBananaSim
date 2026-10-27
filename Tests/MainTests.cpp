@@ -1,6 +1,6 @@
 /**
  * @file MainTests.cpp
- * @brief Entry point for headless CTest suites including analytic swerve model verification.
+ * @brief Entry point for headless CTest suites including analytic swerve model and Jolt adapter verification.
  */
 
 #include "TestFramework.h"
@@ -13,6 +13,7 @@
 #include "RobotSpawnerTest.h"
 #include "SwerveMassRatioTest.h"
 #include "SwerveModelTest.h"
+#include "SwerveAdapterTest.h"
 
 #include <iostream>
 #include <string>
@@ -27,6 +28,7 @@ using FRCBananaSim::Tests::RunSwervePhysicalDriveTest;
 using FRCBananaSim::Tests::RunRobotSpawnerTest;
 using FRCBananaSim::Tests::RunSwerveMassRatioTest;
 using FRCBananaSim::Tests::RunSwerveModelTest;
+using FRCBananaSim::Tests::RunSwerveAdapterTest;
 
 int main(int argc, char* argv[])
 {
@@ -85,6 +87,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunSwerveModelTest(ctx);
         }
+        else if (arg == "--swerve-adapter")
+        {
+            runAll = false;
+            RunSwerveAdapterTest(ctx);
+        }
     }
 
     if (runAll)
@@ -98,10 +105,12 @@ int main(int argc, char* argv[])
         RunRobotSpawnerTest(ctx);
         RunSwerveMassRatioTest(ctx);
         RunSwerveModelTest(ctx);
+        RunSwerveAdapterTest(ctx);
     }
 
     std::cout << "======================================\n";
-    std::cout << " Results: " << ctx.passed << " passed, " << ctx.failed << " failed.\n";
+    std::cout << " SUMMARY: " << ctx.passed << " Passed, "
+              << ctx.failed << " Failed\n";
     std::cout << "======================================\n";
 
     return ctx.IsSuccessful() ? 0 : 1;
