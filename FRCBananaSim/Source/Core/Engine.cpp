@@ -4,8 +4,8 @@
  */
 
 #include "Core/Engine.h"
-#include "Telemetry/TelemetryMacros.h"
-#include "Telemetry/TelemetryManager.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryManager.h"
 #include "Utils/FixedTimestep.h"
 #include "Utils/Log.h"
 

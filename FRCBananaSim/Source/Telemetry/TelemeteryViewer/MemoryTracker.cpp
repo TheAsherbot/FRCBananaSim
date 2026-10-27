@@ -3,7 +3,7 @@
  * @brief Implementation of memory usage tracking and global heap operator overrides.
  */
 
-#include "Telemetry/MemoryTracker.h"
+#include "Telemetry/TelemeteryViewer/MemoryTracker.h"
 
 #include <atomic>
 #include <cstdlib>

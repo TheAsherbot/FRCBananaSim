@@ -4,7 +4,7 @@
  */
 
 #include "Robot/Drivetrain/Systems/SwerveTerrainProbe.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/CastResult.h>

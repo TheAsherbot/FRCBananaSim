@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "Telemetry/ProfileResult.h"
-#include "Telemetry/ProfilerUI.h"
+#include "Telemetry/TelemeteryViewer/ProfileResult.h"
+#include "Telemetry/TelemeteryViewer/ProfilerUI.h"
 
 #include <string>
 #include <vector>

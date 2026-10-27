@@ -54,28 +54,28 @@
     <ClCompile Include="Source\Utils\FixedTimestep.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Telemetry\MemoryTracker.cpp">
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\MemoryTracker.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Telemetry\ProfilerUI.cpp">
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\ProfilerUI.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Telemetry\ProfilerWindow.cpp">
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\ProfilerWindow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Telemetry\SessionLoader.cpp">
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\SessionLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Telemetry\SessionManager.cpp">
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\SessionManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Telemetry\TelemetryManager.cpp">
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\TelemetryManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Telemetry\TelemetryOverlay.cpp">
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\TelemetryOverlay.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Telemetry\TelemetryTimer.cpp">
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\TelemetryTimer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\External\glad\src\glad.c">
@@ -159,6 +159,9 @@
     <ClCompile Include="Source\Bridge\HALSimWebSocketServer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Telemetry\DrivetrainLogger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Utils\Log.h">
@@ -212,34 +215,34 @@
     <ClInclude Include="Source\Utils\FixedTimestep.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\MemoryTracker.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\MemoryTracker.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\ProfileResult.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\ProfileResult.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\ProfilerUI.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\ProfilerUI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\ProfilerWindow.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\ProfilerWindow.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\SessionLoader.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\SessionLoader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\SessionManager.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\SessionManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\TelemetryMacros.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\TelemetryMacros.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\TelemetryManager.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\TelemetryManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\TelemetryOverlay.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\TelemetryOverlay.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Telemetry\TelemetryTimer.h">
+    <ClInclude Include="Source\Telemetry\TelemeteryViewer\TelemetryTimer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Source\Physics\PhysicsConfig.h">
@@ -333,6 +336,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Source\Bridge\HALSimWebSocketServer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Telemetry\DrivetrainLogger.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

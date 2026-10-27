@@ -8,7 +8,7 @@
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Actuation/Components/MotorComponent.h"
 #include "Core/ECS/Core/Scene.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include "Utils/Log.h"
 
 #include <Jolt/Physics/Body/BodyLockMulti.h>

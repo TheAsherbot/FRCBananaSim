@@ -10,7 +10,7 @@
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
 #include "Core/ECS/Core/Scene.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyInterface.h>

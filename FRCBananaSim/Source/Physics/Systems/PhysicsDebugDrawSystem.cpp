@@ -8,7 +8,7 @@
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Core/ECS/Core/Scene.h"
 #include "Core/ECS/Components/TransformComponent.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include "Utils/DebugDraw.h"
 
 namespace FRCBananaSim::Physics::Systems

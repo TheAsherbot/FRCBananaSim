@@ -3,8 +3,8 @@
  * @brief Implementation of the flame graph and profiler statistics rendering.
  */
 
-#include "Telemetry/ProfilerUI.h"
-#include "Telemetry/MemoryTracker.h"
+#include "Telemetry/TelemeteryViewer/ProfilerUI.h"
+#include "Telemetry/TelemeteryViewer/MemoryTracker.h"
 
 #include <imgui/imgui.h>
 

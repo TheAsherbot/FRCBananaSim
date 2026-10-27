@@ -3,9 +3,9 @@
  * @brief Implementation of the secondary GLFW profiler window and its ImGui context.
  */
 
-#include "Telemetry/ProfilerWindow.h"
-#include "Telemetry/ProfilerUI.h"
-#include "Telemetry/TelemetryManager.h"
+#include "Telemetry/TelemeteryViewer/ProfilerWindow.h"
+#include "Telemetry/TelemeteryViewer/ProfilerUI.h"
+#include "Telemetry/TelemeteryViewer/TelemetryManager.h"
 #include "Utils/Log.h"
 
 #include <glad/glad.h>

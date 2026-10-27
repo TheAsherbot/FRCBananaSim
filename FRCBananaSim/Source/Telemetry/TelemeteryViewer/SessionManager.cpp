@@ -3,8 +3,8 @@
  * @brief Implementation of the session browser and viewer UI.
  */
 
-#include "Telemetry/SessionManager.h"
-#include "Telemetry/SessionLoader.h"
+#include "Telemetry/TelemeteryViewer/SessionManager.h"
+#include "Telemetry/TelemeteryViewer/SessionLoader.h"
 
 #include <imgui/imgui.h>
 

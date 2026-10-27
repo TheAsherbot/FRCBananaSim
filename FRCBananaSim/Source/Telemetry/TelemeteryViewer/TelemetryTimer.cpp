@@ -3,9 +3,9 @@
  * @brief Implementation of the RAII-based execution scope timer.
  */
 
-#include "Telemetry/TelemetryTimer.h"
-#include "Telemetry/TelemetryManager.h"
-#include "Telemetry/MemoryTracker.h"
+#include "Telemetry/TelemeteryViewer/TelemetryTimer.h"
+#include "Telemetry/TelemeteryViewer/TelemetryManager.h"
+#include "Telemetry/TelemeteryViewer/MemoryTracker.h"
 
 #include <chrono>
 #include <cstring>

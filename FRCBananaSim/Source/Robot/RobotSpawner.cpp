@@ -13,7 +13,7 @@
 #include "Core/ECS/Components/TransformComponent.h"
 #include "Core/ECS/Components/HierarchyComponent.h"
 #include "Core/Units/Units.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
 #include <nlohmann/json.hpp>
 #include <fstream>

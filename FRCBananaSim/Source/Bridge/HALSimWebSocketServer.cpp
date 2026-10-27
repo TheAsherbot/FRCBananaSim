@@ -18,6 +18,7 @@
 #include <ws2tcpip.h>
 #include <nlohmann/json.hpp>
 
+#include <glm/glm.hpp>
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -394,7 +395,8 @@ namespace FRCBananaSim::Bridge
 
     void HALSimWebSocketServer::SendOutputs(const Control::SimOutputs& outputs)
     {
-        // Broadcasts are dispatched inside the client event loop
+        std::lock_guard<std::mutex> lock(outputsMutex);
+        latestOutputs = outputs;
     }
 
     bool HALSimWebSocketServer::DumpSimDevices(const std::string& filepath) const
@@ -516,12 +518,40 @@ namespace FRCBananaSim::Bridge
                                 clientKey.pop_back();
                             }
 
+                            // Check if client requested a subprotocol (e.g. "Sec-WebSocket-Protocol: wpilibws")
+                            std::string protoHeader = "Sec-WebSocket-Protocol: ";
+                            size_t protoPos = req.find(protoHeader);
+                            if (protoPos == std::string::npos)
+                            {
+                                protoHeader = "sec-websocket-protocol: ";
+                                protoPos = req.find(protoHeader);
+                            }
+
+                            std::string protocolResponseHeader = "";
+                            if (protoPos != std::string::npos)
+                            {
+                                size_t protoStart = protoPos + protoHeader.size();
+                                size_t protoEnd = req.find("\r\n", protoStart);
+                                std::string clientProto = req.substr(protoStart, protoEnd - protoStart);
+                                while (!clientProto.empty() && (clientProto.back() == ' ' || clientProto.back() == '\r'))
+                                {
+                                    clientProto.pop_back();
+                                }
+                                size_t comma = clientProto.find(',');
+                                if (comma != std::string::npos)
+                                {
+                                    clientProto = clientProto.substr(0, comma);
+                                }
+                                protocolResponseHeader = "Sec-WebSocket-Protocol: " + clientProto + "\r\n";
+                            }
+
                             std::string acceptKey = ComputeWebSocketAcceptKey(clientKey);
                             std::string resp =
                                 "HTTP/1.1 101 Switching Protocols\r\n"
                                 "Upgrade: websocket\r\n"
                                 "Connection: Upgrade\r\n"
-                                "Sec-WebSocket-Accept: " + acceptKey + "\r\n\r\n";
+                                "Sec-WebSocket-Accept: " + acceptKey + "\r\n" +
+                                protocolResponseHeader + "\r\n";
 
                             send(clientSock, resp.data(), static_cast<int>(resp.size()), 0);
                             readBuffer.erase(readBuffer.begin(), readBuffer.begin() + headerEnd + 4);
@@ -557,8 +587,9 @@ namespace FRCBananaSim::Bridge
                         }
                     }
 
-                    // 3. Send 50 Hz DriverStation heartbeat
                     auto now = std::chrono::steady_clock::now();
+
+                    // 3. Send 50 Hz DriverStation heartbeat
                     double dsElapsed = std::chrono::duration<double>(now - lastDsHeartbeat).count();
                     if (dsElapsed >= (1.0 / config.heartbeatRateHz))
                     {
@@ -582,6 +613,45 @@ namespace FRCBananaSim::Bridge
                         std::lock_guard<std::mutex> sLock(statsMutex);
                         stats.packetsSent++;
                         stats.bytesSent += frame.size();
+                    }
+
+                    // 4. Send 100 Hz Sensory Outputs (RoboRIO Battery, Encoders, Gyro)
+                    double pubElapsed = std::chrono::duration<double>(now - lastPublish).count();
+                    if (pubElapsed >= (1.0 / config.publishRateHz))
+                    {
+                        lastPublish = now;
+                        Control::SimOutputs out;
+                        {
+                            std::lock_guard<std::mutex> oLock(outputsMutex);
+                            out = latestOutputs;
+                        }
+
+                        // A. Battery Voltage (prevents robot brownout cutoff)
+                        nlohmann::json rrioMsg = {
+                            { "type", "RoboRIO" },
+                            { "device", "" },
+                            { "data", { { ">vin_voltage", out.batteryTerminalVoltage } } }
+                        };
+                        std::string rrioStr = rrioMsg.dump();
+                        std::vector<uint8_t> rrioFrame = EncodeTextFrame(rrioStr);
+                        send(clientSock, reinterpret_cast<const char*>(rrioFrame.data()),
+                            static_cast<int>(rrioFrame.size()), 0);
+                    
+                        // B. Pigeon 2 Gyro Heading
+                        nlohmann::json p2Msg = {
+                            { "type", "SimDevice" },
+                            { "device", "Pigeon 2 (Gyro)[0]" },
+                            { "data", {
+                                { "<yaw", glm::degrees(out.gyroYaw) },
+                                { "<pitch", glm::degrees(out.gyroPitch) },
+                                { "<roll", glm::degrees(out.gyroRoll) },
+                                { "<angularVelocityZ", glm::degrees(out.gyroYawRate) }
+                            } }
+                        };
+                        std::string pStr = p2Msg.dump();
+                        std::vector<uint8_t> pFrame = EncodeTextFrame(pStr);
+                        send(clientSock, reinterpret_cast<const char*>(pFrame.data()),
+                            static_cast<int>(pFrame.size()), 0);
                     }
                 }
             }

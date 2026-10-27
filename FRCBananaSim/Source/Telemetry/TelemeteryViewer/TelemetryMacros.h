@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "Telemetry/TelemetryTimer.h"
+#include "Telemetry/TelemeteryViewer/TelemetryTimer.h"
 
 #if defined(_DEBUG) || defined(SIM_FORCE_PROFILING)
 #define SIM_ENABLE_PROFILING 1

@@ -4,7 +4,7 @@
  */
 
 #include "Robot/Drivetrain/Model/SwerveDrivetrainModel.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cmath>

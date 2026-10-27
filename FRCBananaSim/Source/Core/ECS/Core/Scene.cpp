@@ -6,7 +6,7 @@
 #include "Scene.h"
 #include "System.h"
 #include "CORE/ECS/Components/HierarchyComponent.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include <algorithm>
 
 namespace FRCBananaSim::Core::ECS::Core

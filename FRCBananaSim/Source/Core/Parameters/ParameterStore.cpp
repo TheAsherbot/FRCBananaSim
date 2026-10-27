@@ -5,7 +5,7 @@
 
 #include "ParameterStore.h"
 #include "Core/Units/Units.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include "Utils/Log.h"
 
 #include <fstream>

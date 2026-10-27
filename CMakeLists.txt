@@ -48,6 +48,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
     FRCBananaSim/Source/Bridge/Sha1.cpp
     FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
+    FRCBananaSim/Source/Telemetry/DrivetrainLogger.cpp
     FRCBananaSim/Source/Core/Engine.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
@@ -63,14 +64,14 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Renderer/Input.cpp
     FRCBananaSim/Source/Renderer/Renderer.cpp
     FRCBananaSim/Source/Renderer/Systems/RenderSystem.cpp
-    FRCBananaSim/Source/Telemetry/MemoryTracker.cpp
-    FRCBananaSim/Source/Telemetry/ProfilerUI.cpp
-    FRCBananaSim/Source/Telemetry/ProfilerWindow.cpp
-    FRCBananaSim/Source/Telemetry/SessionLoader.cpp
-    FRCBananaSim/Source/Telemetry/SessionManager.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryManager.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryOverlay.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryTimer.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/MemoryTracker.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/ProfilerUI.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/ProfilerWindow.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/SessionLoader.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/SessionManager.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryManager.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryOverlay.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryTimer.cpp
     FRCBananaSim/Source/Utils/DebugDraw.cpp
     FRCBananaSim/Source/Utils/FixedTimestep.cpp
     FRCBananaSim/Source/Utils/Log.cpp
@@ -120,6 +121,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
     FRCBananaSim/Source/Bridge/Sha1.cpp
     FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
+    FRCBananaSim/Source/Telemetry/DrivetrainLogger.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
     FRCBananaSim/Source/Core/ECS/Core/System.cpp
@@ -129,9 +131,9 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Physics/JoltContext.cpp
     FRCBananaSim/Source/Physics/Systems/PhysicsSystem.cpp
     FRCBananaSim/Source/Physics/Systems/JointSystem.cpp
-    FRCBananaSim/Source/Telemetry/MemoryTracker.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryManager.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryTimer.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/MemoryTracker.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryManager.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryTimer.cpp
     FRCBananaSim/Source/Utils/DebugDraw.cpp
     FRCBananaSim/Source/Utils/FixedTimestep.cpp
     FRCBananaSim/Source/Utils/Log.cpp
@@ -146,6 +148,7 @@ set(TEST_SOURCES
     Tests/SwerveModelTest.cpp
     Tests/SwerveAdapterTest.cpp
     Tests/HALSimBridgeTest.cpp
+    Tests/DrivetrainLoggerTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -172,4 +175,5 @@ add_test(NAME RobotSpawnerTest COMMAND FRCBananaSim_Tests --robot-spawner)
 add_test(NAME SwerveModelTest COMMAND FRCBananaSim_Tests --swerve-model)
 add_test(NAME SwerveAdapterTest COMMAND FRCBananaSim_Tests --swerve-adapter)
 add_test(NAME HALSimBridgeTest COMMAND FRCBananaSim_Tests --halsim-bridge)
+add_test(NAME DrivetrainLoggerTest COMMAND FRCBananaSim_Tests --drivetrain-logger)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

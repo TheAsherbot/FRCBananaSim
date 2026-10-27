@@ -22,19 +22,20 @@
 #include "Robot/Drivetrain/Systems/SwerveDriveSystem.h"
 #include "Robot/Drivetrain/Model/SwerveDrivetrainModel.h"
 #include "Robot/Drivetrain/Model/TerrainProvider.h"
-#include "Control/SimControlBoundary.h"
 #include "Core/Units/Units.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/Components/MeshComponent.h"
 #include "Renderer/Systems/RenderSystem.h"
-#include "Telemetry/TelemetryMacros.h"
-#include "Telemetry/TelemetryManager.h"
-#include "Telemetry/TelemetryOverlay.h"
-#include "Telemetry/ProfilerWindow.h"
-#include "Telemetry/ProfileResult.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryManager.h"
+#include "Telemetry/TelemeteryViewer/TelemetryOverlay.h"
+#include "Telemetry/TelemeteryViewer/ProfilerWindow.h"
+#include "Telemetry/TelemeteryViewer/ProfileResult.h"
 #include "Utils/DebugDraw.h"
 #include "Utils/Log.h"
 #include "Bridge/HALSimWebSocketServer.h"
+#include "Telemetry/DrivetrainLogger.h"
+#include "Control/SimControlBoundary.h"
 
 #include <GLFW/glfw3.h>
 #include <imgui/imgui.h>
@@ -304,6 +305,8 @@ int main(int argc, char* argv[])
 {
     FRCBananaSim::Bridge::HALSimWebSocketServer wsServer;
     wsServer.Start();
+
+    FRCBananaSim::Telemetry::DrivetrainLogger drivetrainLogger(120000); // 10 min pre-allocated buffer at 200 Hz
 
     // 1. Initialize Telemetry System
     TelemetryManager::Get().Initialize();
@@ -757,6 +760,44 @@ int main(int argc, char* argv[])
                 }
             }
 
+            // Record high-rate telemetry snapshot
+            if (drivetrainLogger.IsRecording() && swerveRobot.isSuccess)
+            {
+                FRCBananaSim::Telemetry::DrivetrainLogSample sample;
+                sample.timestamp = static_cast<double>(totalSimSteps) * fixedDeltaTime;
+                sample.commandedVoltage = static_cast<double>(swerveDriveVolts);
+                sample.batteryVoltage = swerveOutputs.batteryTerminalVoltage;
+                sample.totalBusCurrent = swerveOutputs.totalBusCurrent;
+
+                auto* chassisT = scene.GetComponent<TransformComponent>(swerveRobot.chassisEntity);
+                sample.chassisElevation = chassisT ? chassisT->position.y : 0.0;
+
+                auto* model = swerveSystem.GetModel();
+                if (model)
+                {
+                    const auto& motion = model->GetChassisState();
+                    glm::vec3 linVelEng(motion.linearVelocity.y, motion.linearVelocity.z, motion.linearVelocity.x);
+                    sample.chassisSpeed = glm::length(glm::vec2(linVelEng.x, linVelEng.z));
+
+                    for (uint32_t i = 0; i < 4; ++i)
+                    {
+                        const auto& modState = model->GetModule(i).GetState();
+                        sample.steerAnglesDeg[i] = glm::degrees(modState.steerAngle);
+                        sample.wheelVelocitiesRadS[i] = modState.wheelVelocity;
+                        sample.driveCurrentsA[i] = modState.driveStatorCurrent;
+                        sample.normalForcesN[i] = modState.contactState.normalForce;
+                        sample.slipRatios[i] = modState.contactState.saturationRatio;
+                    }
+                }
+
+                sample.gyroYawDeg = glm::degrees(swerveOutputs.gyroYaw);
+                sample.gyroPitchDeg = glm::degrees(swerveOutputs.gyroPitch);
+                sample.gyroRollDeg = glm::degrees(swerveOutputs.gyroRoll);
+                sample.gyroYawRateDegS = glm::degrees(swerveOutputs.gyroYawRate);
+
+                drivetrainLogger.RecordSample(sample);
+            }
+
             ++totalSimSteps;
         };
 
@@ -998,6 +1039,46 @@ int main(int argc, char* argv[])
                 if (ImGui::Button("Dump Discovered SimDevices to JSON"))
                 {
                     wsServer.DumpSimDevices("Resources/Telemetry/sim_device_dump.json");
+                }
+
+                ImGui::Separator();
+
+                // -------------------------------------------------------------
+                // DRIVETRAIN TELEMETRY RECORDER & CSV EXPORT
+                // -------------------------------------------------------------
+                ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "CALIBRATION TELEMETRY RECORDER:");
+                if (drivetrainLogger.IsRecording())
+                {
+                    if (ImGui::Button("Stop Recording", ImVec2(140.0f, 24.0f)))
+                    {
+                        drivetrainLogger.StopRecording();
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(1.0f, 0.25f, 0.25f, 1.0f), "● REC (%zu samples)", drivetrainLogger.GetSampleCount());
+                }
+                else
+                {
+                    if (ImGui::Button("Start Recording", ImVec2(140.0f, 24.0f)))
+                    {
+                        drivetrainLogger.StartRecording();
+                    }
+                    ImGui::SameLine();
+                    ImGui::Text("Stored: %zu / %zu", drivetrainLogger.GetSampleCount(), drivetrainLogger.GetCapacity());
+                }
+
+                if (ImGui::Button("Export 6-DOF CSV"))
+                {
+                    drivetrainLogger.ExportToCsv("Resources/Telemetry/drivetrain_telemetry.csv");
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Export FTC Schema CSV"))
+                {
+                    drivetrainLogger.ExportToFtcSchemaCsv("Resources/Telemetry/drivetrain_ftc_schema.csv");
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear Log"))
+                {
+                    drivetrainLogger.Clear();
                 }
 
                 ImGui::Separator();

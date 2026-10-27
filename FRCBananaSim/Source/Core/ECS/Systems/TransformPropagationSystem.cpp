@@ -7,7 +7,7 @@
 #include "Core/ECS/Core/Scene.h"
 #include "Core/ECS/Components/TransformComponent.h"
 #include "Core/ECS/Components/HierarchyComponent.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
 namespace FRCBananaSim::Core::ECS::Systems
 {

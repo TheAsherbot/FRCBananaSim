@@ -3,7 +3,7 @@
  * @brief Implementation of the central telemetry coordinator and trace serializer.
  */
 
-#include "Telemetry/TelemetryManager.h"
+#include "Telemetry/TelemeteryViewer/TelemetryManager.h"
 
 #include <algorithm>
 #include <chrono>

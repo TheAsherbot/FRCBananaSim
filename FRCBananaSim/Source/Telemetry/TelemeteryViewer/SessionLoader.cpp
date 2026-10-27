@@ -3,7 +3,7 @@
  * @brief Implementation of JSON trace file parsing and session file management.
  */
 
-#include "Telemetry/SessionLoader.h"
+#include "Telemetry/TelemeteryViewer/SessionLoader.h"
 
 #include <algorithm>
 #include <cstdint>

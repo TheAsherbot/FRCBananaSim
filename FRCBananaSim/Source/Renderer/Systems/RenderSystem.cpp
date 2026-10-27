@@ -8,7 +8,7 @@
 #include "Renderer/Components/MeshComponent.h"
 #include "Core/ECS/Core/Scene.h"
 #include "Core/ECS/Components/TransformComponent.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
 namespace FRCBananaSim::Renderer::Systems
 {

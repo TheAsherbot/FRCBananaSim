@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "Telemetry/ProfileResult.h"
+#include "Telemetry/TelemeteryViewer/ProfileResult.h"
 
 #include <cstddef>
 #include <vector>

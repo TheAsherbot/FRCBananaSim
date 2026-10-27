@@ -3,9 +3,9 @@
  * @brief Implementation of the Mode 2 telemetry heads-up display.
  */
 
-#include "Telemetry/TelemetryOverlay.h"
-#include "Telemetry/TelemetryManager.h"
-#include "Telemetry/MemoryTracker.h"
+#include "Telemetry/TelemeteryViewer/TelemetryOverlay.h"
+#include "Telemetry/TelemeteryViewer/TelemetryManager.h"
+#include "Telemetry/TelemeteryViewer/MemoryTracker.h"
 
 #include <cstddef>
 #include <imgui/imgui.h>

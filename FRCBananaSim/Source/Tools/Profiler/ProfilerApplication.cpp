@@ -10,7 +10,7 @@
 #include <imgui/backend/imgui_impl_glfw.h>
 #include <imgui/backend/imgui_impl_opengl3.h>
 
-#include "Telemetry/SessionManager.h"
+#include "Telemetry/TelemeteryViewer/SessionManager.h"
 
 int main()
 {

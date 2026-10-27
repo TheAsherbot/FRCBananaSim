@@ -85,8 +85,13 @@ int main(int argc, char* argv[])
             runAll = false;
             RunHALSimBridgeTest(ctx);
         }
+        else if (arg == "--drivetrain-logger")
+        {
+            runAll = false;
+            RunDrivetrainLoggerTest(ctx);
+        }
     }
-    
+
     if (runAll)
     {
         RunUnitsTest(ctx);
@@ -98,6 +103,7 @@ int main(int argc, char* argv[])
         RunSwerveModelTest(ctx);
         RunSwerveAdapterTest(ctx);
         RunHALSimBridgeTest(ctx);
+        RunDrivetrainLoggerTest(ctx);
     }
 
     std::cout << "======================================\n";

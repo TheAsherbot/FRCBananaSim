@@ -169,6 +169,9 @@ namespace FRCBananaSim::Bridge
         Control::SimInputs currentInputs;
         bool hasNewInputs = false;
 
+        mutable std::mutex outputsMutex;
+        Control::SimOutputs latestOutputs;
+
         mutable std::mutex statsMutex;
         BridgeStatistics stats;
 
