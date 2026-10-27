@@ -148,6 +148,7 @@ void main()
         {
             std::vector<MeshVertex> v;
             const float radius = 0.5f;
+
             for (int i = 0; i < rings; ++i)
             {
                 float lat0 = kPi * (-0.5f + static_cast<float>(i) / rings);
@@ -173,6 +174,94 @@ void main()
                     v.push_back({ p11 * radius, glm::normalize(p11) });
                     v.push_back({ p01 * radius, glm::normalize(p01) });
                 }
+            }
+            return v;
+        }
+
+        std::vector<MeshVertex> GenerateCylinderY(int segments = 24)
+        {
+            std::vector<MeshVertex> v;
+            const float radius = 0.5f;
+            const float halfHeight = 0.5f;
+
+            for (int j = 0; j < segments; ++j)
+            {
+                float theta0 = 2.0f * kPi * static_cast<float>(j) / segments;
+                float theta1 = 2.0f * kPi * static_cast<float>(j + 1) / segments;
+
+                float c0 = std::cos(theta0), s0 = std::sin(theta0);
+                float c1 = std::cos(theta1), s1 = std::sin(theta1);
+
+                glm::vec3 n0(c0, 0.0f, s0);
+                glm::vec3 n1(c1, 0.0f, s1);
+
+                glm::vec3 p00(c0 * radius, -halfHeight, s0 * radius);
+                glm::vec3 p01(c0 * radius, halfHeight, s0 * radius);
+                glm::vec3 p10(c1 * radius, -halfHeight, s1 * radius);
+                glm::vec3 p11(c1 * radius, halfHeight, s1 * radius);
+
+                // Cylinder wall
+                v.push_back({ p00, n0 });
+                v.push_back({ p10, n1 });
+                v.push_back({ p11, n1 });
+
+                v.push_back({ p00, n0 });
+                v.push_back({ p11, n1 });
+                v.push_back({ p01, n0 });
+
+                // Top cap (+Y)
+                v.push_back({ { 0.0f, halfHeight, 0.0f }, { 0.0f, 1.0f, 0.0f } });
+                v.push_back({ p01, { 0.0f, 1.0f, 0.0f } });
+                v.push_back({ p11, { 0.0f, 1.0f, 0.0f } });
+
+                // Bottom cap (-Y)
+                v.push_back({ { 0.0f, -halfHeight, 0.0f }, { 0.0f, -1.0f, 0.0f } });
+                v.push_back({ p10, { 0.0f, -1.0f, 0.0f } });
+                v.push_back({ p00, { 0.0f, -1.0f, 0.0f } });
+            }
+            return v;
+        }
+
+        std::vector<MeshVertex> GenerateCylinderX(int segments = 24)
+        {
+            std::vector<MeshVertex> v;
+            const float radius = 0.5f;
+            const float halfWidth = 0.5f;
+
+            for (int j = 0; j < segments; ++j)
+            {
+                float theta0 = 2.0f * kPi * static_cast<float>(j) / segments;
+                float theta1 = 2.0f * kPi * static_cast<float>(j + 1) / segments;
+
+                float c0 = std::cos(theta0), s0 = std::sin(theta0);
+                float c1 = std::cos(theta1), s1 = std::sin(theta1);
+
+                glm::vec3 n0(0.0f, c0, s0);
+                glm::vec3 n1(0.0f, c1, s1);
+
+                glm::vec3 p00(-halfWidth, c0 * radius, s0 * radius);
+                glm::vec3 p01(halfWidth, c0 * radius, s0 * radius);
+                glm::vec3 p10(-halfWidth, c1 * radius, s1 * radius);
+                glm::vec3 p11(halfWidth, c1 * radius, s1 * radius);
+
+                // Cylinder tread wall
+                v.push_back({ p00, n0 });
+                v.push_back({ p10, n1 });
+                v.push_back({ p11, n1 });
+
+                v.push_back({ p00, n0 });
+                v.push_back({ p11, n1 });
+                v.push_back({ p01, n0 });
+
+                // Right cap (+X)
+                v.push_back({ { halfWidth, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } });
+                v.push_back({ p01, { 1.0f, 0.0f, 0.0f } });
+                v.push_back({ p11, { 1.0f, 0.0f, 0.0f } });
+
+                // Left cap (-X)
+                v.push_back({ { -halfWidth, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f } });
+                v.push_back({ p10, { -1.0f, 0.0f, 0.0f } });
+                v.push_back({ p00, { -1.0f, 0.0f, 0.0f } });
             }
             return v;
         }
@@ -317,34 +406,28 @@ void main()
         impl->primitives[PrimitiveShape::Cube] = UploadMesh(GenerateCube());
         impl->primitives[PrimitiveShape::Sphere] = UploadMesh(GenerateSphere());
         impl->primitives[PrimitiveShape::Plane] = UploadMesh(GeneratePlane());
+        impl->primitives[PrimitiveShape::Cylinder] = UploadMesh(GenerateCylinderY());
+        impl->primitives[PrimitiveShape::CylinderX] = UploadMesh(GenerateCylinderX());
 
         glGenVertexArrays(1, &impl->debugLineVao);
-        glBindVertexArray(impl->debugLineVao);
         glGenBuffers(1, &impl->debugLineVbo);
-        glBindBuffer(GL_ARRAY_BUFFER, impl->debugLineVbo);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(DebugLineVertex),
-            reinterpret_cast<void*>(offsetof(DebugLineVertex, position)));
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(DebugLineVertex),
-            reinterpret_cast<void*>(offsetof(DebugLineVertex, color)));
-        glEnableVertexAttribArray(1);
-        glBindVertexArray(0);
-
-        impl->lastFrameTime = glfwGetTime();
-        impl->valid = true;
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
         ImGui::StyleColorsDark();
         ImGui_ImplGlfw_InitForOpenGL(impl->window, true);
         ImGui_ImplOpenGL3_Init("#version 330 core");
 
-        SIM_LOG_INFO("Renderer initialized: " << width << "x" << height << " '" << title << "'");
+        impl->valid = true;
+        impl->lastFrameTime = glfwGetTime();
     }
 
     Renderer::~Renderer()
     {
-        if (impl && impl->valid)
+        if (impl->valid)
         {
             ImGui_ImplOpenGL3_Shutdown();
             ImGui_ImplGlfw_Shutdown();
@@ -352,21 +435,19 @@ void main()
 
             glDeleteProgram(impl->meshProgram);
             glDeleteProgram(impl->debugLineProgram);
+
             for (auto& [shape, mesh] : impl->primitives)
             {
                 glDeleteVertexArrays(1, &mesh.vao);
                 glDeleteBuffers(1, &mesh.vbo);
             }
+
             glDeleteVertexArrays(1, &impl->debugLineVao);
             glDeleteBuffers(1, &impl->debugLineVbo);
-        }
 
-        if (impl && impl->window)
-        {
             glfwDestroyWindow(impl->window);
+            glfwTerminate();
         }
-
-        glfwTerminate();
     }
 
     bool Renderer::IsValid() const
@@ -376,15 +457,37 @@ void main()
 
     bool Renderer::ShouldClose() const
     {
-        return impl->valid ? glfwWindowShouldClose(impl->window) : true;
+        return !impl->valid || glfwWindowShouldClose(impl->window);
     }
 
-    void Renderer::SetVSync(bool enabled)
+    const GLFWwindow* Renderer::GetWindow() const
     {
-        if (impl && impl->valid)
-        {
-            glfwSwapInterval(enabled ? 1 : 0);
-        }
+        return impl->window;
+    }
+
+    Camera& Renderer::GetCamera()
+    {
+        return impl->camera;
+    }
+
+    const Camera& Renderer::GetCamera() const
+    {
+        return impl->camera;
+    }
+
+    Input& Renderer::GetInput()
+    {
+        return impl->input;
+    }
+
+    const Input& Renderer::GetInput() const
+    {
+        return impl->input;
+    }
+
+    GLFWwindow* Renderer::GetWindow()
+    {
+        return impl->window;
     }
 
     void Renderer::BeginFrame()
@@ -396,6 +499,12 @@ void main()
 
         glfwPollEvents();
         impl->input.Update();
+
+        // Right-click toggles free-look cursor lock for Camera
+        if (impl->input.WasKeyPressed(GLFW_KEY_F1))
+        {
+            impl->input.SetCursorCaptured(!impl->input.IsCursorCaptured());
+        }
 
         double now = glfwGetTime();
         float dt = static_cast<float>(now - impl->lastFrameTime);
@@ -505,37 +614,6 @@ void main()
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
         glfwSwapBuffers(impl->window);
-    }
-
-    Camera& Renderer::GetCamera()
-    {
-        return impl->camera;
-    }
-
-    const Camera& Renderer::GetCamera() const
-    {
-        return impl->camera;
-    }
-
-    Input& Renderer::GetInput()
-    {
-        return impl->input;
-    }
-
-    const Input& Renderer::GetInput() const
-    {
-        return impl->input;
-    }
-
-    GLFWwindow* Renderer::GetWindow()
-    {
-        return impl ? impl->window : nullptr;
-    }
-
-    const GLFWwindow* Renderer::GetWindow() const
-    {
-        return impl ? impl->window : nullptr;
     }
 }

@@ -20,9 +20,11 @@ namespace FRCBananaSim::Renderer::Components
      */
     enum class PrimitiveShape
     {
-        Cube,   ///< Unit cube centered at origin.
-        Sphere, ///< UV sphere centered at origin.
-        Plane   ///< Unit quad on the XZ plane facing +Y.
+        Cube,      ///< Unit cube centered at origin.
+        Sphere,    ///< UV sphere centered at origin.
+        Plane,     ///< Unit quad on the XZ plane facing +Y.
+        Cylinder,  ///< Unit cylinder along vertical Y-axis (steer housing).
+        CylinderX  ///< Unit cylinder along horizontal X-axis (wheel).
     };
 
     /**

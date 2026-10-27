@@ -11,11 +11,21 @@
 namespace FRCBananaSim::Actuation
 {
     /**
+     * @struct AffineMotorTorque
+     * @brief Affine torque decomposition at the output shaft: tau = tau0 - damping * omega.
+     */
+    struct AffineMotorTorque
+    {
+        double stallTorqueCommanded = 0.0; ///< Commanded torque at zero output speed (N*m).
+        double electricalDamping = 0.0;    ///< Back-EMF electrical damping coefficient D (N*m / (rad/s)).
+    };
+
+    /**
      * @class DCMotorModel
      * @brief Physics and electrical model for permanent-magnet DC motors coupled to gearboxes.
      *
      * Utilizes semi-implicit integration of back-EMF to guarantee unconditional stability
-     * across high gear ratios (e.g., G = 21.43 or G = 100) at fixed physics timesteps (dt = 5 ms).
+     * across high gear ratios (e.g., G = 26.09 or G = 100) at fixed physics timesteps.
      */
     class DCMotorModel
     {
@@ -42,7 +52,9 @@ namespace FRCBananaSim::Actuation
 
         // WPILib-aligned factory presets
         static DCMotorModel KrakenX60(double gearRatio = 1.0, double efficiency = 1.0);
+        static DCMotorModel KrakenX60FOC(double gearRatio = 1.0, double efficiency = 1.0);
         static DCMotorModel KrakenX44(double gearRatio = 1.0, double efficiency = 1.0);
+        static DCMotorModel KrakenX44FOC(double gearRatio = 1.0, double efficiency = 1.0);
         static DCMotorModel Minion(double gearRatio = 1.0, double efficiency = 1.0);
         static DCMotorModel Falcon500(double gearRatio = 1.0, double efficiency = 1.0);
         static DCMotorModel NEO1(double gearRatio = 1.0, double efficiency = 1.0);
@@ -61,6 +73,20 @@ namespace FRCBananaSim::Actuation
          */
         double CalculateTorque(double appliedVoltage, double currentAngularVelocity,
             double externalInertia, double deltaTime) const;
+
+        /**
+         * @brief Decomposes motor output into affine linear terms: tau = tau0 - D * omega.
+         * @param appliedVoltage Voltage across the motor windings (V).
+         * @return AffineMotorTorque holding stall torque command tau0 and electrical damping D.
+         */
+        AffineMotorTorque CalculateAffineTorqueTerms(double appliedVoltage) const;
+
+        /**
+         * @brief Computes maximum output torque allowed by a stator current limit.
+         * @param statorCurrentLimit Stator current threshold in Amperes (A).
+         * @return Maximum permissible output torque magnitude (N*m).
+         */
+        double CalculateStatorTorqueLimit(double statorCurrentLimit) const;
 
         /**
          * @brief Calculates instantaneous motor winding (stator) current.

@@ -46,6 +46,17 @@ namespace FRCBananaSim::Actuation
         double CalculateTerminalVoltage(double totalMotorSupplyCurrent) const;
 
         /**
+         * @brief Closed-form bus voltage solver eliminating algebraic loops:
+         * Solves V_bus = 0.5 * (B + sqrt(B^2 - 4 * R_bat * P_total)) where B = V_oc - R_bat * I_q.
+         * @param aggregateMotorPowerWatts Total active electrical power commanded by actuators (W).
+         * @param isCurrentlyBrownedOut Current persistent brownout latch state.
+         * @param outNewBrownoutState Output updated brownout state with Schmitt-trigger hysteresis.
+         * @return Solved terminal bus voltage (V).
+         */
+        double SolveBusVoltageClosedForm(double aggregateMotorPowerWatts, bool isCurrentlyBrownedOut,
+            bool& outNewBrownoutState) const;
+
+        /**
          * @brief Throttles commanded motor voltage to obey supply current limits without zero division.
          * @param commandedVoltage Voltage commanded by robot code (V).
          * @param statorCurrent Instantaneous winding current through motor (A).

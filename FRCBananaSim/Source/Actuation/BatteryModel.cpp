@@ -1,6 +1,6 @@
 /**
  * @file BatteryModel.cpp
- * @brief Implementation of lumped battery model with voltage sag and brownout protection.
+ * @brief Implementation of lumped electrical battery model and brownout hysteresis.
  */
 
 #include "Actuation/BatteryModel.h"
@@ -33,35 +33,76 @@ namespace FRCBananaSim::Actuation
 
     BatteryModel BatteryModel::FTCStandard()
     {
-        return BatteryModel(12.0_V, 0.15_ohm, 0.35_A, 20.0_A, 15.0_A, 7.5_V, 6.5_V, 7.2_V);
+        return BatteryModel(12.00_V, 0.120_ohm, 0.35_A, 20.0_A, 15.0_A, 8.5_V, 7.0_V, 9.0_V);
     }
 
     double BatteryModel::CalculateTerminalVoltage(double totalMotorSupplyCurrent) const
     {
-        double totalCurrent = std::max(0.0_A, totalMotorSupplyCurrent) + quiescentCurrent;
-        double voltageSag = totalCurrent * internalResistance;
-        double terminalVoltage = nominalVoltage - voltageSag;
+        double totalCurrent = std::max(0.0, totalMotorSupplyCurrent) + quiescentCurrent;
+        double saggedVoltage = nominalVoltage - (totalCurrent * internalResistance);
+        return std::max(0.0, saggedVoltage);
+    }
 
-        return std::max(0.0_V, terminalVoltage);
+    double BatteryModel::SolveBusVoltageClosedForm(double aggregateMotorPowerWatts, bool isCurrentlyBrownedOut,
+        bool& outNewBrownoutState) const
+    {
+        double openCircuitEffective = nominalVoltage - (quiescentCurrent * internalResistance);
+        double discriminant = (openCircuitEffective * openCircuitEffective) - (4.0 * internalResistance * aggregateMotorPowerWatts);
+
+        double terminalVoltage = 0.0;
+        if (discriminant <= 0.0)
+        {
+            // Commanded power exceeds theoretical maximum deliverable by battery: voltage collapses
+            terminalVoltage = 0.5 * openCircuitEffective;
+            outNewBrownoutState = true;
+            return terminalVoltage;
+        }
+
+        terminalVoltage = 0.5 * (openCircuitEffective + std::sqrt(discriminant));
+
+        // Evaluate Schmitt-trigger brownout state
+        if (isCurrentlyBrownedOut)
+        {
+            if (terminalVoltage >= brownoutRecoveryVoltage)
+            {
+                outNewBrownoutState = false;
+            }
+            else
+            {
+                outNewBrownoutState = true;
+            }
+        }
+        else
+        {
+            if (terminalVoltage <= brownoutCutoffVoltage)
+            {
+                outNewBrownoutState = true;
+            }
+            else
+            {
+                outNewBrownoutState = false;
+            }
+        }
+
+        return terminalVoltage;
     }
 
     double BatteryModel::ApplySupplyCurrentLimit(double commandedVoltage, double statorCurrent,
         double terminalVoltage) const
     {
-        if (terminalVoltage <= 0.001_V || std::abs(commandedVoltage) <= 0.001_V)
+        double absCommanded = std::abs(commandedVoltage);
+        if (absCommanded < 1e-4 || terminalVoltage < 1e-3)
         {
-            return 0.0_V;
+            return 0.0;
         }
 
-        // Power drawn at motor armature: P = |I_stator * V_cmd|
-        double demandedPower = std::abs(statorCurrent * commandedVoltage);
-        // Maximum electrical power allowed by supply breaker: P_max = I_supply_limit * V_terminal
-        double allowedPower = supplyCurrentLimit * terminalVoltage;
+        double motorElectricalPower = std::abs(statorCurrent) * absCommanded;
+        double maxAllowedPower = supplyCurrentLimit * terminalVoltage;
 
-        if (demandedPower > allowedPower && demandedPower > 1e-6_W)
+        if (motorElectricalPower > maxAllowedPower && motorElectricalPower > 1e-6)
         {
-            double scale = allowedPower / demandedPower;
-            return commandedVoltage * scale;
+            double scaleFactor = maxAllowedPower / motorElectricalPower;
+            return commandedVoltage * scaleFactor;
         }
 
         return commandedVoltage;
@@ -69,23 +110,21 @@ namespace FRCBananaSim::Actuation
 
     bool BatteryModel::IsBrownoutWarning(double terminalVoltage) const
     {
-        return terminalVoltage < brownoutWarningVoltage;
+        return terminalVoltage <= brownoutWarningVoltage;
     }
 
     bool BatteryModel::IsBrownoutCritical(double terminalVoltage) const
     {
         if (isBrownedOutState)
         {
-            // Schmidt trigger recovery threshold: requires voltage to rise above recovery level
-            if (terminalVoltage > brownoutRecoveryVoltage)
+            if (terminalVoltage >= brownoutRecoveryVoltage)
             {
                 isBrownedOutState = false;
             }
         }
         else
         {
-            // Schmidt trigger trip threshold: falls below critical cutoff
-            if (terminalVoltage < brownoutCutoffVoltage)
+            if (terminalVoltage <= brownoutCutoffVoltage)
             {
                 isBrownedOutState = true;
             }

@@ -47,9 +47,21 @@ namespace FRCBananaSim::Actuation
         return DCMotorModel(12.0_V, 7.09_Nm, 366.0_A, 6000.0_rpm, 2.0_A, 5.6e-5, gearRatio, efficiency);
     }
 
+    DCMotorModel DCMotorModel::KrakenX60FOC(double gearRatio, double efficiency)
+    {
+        // CTRE Phoenix Pro FOC performance profile
+        return DCMotorModel(12.0_V, 9.37_Nm, 483.0_A, 5800.0_rpm, 2.0_A, 5.6e-5, gearRatio, efficiency);
+    }
+
     DCMotorModel DCMotorModel::KrakenX44(double gearRatio, double efficiency)
     {
         return DCMotorModel(12.0_V, 4.11_Nm, 279.0_A, 7758.0_rpm, 3.0_A, 2.1e-5, gearRatio, efficiency);
+    }
+
+    DCMotorModel DCMotorModel::KrakenX44FOC(double gearRatio, double efficiency)
+    {
+        // CTRE Phoenix Pro FOC profile for Kraken X44
+        return DCMotorModel(12.0_V, 4.80_Nm, 330.0_A, 7500.0_rpm, 3.0_A, 2.1e-5, gearRatio, efficiency);
     }
 
     DCMotorModel DCMotorModel::Minion(double gearRatio, double efficiency)
@@ -87,6 +99,19 @@ namespace FRCBananaSim::Actuation
         return DCMotorModel(12.0_V, 0.25_Nm, 9.2_A, 6000.0_rpm, 0.25_A, 1.0e-6, gearRatio, efficiency);
     }
 
+    AffineMotorTorque DCMotorModel::CalculateAffineTorqueTerms(double appliedVoltage) const
+    {
+        AffineMotorTorque terms;
+        terms.stallTorqueCommanded = gearRatio * gearboxEfficiency * stallTorque * (appliedVoltage / nominalVoltage);
+        terms.electricalDamping = (torqueConstantKt * backEmfConstantKe * gearRatio * gearRatio * gearboxEfficiency) / resistance;
+        return terms;
+    }
+
+    double DCMotorModel::CalculateStatorTorqueLimit(double statorCurrentLimit) const
+    {
+        return gearRatio * gearboxEfficiency * torqueConstantKt * std::max(0.0, statorCurrentLimit);
+    }
+
     double DCMotorModel::CalculateTorque(double appliedVoltage, double currentAngularVelocity,
         double externalInertia, double deltaTime) const
     {
@@ -95,20 +120,14 @@ namespace FRCBananaSim::Actuation
             return 0.0;
         }
 
-        // Commanded stall torque at output shaft scaled by gear ratio and efficiency
-        double commandedStallTorque = gearRatio * gearboxEfficiency * stallTorque * (appliedVoltage / nominalVoltage);
-
-        // Reflected electrical damping coefficient: D = (Kt * Kv * G^2 * eta) / R
-        double electricalDamping = (torqueConstantKt * backEmfConstantKe * gearRatio * gearRatio * gearboxEfficiency) / resistance;
-
-        // Total effective rotational inertia at output shaft
+        AffineMotorTorque affine = CalculateAffineTorqueTerms(appliedVoltage);
         double effectiveInertia = GetReflectedInertia(externalInertia);
 
         // Semi-implicit integration formulation: unconditionally stable for any gear ratio and timestep
-        double denominator = 1.0 + ((electricalDamping * deltaTime) / effectiveInertia);
-        double outputTorque = (commandedStallTorque - (electricalDamping * currentAngularVelocity)) / denominator;
+        double denominator = 1.0 + ((affine.electricalDamping * deltaTime) / effectiveInertia);
+        double outputTorque = (affine.stallTorqueCommanded - (affine.electricalDamping * currentAngularVelocity)) / denominator;
 
-        // Physical clamp: output torque cannot exceed the gearbox mechanical stall rating
+        // Physical clamp: output torque cannot exceed gearbox stall rating
         double maxOutputStall = gearRatio * gearboxEfficiency * stallTorque;
         return std::clamp(outputTorque, -maxOutputStall, maxOutputStall);
     }

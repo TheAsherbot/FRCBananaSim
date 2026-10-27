@@ -174,6 +174,7 @@ namespace FRCBananaSim::Robot
         TransformComponent chassisTransform;
         chassisTransform.position = spawnPosition;
         chassisTransform.rotation = spawnRotation;
+        chassisTransform.scale = glm::vec3(width, height, length);
         scene.AddComponent(chassisEntity, chassisTransform);
 
         RigidBodyComponent chassisRb;
@@ -229,12 +230,17 @@ namespace FRCBananaSim::Robot
             }
 
             // World spatial placements adhering strictly to: +X Right, +Y Up, +Z Forward
-            glm::vec3 localSteerOffset(modLoc.x, -height * 0.25f, modLoc.y);
-            glm::vec3 localWheelOffset(modLoc.x, -height * 0.5f - static_cast<float>(wheelRadius), modLoc.y);
+            // Chassis sits on top; steer housing hangs below chassis; 10 mm air gap to wheel
+            constexpr float moduleAirGap = 0.010f; // 10 mm clearance between steer housing and wheel
+            float halfChassisH = height * 0.5f;
+            float halfSteerH = steerHeight * 0.5f;
+
+            glm::vec3 localSteerOffset(modLoc.x, -halfChassisH - halfSteerH, modLoc.y);
+            glm::vec3 localWheelOffset(modLoc.x, -halfChassisH - steerHeight - moduleAirGap - static_cast<float>(wheelRadius), modLoc.y);
 
             glm::vec3 worldSteerPos = spawnPosition + spawnRotation * localSteerOffset;
             glm::vec3 worldWheelPos = spawnPosition + spawnRotation * localWheelOffset;
-            glm::vec3 worldSteerPivot = spawnPosition + spawnRotation * glm::vec3(modLoc.x, -height * 0.15f, modLoc.y);
+            glm::vec3 worldSteerPivot = spawnPosition + spawnRotation * glm::vec3(modLoc.x, -halfChassisH, modLoc.y);
             glm::vec3 worldDrivePivot = worldWheelPos;
 
             // 1. Steer Link Entity
@@ -242,6 +248,7 @@ namespace FRCBananaSim::Robot
             TransformComponent steerTransform;
             steerTransform.position = worldSteerPos;
             steerTransform.rotation = spawnRotation;
+            steerTransform.scale = glm::vec3(steerRadius * 2.0f, steerHeight, steerRadius * 2.0f);
             scene.AddComponent(steerEntity, steerTransform);
 
             RigidBodyComponent steerRb;
@@ -262,6 +269,7 @@ namespace FRCBananaSim::Robot
             TransformComponent wheelTransform;
             wheelTransform.position = worldWheelPos;
             wheelTransform.rotation = spawnRotation;
+            wheelTransform.scale = glm::vec3(wheelWidth, static_cast<float>(wheelRadius) * 2.0f, static_cast<float>(wheelRadius) * 2.0f);
             scene.AddComponent(wheelEntity, wheelTransform);
 
             RigidBodyComponent wheelRb;
@@ -273,12 +281,10 @@ namespace FRCBananaSim::Robot
             wheelRb.collisionSubGroupID = 5 + i; // SubGroupID 5..8
             scene.AddComponent(wheelEntity, wheelRb);
 
+            // Wheel collision volume: Sphere matching wheel radius eliminates cylinder rim chatter
             ColliderComponent wheelCol;
-            wheelCol.shape = ColliderShape::Cylinder;
+            wheelCol.shape = ColliderShape::Sphere;
             wheelCol.radius = static_cast<float>(wheelRadius);
-            wheelCol.halfHeight = wheelWidth * 0.5f;
-            // Align Jolt Y-axis cylinder with horizontal X-axis axle (90 deg around Z)
-            wheelCol.localRotation = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
             scene.AddComponent(wheelEntity, wheelCol);
 
             // 3. Vertical Steer Joint (Swivels around vertical +Y)

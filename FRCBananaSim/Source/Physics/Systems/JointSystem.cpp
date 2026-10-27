@@ -286,6 +286,7 @@ namespace FRCBananaSim::Physics::Systems
                         JPH::Vec3 torqueVec = worldHingeAxis * joint->appliedTorque;
 
                         bodyInterface.AddTorque(childRb->bodyID, torqueVec);
+                        bodyInterface.ActivateBody(childRb->bodyID);
 
                         if (joint->parentEntity != invalidEntity)
                         {
@@ -293,6 +294,7 @@ namespace FRCBananaSim::Physics::Systems
                             if (parentRb && parentRb->isCreated && !parentRb->bodyID.IsInvalid())
                             {
                                 bodyInterface.AddTorque(parentRb->bodyID, -torqueVec);
+                                bodyInterface.ActivateBody(parentRb->bodyID);
                             }
                         }
                     }
