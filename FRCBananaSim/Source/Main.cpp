@@ -34,6 +34,7 @@
 #include "Telemetry/ProfileResult.h"
 #include "Utils/DebugDraw.h"
 #include "Utils/Log.h"
+#include "Bridge/HALSimWebSocketServer.h"
 
 #include <GLFW/glfw3.h>
 #include <imgui/imgui.h>
@@ -301,6 +302,9 @@ static void RenderSceneColliderDebugDraw(Scene& scene, bool alwaysOnTop,
 
 int main(int argc, char* argv[])
 {
+    FRCBananaSim::Bridge::HALSimWebSocketServer wsServer;
+    wsServer.Start();
+
     // 1. Initialize Telemetry System
     TelemetryManager::Get().Initialize();
     TelemetryManager::Get().SetMode(TelemetryMode::Minimal);
@@ -590,6 +594,7 @@ int main(int argc, char* argv[])
                 return;
             }
 
+
             auto* battery = scene.GetComponent<BatteryComponent>(batteryEntity);
 
             // 1. Pin/Unpin chassis via motion type (in Jolt mode)
@@ -601,6 +606,16 @@ int main(int argc, char* argv[])
                 if (bi.GetMotionType(chassisRb->bodyID) != targetMotion)
                 {
                     bi.SetMotionType(chassisRb->bodyID, targetMotion, JPH::EActivation::Activate);
+                }
+            }
+
+            // Ingest incoming motor demands from WPILib robot code if connected
+            if (wsServer.IsClientConnected())
+            {
+                SimInputs netInputs = swerveInputs;
+                if (wsServer.UpdateInputs(netInputs))
+                {
+                    swerveInputs = netInputs;
                 }
             }
 
@@ -671,6 +686,12 @@ int main(int argc, char* argv[])
             swerveSystem.SetInputs(swerveInputs);
             swerveSystem.FixedUpdate(fixedDeltaTime);
             swerveOutputs = swerveSystem.GetOutputs();
+
+            // Broadcast sensory outputs to connected WPILib robot code
+            if (wsServer.IsClientConnected())
+            {
+                wsServer.SendOutputs(swerveOutputs);
+            }
 
             // 4. Central Battery Bus Update
             if (battery)
@@ -949,6 +970,38 @@ int main(int argc, char* argv[])
 
                 ImGui::Separator();
 
+                // -------------------------------------------------------------
+                // WPILIB HALSIM WEBSOCKET BRIDGE
+                // -------------------------------------------------------------
+                ImGui::TextColored(ImVec4(0.2f, 0.9f, 1.0f, 1.0f), "WPILIB HALSIM WEBSOCKET BRIDGE (:3300/wpilibws):");
+                if (wsServer.IsClientConnected())
+                {
+                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "● CONNECTED to Live Robot Code");
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "○ Waiting for ./gradlew simulateNative...");
+                }
+
+                bool isDsEnabled = wsServer.IsDriverStationEnabled();
+                if (ImGui::Checkbox("DS Enable Robot", &isDsEnabled))
+                {
+                    wsServer.SetDriverStation(isDsEnabled, wsServer.IsAutonomous());
+                }
+                ImGui::SameLine();
+                bool isAuto = wsServer.IsAutonomous();
+                if (ImGui::Checkbox("Autonomous Mode", &isAuto))
+                {
+                    wsServer.SetDriverStation(wsServer.IsDriverStationEnabled(), isAuto);
+                }
+
+                if (ImGui::Button("Dump Discovered SimDevices to JSON"))
+                {
+                    wsServer.DumpSimDevices("Resources/Telemetry/sim_device_dump.json");
+                }
+
+                ImGui::Separator();
+
                 // Main Tab Bar
                 if (ImGui::BeginTabBar("MainTabs"))
                 {
@@ -1185,6 +1238,8 @@ int main(int argc, char* argv[])
     engine.Run();
 
     // 12. Clean Teardown
+    wsServer.Stop();
+
     if (profilerWindow.IsOpen())
     {
         profilerWindow.Close(renderer.GetWindow());

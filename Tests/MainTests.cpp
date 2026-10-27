@@ -12,6 +12,7 @@
 #include "RobotSpawnerTest.h"
 #include "SwerveModelTest.h"
 #include "SwerveAdapterTest.h"
+#include "HALSimBridgeTest.h"
 
 #include <iostream>
 #include <string>
@@ -25,6 +26,7 @@ using FRCBananaSim::Tests::RunJointStabilityTest;
 using FRCBananaSim::Tests::RunRobotSpawnerTest;
 using FRCBananaSim::Tests::RunSwerveModelTest;
 using FRCBananaSim::Tests::RunSwerveAdapterTest;
+using FRCBananaSim::Tests::RunHALSimBridgeTest;
 
 int main(int argc, char* argv[])
 {
@@ -78,8 +80,13 @@ int main(int argc, char* argv[])
             runAll = false;
             RunSwerveAdapterTest(ctx);
         }
+        else if (arg == "--halsim-bridge")
+        {
+            runAll = false;
+            RunHALSimBridgeTest(ctx);
+        }
     }
-
+    
     if (runAll)
     {
         RunUnitsTest(ctx);
@@ -90,6 +97,7 @@ int main(int argc, char* argv[])
         RunRobotSpawnerTest(ctx);
         RunSwerveModelTest(ctx);
         RunSwerveAdapterTest(ctx);
+        RunHALSimBridgeTest(ctx);
     }
 
     std::cout << "======================================\n";

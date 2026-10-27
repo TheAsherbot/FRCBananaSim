@@ -46,6 +46,8 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveTerrainProbe.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
+    FRCBananaSim/Source/Bridge/Sha1.cpp
+    FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
     FRCBananaSim/Source/Core/Engine.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
@@ -98,6 +100,7 @@ target_link_libraries(FRCBananaSim PRIVATE
     Jolt
     opengl32
     gdi32
+    ws2_32
 )
 
 # Target 2: Headless CTest Executable
@@ -115,6 +118,8 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveTerrainProbe.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
+    FRCBananaSim/Source/Bridge/Sha1.cpp
+    FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
     FRCBananaSim/Source/Core/ECS/Core/System.cpp
@@ -140,6 +145,7 @@ set(TEST_SOURCES
     Tests/RobotSpawnerTest.cpp
     Tests/SwerveModelTest.cpp
     Tests/SwerveAdapterTest.cpp
+    Tests/HALSimBridgeTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -154,6 +160,7 @@ target_link_directories(FRCBananaSim_Tests PRIVATE
 
 target_link_libraries(FRCBananaSim_Tests PRIVATE
     Jolt
+    ws2_32
 )
 
 add_test(NAME UnitsTest COMMAND FRCBananaSim_Tests --units)
@@ -164,4 +171,5 @@ add_test(NAME JointStabilityTest COMMAND FRCBananaSim_Tests --joint-stability)
 add_test(NAME RobotSpawnerTest COMMAND FRCBananaSim_Tests --robot-spawner)
 add_test(NAME SwerveModelTest COMMAND FRCBananaSim_Tests --swerve-model)
 add_test(NAME SwerveAdapterTest COMMAND FRCBananaSim_Tests --swerve-adapter)
+add_test(NAME HALSimBridgeTest COMMAND FRCBananaSim_Tests --halsim-bridge)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)
