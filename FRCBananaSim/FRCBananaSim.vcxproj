@@ -204,6 +204,7 @@
     <ClCompile Include="Source\Renderer\Input.cpp" />
     <ClCompile Include="Source\Renderer\Renderer.cpp" />
     <ClCompile Include="Source\Renderer\Systems\RenderSystem.cpp" />
+    <ClCompile Include="Source\Robot\Drivetrain\Systems\SwerveTerrainProbe.cpp" />
     <ClCompile Include="Source\Robot\RobotSpawner.cpp" />
     <ClCompile Include="Source\Telemetry\MemoryTracker.cpp" />
     <ClCompile Include="Source\Telemetry\ProfilerUI.cpp" />
@@ -259,6 +260,7 @@
     <ClInclude Include="Source\Renderer\Input.h" />
     <ClInclude Include="Source\Renderer\Renderer.h" />
     <ClInclude Include="Source\Renderer\Systems\RenderSystem.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Systems\SwerveTerrainProbe.h" />
     <ClInclude Include="Source\Robot\RobotSpawner.h" />
     <ClInclude Include="Source\Telemetry\MemoryTracker.h" />
     <ClInclude Include="Source\Telemetry\ProfileResult.h" />

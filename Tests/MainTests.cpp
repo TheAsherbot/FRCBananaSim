@@ -9,9 +9,7 @@
 #include "PhysicsDeterminismTest.h"
 #include "MotorBatteryTest.h"
 #include "JointStabilityTest.h"
-#include "SwervePhysicalDriveTest.h"
 #include "RobotSpawnerTest.h"
-#include "SwerveMassRatioTest.h"
 #include "SwerveModelTest.h"
 #include "SwerveAdapterTest.h"
 
@@ -24,9 +22,7 @@ using FRCBananaSim::Tests::RunParameterStoreTest;
 using FRCBananaSim::Tests::RunPhysicsDeterminismTest;
 using FRCBananaSim::Tests::RunMotorBatteryTest;
 using FRCBananaSim::Tests::RunJointStabilityTest;
-using FRCBananaSim::Tests::RunSwervePhysicalDriveTest;
 using FRCBananaSim::Tests::RunRobotSpawnerTest;
-using FRCBananaSim::Tests::RunSwerveMassRatioTest;
 using FRCBananaSim::Tests::RunSwerveModelTest;
 using FRCBananaSim::Tests::RunSwerveAdapterTest;
 
@@ -67,20 +63,10 @@ int main(int argc, char* argv[])
             runAll = false;
             RunJointStabilityTest(ctx);
         }
-        else if (arg == "--swerve-drive")
-        {
-            runAll = false;
-            RunSwervePhysicalDriveTest(ctx);
-        }
         else if (arg == "--robot-spawner")
         {
             runAll = false;
             RunRobotSpawnerTest(ctx);
-        }
-        else if (arg == "--mass-ratio")
-        {
-            runAll = false;
-            RunSwerveMassRatioTest(ctx);
         }
         else if (arg == "--swerve-model")
         {
@@ -101,9 +87,7 @@ int main(int argc, char* argv[])
         RunPhysicsDeterminismTest(ctx);
         RunMotorBatteryTest(ctx);
         RunJointStabilityTest(ctx);
-        RunSwervePhysicalDriveTest(ctx);
         RunRobotSpawnerTest(ctx);
-        RunSwerveMassRatioTest(ctx);
         RunSwerveModelTest(ctx);
         RunSwerveAdapterTest(ctx);
     }

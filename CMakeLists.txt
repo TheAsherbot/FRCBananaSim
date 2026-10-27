@@ -137,9 +137,7 @@ set(TEST_SOURCES
     Tests/PhysicsDeterminismTest.cpp
     Tests/MotorBatteryTest.cpp
     Tests/JointStabilityTest.cpp
-    Tests/SwervePhysicalDriveTest.cpp
     Tests/RobotSpawnerTest.cpp
-    Tests/SwerveMassRatioTest.cpp
     Tests/SwerveModelTest.cpp
     Tests/SwerveAdapterTest.cpp
 )
@@ -163,9 +161,7 @@ add_test(NAME ParameterStoreTest COMMAND FRCBananaSim_Tests --params)
 add_test(NAME PhysicsDeterminismTest COMMAND FRCBananaSim_Tests --determinism)
 add_test(NAME MotorBatteryTest COMMAND FRCBananaSim_Tests --motor-battery)
 add_test(NAME JointStabilityTest COMMAND FRCBananaSim_Tests --joint-stability)
-add_test(NAME SwervePhysicalDriveTest COMMAND FRCBananaSim_Tests --swerve-drive)
 add_test(NAME RobotSpawnerTest COMMAND FRCBananaSim_Tests --robot-spawner)
-add_test(NAME SwerveMassRatioTest COMMAND FRCBananaSim_Tests --mass-ratio)
 add_test(NAME SwerveModelTest COMMAND FRCBananaSim_Tests --swerve-model)
 add_test(NAME SwerveAdapterTest COMMAND FRCBananaSim_Tests --swerve-adapter)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

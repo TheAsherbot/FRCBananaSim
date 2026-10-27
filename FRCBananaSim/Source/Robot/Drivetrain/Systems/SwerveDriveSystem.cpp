@@ -226,17 +226,22 @@ namespace FRCBananaSim::Robot::Drivetrain::System
     {
         SIM_PROFILE_SCOPE("SwerveDriveSystem::RenderUpdate");
 
-        auto chasses = scene.Query<SwerveChassisComponent>();
+        auto chasses = scene.Query<SwerveChassisComponent, TransformComponent>();
         if (chasses.empty())
         {
             return;
         }
 
-        auto* chassis = scene.GetComponent<SwerveChassisComponent>(chasses[0]);
-        if (!chassis || !chassis->drivetrainModel)
+        Entity chassisEntity = chasses[0];
+        auto* chassis = scene.GetComponent<SwerveChassisComponent>(chassisEntity);
+        auto* chassisT = scene.GetComponent<TransformComponent>(chassisEntity);
+        if (!chassis || !chassisT || !chassis->drivetrainModel)
         {
             return;
         }
+
+        glm::vec3 chassisPos = chassisT->position;
+        glm::quat chassisRot = chassisT->rotation;
 
         for (uint32_t i = 0; i < 4; ++i)
         {
@@ -253,25 +258,55 @@ namespace FRCBananaSim::Robot::Drivetrain::System
 
             const auto& modState = chassis->drivetrainModel->GetModule(i).GetState();
 
-            // 1. Update steer housing visual rotation (swivels around vertical +Y)
+            // Module local offsets in Jolt frame (+X Right, +Y Up, +Z Forward)
+            float halfChassisH = 0.075f;
+            float halfSteerH = 0.030f;
+            float steerH = 0.060f;
+            float airGap = 0.010f;
+            float wheelR = static_cast<float>(mod->wheelRadius);
+
+            glm::vec3 localSteerOffset(mod->moduleLocation.x, -halfChassisH - halfSteerH, mod->moduleLocation.y);
+            glm::vec3 localWheelOffset(mod->moduleLocation.x, -halfChassisH - steerH - airGap - wheelR, mod->moduleLocation.y);
+
+            glm::vec3 worldSteerPos = chassisPos + chassisRot * localSteerOffset;
+            glm::quat localSteerRot = glm::angleAxis(static_cast<float>(modState.steerAngle), glm::vec3(0.0f, 1.0f, 0.0f));
+            glm::quat worldSteerRot = chassisRot * localSteerRot;
+
+            glm::vec3 worldWheelPos = chassisPos + chassisRot * localWheelOffset;
+            glm::quat localWheelRot = localSteerRot * glm::angleAxis(static_cast<float>(modState.wheelPosition), glm::vec3(1.0f, 0.0f, 0.0f));
+            glm::quat worldWheelRot = chassisRot * localWheelRot;
+
+            // 1. Update steer housing visual transform
             if (mod->steerEntity != invalidEntity)
             {
                 auto* steerT = scene.GetComponent<TransformComponent>(mod->steerEntity);
+                auto* steerWt = scene.GetComponent<WorldTransformComponent>(mod->steerEntity);
                 if (steerT)
                 {
-                    // In Jolt Engine frame: +Y Up is vertical rotation axis
-                    steerT->rotation = glm::angleAxis(static_cast<float>(modState.steerAngle), glm::vec3(0.0f, 1.0f, 0.0f));
+                    steerT->position = worldSteerPos;
+                    steerT->rotation = worldSteerRot;
+                }
+                if (steerWt)
+                {
+                    steerWt->worldPosition = worldSteerPos;
+                    steerWt->worldRotation = worldSteerRot;
                 }
             }
 
-            // 2. Update wheel visual rotation (rolls around horizontal +X)
+            // 2. Update wheel visual transform
             if (mod->wheelEntity != invalidEntity)
             {
                 auto* wheelT = scene.GetComponent<TransformComponent>(mod->wheelEntity);
+                auto* wheelWt = scene.GetComponent<WorldTransformComponent>(mod->wheelEntity);
                 if (wheelT)
                 {
-                    // Rolls around +X horizontal axis
-                    wheelT->rotation = glm::angleAxis(static_cast<float>(modState.wheelPosition), glm::vec3(1.0f, 0.0f, 0.0f));
+                    wheelT->position = worldWheelPos;
+                    wheelT->rotation = worldWheelRot;
+                }
+                if (wheelWt)
+                {
+                    wheelWt->worldPosition = worldWheelPos;
+                    wheelWt->worldRotation = worldWheelRot;
                 }
             }
         }

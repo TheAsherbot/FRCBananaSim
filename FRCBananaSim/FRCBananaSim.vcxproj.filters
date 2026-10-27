@@ -150,6 +150,9 @@
     <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveDrivetrainModel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Robot\Drivetrain\Systems\SwerveTerrainProbe.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Utils\Log.h">
@@ -315,6 +318,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Source\Robot\Drivetrain\Model\SwerveDrivetrainModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Drivetrain\Systems\SwerveTerrainProbe.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
