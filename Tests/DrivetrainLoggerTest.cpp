@@ -19,23 +19,23 @@ namespace FRCBananaSim::Tests
         // 1. Initial State & Recording Toggle
         {
             DrivetrainLogger logger(100);
-            ctx.AssertEqual(static_cast<int>(logger.GetSampleCount()), 0, "Initial sample count is zero");
-            ctx.AssertEqual(static_cast<int>(logger.GetCapacity()), 100, "Buffer capacity matches constructor");
-            ctx.AssertTrue(!logger.IsRecording(), "Recording starts inactive");
+            TEST_EXPECT_EQ(ctx, static_cast<int>(logger.GetSampleCount()), 0);
+            TEST_EXPECT_EQ(ctx, static_cast<int>(logger.GetCapacity()), 100);
+            TEST_EXPECT_FALSE(ctx, logger.IsRecording());
 
             DrivetrainLogSample sample;
             sample.timestamp = 0.05;
             logger.RecordSample(sample);
-            ctx.AssertEqual(static_cast<int>(logger.GetSampleCount()), 0, "No samples recorded while inactive");
+            TEST_EXPECT_EQ(ctx, static_cast<int>(logger.GetSampleCount()), 0);
 
             logger.StartRecording();
-            ctx.AssertTrue(logger.IsRecording(), "Recording is active after StartRecording()");
+            TEST_EXPECT_TRUE(ctx, logger.IsRecording());
 
             logger.RecordSample(sample);
-            ctx.AssertEqual(static_cast<int>(logger.GetSampleCount()), 1, "Sample recorded while active");
+            TEST_EXPECT_EQ(ctx, static_cast<int>(logger.GetSampleCount()), 1);
 
             logger.StopRecording();
-            ctx.AssertTrue(!logger.IsRecording(), "Recording stopped");
+            TEST_EXPECT_FALSE(ctx, logger.IsRecording());
         }
 
         // 2. Ring Buffer Wrap-Around Correctness
@@ -51,11 +51,11 @@ namespace FRCBananaSim::Tests
                 logger.RecordSample(s);
             }
 
-            ctx.AssertEqual(static_cast<int>(logger.GetSampleCount()), 5, "Sample count clamped to capacity");
+            TEST_EXPECT_EQ(ctx, static_cast<int>(logger.GetSampleCount()), 5);
 
             // Oldest sample should be i=3, newest should be i=7
-            ctx.AssertNear(logger.GetSample(0).commandedVoltage, 3.0, 1e-4, "Oldest sample preserved after wrap-around");
-            ctx.AssertNear(logger.GetSample(4).commandedVoltage, 7.0, 1e-4, "Newest sample preserved after wrap-around");
+            TEST_EXPECT_NEAR(ctx, logger.GetSample(0).commandedVoltage, 3.0, 1e-4);
+            TEST_EXPECT_NEAR(ctx, logger.GetSample(4).commandedVoltage, 7.0, 1e-4);
         }
 
         // 3. CSV File Export
@@ -78,17 +78,16 @@ namespace FRCBananaSim::Tests
             const std::string ftcCsvPath = "test_ftc_log.csv";
 
             bool fullSuccess = logger.ExportToCsv(fullCsvPath);
-            ctx.AssertTrue(fullSuccess, "Full CSV exported successfully");
+            TEST_EXPECT_TRUE(ctx, fullSuccess);
 
             bool ftcSuccess = logger.ExportToFtcSchemaCsv(ftcCsvPath);
-            ctx.AssertTrue(ftcSuccess, "FTC schema CSV exported successfully");
+            TEST_EXPECT_TRUE(ctx, ftcSuccess);
 
             // Verify FTC file content
             std::ifstream ftcFile(ftcCsvPath);
             std::string headerLine;
             std::getline(ftcFile, headerLine);
-            ctx.AssertEqual(headerLine, std::string("timestamp_s,commanded_volts,wheel_velocity_rad_s,battery_volts,current_draw_a"),
-                "FTC CSV header matches schema");
+            TEST_EXPECT_EQ(ctx, headerLine, std::string("timestamp_s,commanded_volts,wheel_velocity_rad_s,battery_volts,current_draw_a"));
 
             ftcFile.close();
             std::remove(fullCsvPath.c_str());

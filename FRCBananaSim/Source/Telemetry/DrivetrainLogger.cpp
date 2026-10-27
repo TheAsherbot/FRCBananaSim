@@ -14,7 +14,7 @@
 namespace FRCBananaSim::Telemetry
 {
     DrivetrainLogger::DrivetrainLogger(size_t capacity)
-        : bufferCapacity(std::max<size_t>(100, capacity)),
+        : bufferCapacity(std::max<size_t>(1, capacity)),
         writeHead(0),
         sampleCount(0),
         isActivelyRecording(false)

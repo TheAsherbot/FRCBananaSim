@@ -13,6 +13,7 @@
 #include "SwerveModelTest.h"
 #include "SwerveAdapterTest.h"
 #include "HALSimBridgeTest.h"
+#include "DrivetrainLoggerTest.h"
 
 #include <iostream>
 #include <string>
@@ -27,6 +28,7 @@ using FRCBananaSim::Tests::RunRobotSpawnerTest;
 using FRCBananaSim::Tests::RunSwerveModelTest;
 using FRCBananaSim::Tests::RunSwerveAdapterTest;
 using FRCBananaSim::Tests::RunHALSimBridgeTest;
+using FRCBananaSim::Tests::RunDrivetrainLoggerTest;
 
 int main(int argc, char* argv[])
 {
