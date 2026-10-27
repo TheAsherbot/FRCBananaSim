@@ -87,6 +87,33 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         return result;
     }
 
+    EffectiveTireStiffness TireContactModel::CalculateLockedTangentialStiffness(double normalForce,
+        const glm::vec2& bristleDeflection, double deltaTime) const
+    {
+        EffectiveTireStiffness result;
+
+        if (normalForce <= 1e-3 || deltaTime <= 1e-7)
+        {
+            return result;
+        }
+
+        double mu = CalculateEffectiveFrictionCoefficient(0.0, normalForce);
+        double kBristle = (mu * normalForce) / std::max(1e-5, params.preSlideDisplacement);
+
+        constexpr double effectiveQuarterMass = 12.5; // kg
+        constexpr double bristleZeta = 0.707;
+        double cBristle = 2.0 * bristleZeta * std::sqrt(kBristle * effectiveQuarterMass);
+        double kEff = (kBristle * deltaTime) + cBristle;
+
+        result.stiffnessX = kEff;
+        result.interceptForce.x = -kBristle * bristleDeflection.x;
+
+        result.stiffnessY = kEff * params.lateralFrictionRatio;
+        result.interceptForce.y = -kBristle * bristleDeflection.y;
+
+        return result;
+    }
+
     glm::vec2 TireContactModel::UpdateFrictionAndState(double normalForce, const glm::vec2& slipVelocity,
         double deltaTime, TireContactState& inOutState) const
     {
@@ -122,10 +149,6 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         glm::vec2 trialForce;
         trialForce.x = -((kBristleX * inOutState.bristleDeflection.x) + (kEffX * slipVelocity.x));
         trialForce.y = -((kBristleY * inOutState.bristleDeflection.y) + (kEffY * slipVelocity.y));
-
-        // Subtract rolling resistance in longitudinal rolling direction
-        double fRollingResistance = params.rollingResistance * normalForce * std::clamp(slipVelocity.x / 0.05, -1.0, 1.0);
-        trialForce.x -= fRollingResistance;
 
         // Elliptical yield surface evaluation
         double limitX = std::max(1e-3, muX * normalForce);

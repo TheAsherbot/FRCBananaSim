@@ -38,6 +38,11 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Actuation/ServoModel.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveParams.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/TireContactModel.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveModuleModel.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveChassisSolver.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveDrivetrainModel.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
     FRCBananaSim/Source/Core/Engine.cpp
@@ -101,6 +106,11 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Actuation/ServoModel.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveParams.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/TireContactModel.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveModuleModel.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveChassisSolver.cpp
+    FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveDrivetrainModel.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
@@ -118,6 +128,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Utils/DebugDraw.cpp
     FRCBananaSim/Source/Utils/FixedTimestep.cpp
     FRCBananaSim/Source/Utils/Log.cpp
+    Tests/Support/TestTerrain.cpp
     Tests/MainTests.cpp
     Tests/UnitsTest.cpp
     Tests/ParameterStoreTest.cpp
@@ -127,6 +138,7 @@ set(TEST_SOURCES
     Tests/SwervePhysicalDriveTest.cpp
     Tests/RobotSpawnerTest.cpp
     Tests/SwerveMassRatioTest.cpp
+    Tests/SwerveModelTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -151,4 +163,5 @@ add_test(NAME JointStabilityTest COMMAND FRCBananaSim_Tests --joint-stability)
 add_test(NAME SwervePhysicalDriveTest COMMAND FRCBananaSim_Tests --swerve-drive)
 add_test(NAME RobotSpawnerTest COMMAND FRCBananaSim_Tests --robot-spawner)
 add_test(NAME SwerveMassRatioTest COMMAND FRCBananaSim_Tests --mass-ratio)
+add_test(NAME SwerveModelTest COMMAND FRCBananaSim_Tests --swerve-model)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

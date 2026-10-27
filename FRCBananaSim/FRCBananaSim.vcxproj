@@ -189,6 +189,11 @@
     <ClCompile Include="Source\Core\Engine.cpp" />
     <ClCompile Include="Source\Core\Parameters\ParameterStore.cpp" />
     <ClCompile Include="Source\Core\Units\Units.cpp" />
+    <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveChassisSolver.cpp" />
+    <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveDrivetrainModel.cpp" />
+    <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveModuleModel.cpp" />
+    <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveParams.cpp" />
+    <ClCompile Include="Source\Robot\Drivetrain\Model\TireContactModel.cpp" />
     <ClCompile Include="Source\Robot\Drivetrain\Systems\SwerveDriveSystem.cpp" />
     <ClCompile Include="Source\Main.cpp" />
     <ClCompile Include="Source\Physics\JoltContext.cpp" />
@@ -234,6 +239,12 @@
     <ClInclude Include="Source\Core\Units\Units.h" />
     <ClInclude Include="Source\Robot\Drivetrain\Components\SwerveChassisComponent.h" />
     <ClInclude Include="Source\Robot\Drivetrain\Components\SwerveModuleComponent.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Model\SwerveChassisSolver.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Model\SwerveDrivetrainModel.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Model\SwerveModuleModel.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Model\SwerveParams.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Model\TerrainProvider.h" />
+    <ClInclude Include="Source\Robot\Drivetrain\Model\TireContactModel.h" />
     <ClInclude Include="Source\Robot\Drivetrain\Systems\SwerveDriveSystem.h" />
     <ClInclude Include="Source\Physics\Components\ColliderComponent.h" />
     <ClInclude Include="Source\Physics\Components\JointComponent.h" />

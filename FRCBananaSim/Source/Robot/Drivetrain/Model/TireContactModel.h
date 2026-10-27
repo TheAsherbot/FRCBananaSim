@@ -80,6 +80,16 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
             double currentWheelSpin, const glm::vec2& bristleDeflection, double deltaTime) const;
 
         /**
+         * @brief Calculates locked-axle tangential stiffness for stationary stick hold on ramps.
+         * @param normalForce Resolved normal force N (N).
+         * @param bristleDeflection Current 2D bristle deflection vector z (m).
+         * @param deltaTime Integration sub-step duration in seconds.
+         * @return EffectiveTireStiffness struct containing locked Kx, Ky, and intercept vector f0.
+         */
+        EffectiveTireStiffness CalculateLockedTangentialStiffness(double normalForce,
+            const glm::vec2& bristleDeflection, double deltaTime) const;
+
+        /**
          * @brief Evaluates 2D contact friction force and updates persistent bristle state using radial return.
          * @param normalForce Normal reaction force N (N).
          * @param slipVelocity Contact patch slip velocity vector s = (sx, sy) in contact frame (m/s).
@@ -99,7 +109,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         double CalculateEffectiveFrictionCoefficient(double slipSpeed, double normalForce) const;
 
         /**
-         * @brief Retrieves configured tire physical parameters.
+         * @brief Accessor for configured tire parameters.
          * @return Const reference to TireParams.
          */
         const TireParams& GetParams() const;

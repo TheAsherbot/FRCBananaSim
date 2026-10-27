@@ -58,9 +58,20 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         // 2. Compute affine motor torque terms: tau = tau0 - D * omega
         Actuation::AffineMotorTorque affine = steerParams.motor.CalculateAffineTorqueTerms(appliedVolts);
         double maxStatorTorque = steerParams.motor.CalculateStatorTorqueLimit(steerCommand.statorCurrentLimit);
-        affine.stallTorqueCommanded = std::clamp(affine.stallTorqueCommanded, -maxStatorTorque, maxStatorTorque);
 
-        // In NeutralMode::Coast with zero voltage, back-EMF damping is zero
+        // Stator current limit clamping on affine model:
+        double naturalTorque = affine.stallTorqueCommanded - (affine.electricalDamping * state.steerVelocity);
+        if (naturalTorque > maxStatorTorque)
+        {
+            affine.stallTorqueCommanded = maxStatorTorque;
+            affine.electricalDamping = 0.0;
+        }
+        else if (naturalTorque < -maxStatorTorque)
+        {
+            affine.stallTorqueCommanded = -maxStatorTorque;
+            affine.electricalDamping = 0.0;
+        }
+
         if (steerCommand.mode == Control::MotorControlMode::Disabled &&
             steerCommand.neutralMode == Control::NeutralMode::Coast)
         {
@@ -82,13 +93,11 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
         if (availableTorque <= tauCoulomb)
         {
-            // Static stick phase: zero velocity
             state.steerVelocity = 0.0;
             state.steerAppliedTorque = affine.stallTorqueCommanded;
         }
         else
         {
-            // Dynamic kinetic slip phase: subtract kinetic friction in motion direction
             double sign = (freeVelocity > 0.0) ? 1.0 : -1.0;
             state.steerVelocity = freeVelocity - (sign * tauCoulomb / denominator);
             state.steerAppliedTorque = affine.stallTorqueCommanded - (affine.electricalDamping * state.steerVelocity);
@@ -97,7 +106,6 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         // 6. Integrate azimuth angle
         state.steerAngle += state.steerVelocity * deltaTime;
 
-        // Wrap to [-pi, +pi]
         constexpr double pi = 3.14159265358979323846;
         while (state.steerAngle > pi)
         {
@@ -121,7 +129,6 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         state.unwrappedSteerAngle += deltaAngle;
         state.lastSteerAngle = state.steerAngle;
 
-        // Current telemetry
         state.steerStatorCurrent = steerParams.motor.CalculateCurrent(appliedVolts, state.steerVelocity);
     }
 
@@ -152,12 +159,30 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
         Actuation::AffineMotorTorque affine = driveParams.motor.CalculateAffineTorqueTerms(appliedVolts);
         double maxStatorTorque = driveParams.motor.CalculateStatorTorqueLimit(driveCommand.statorCurrentLimit);
-        affine.stallTorqueCommanded = std::clamp(affine.stallTorqueCommanded, -maxStatorTorque, maxStatorTorque);
+
+        double naturalTorque = affine.stallTorqueCommanded - (affine.electricalDamping * state.wheelVelocity);
+        if (naturalTorque > maxStatorTorque)
+        {
+            affine.stallTorqueCommanded = maxStatorTorque;
+            affine.electricalDamping = 0.0;
+        }
+        else if (naturalTorque < -maxStatorTorque)
+        {
+            affine.stallTorqueCommanded = -maxStatorTorque;
+            affine.electricalDamping = 0.0;
+        }
 
         if (driveCommand.mode == Control::MotorControlMode::Disabled &&
             driveCommand.neutralMode == Control::NeutralMode::Coast)
         {
             affine.electricalDamping = 0.0;
+        }
+
+        // Locked axle stick check: when motor demand is zero and neutral mode is Brake at near-zero velocity
+        if (std::abs(driveCommand.demand) < 1e-4 && driveCommand.neutralMode == Control::NeutralMode::Brake &&
+            std::abs(state.wheelVelocity) < 1e-3)
+        {
+            return tireModel.CalculateLockedTangentialStiffness(normalForce, state.contactState.bristleDeflection, deltaTime);
         }
 
         double jAxle = tireModel.GetParams().wheelAxleInertia +
@@ -169,27 +194,58 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
     glm::vec3 SwerveModuleModel::FinalizeDriveStep(const Control::MotorCommand& driveCommand, double busVoltage,
         double normalForce, const glm::vec3& groundPatchVelocity,
-        const glm::vec3& surfaceNormal, double deltaTime)
+        const glm::vec3& surfaceNormal, const glm::vec3& wheelHeadingWorld, double deltaTime)
     {
         if (deltaTime <= 1e-7)
         {
             return glm::vec3(0.0f);
         }
 
-        // 1. Wheel local rolling and lateral axes in world NWU
-        double cosA = std::cos(state.steerAngle);
-        double sinA = std::sin(state.steerAngle);
-        glm::vec3 wheelHeading(cosA, sinA, 0.0); // +X Forward, +Y Left
-
-        // Orthogonalize rolling axis along terrain surface normal
-        glm::vec3 eX = glm::normalize(wheelHeading - surfaceNormal * glm::dot(wheelHeading, surfaceNormal));
+        // 1. Orthogonalize rolling axis along terrain surface normal in world NWU
+        glm::vec3 eX = wheelHeadingWorld - surfaceNormal * glm::dot(wheelHeadingWorld, surfaceNormal);
+        float lenEx = glm::length(eX);
+        if (lenEx > 1e-5f)
+        {
+            eX /= lenEx;
+        }
+        else
+        {
+            eX = glm::vec3(1.0f, 0.0f, 0.0f);
+        }
         glm::vec3 eY = glm::cross(surfaceNormal, eX);
 
         // 2. Project chassis contact velocity onto terrain tangent frame
         double patchUx = glm::dot(groundPatchVelocity, eX);
         double patchUy = glm::dot(groundPatchVelocity, eY);
 
-        // 3. Advance wheel angular velocity from resolved drive motor torque
+        // 3. Locked axle stick check
+        bool isAxleStick = false;
+        if (std::abs(driveCommand.demand) < 1e-4 && driveCommand.neutralMode == Control::NeutralMode::Brake &&
+            std::abs(state.wheelVelocity) < 1e-3)
+        {
+            isAxleStick = true;
+        }
+
+        double r = tireModel.GetParams().wheelRadius;
+
+        if (isAxleStick)
+        {
+            state.wheelVelocity = 0.0;
+            state.linearVelocity = 0.0;
+
+            glm::vec2 slipVel(patchUx, patchUy);
+            glm::vec2 fTangential = tireModel.UpdateFrictionAndState(normalForce, slipVel, deltaTime, state.contactState);
+
+            state.driveAppliedTorque = -r * fTangential.x;
+            state.driveStatorCurrent = 0.0;
+
+            glm::vec3 worldForce = (eX * static_cast<float>(fTangential.x)) +
+                (eY * static_cast<float>(fTangential.y)) +
+                (surfaceNormal * static_cast<float>(normalForce));
+            return worldForce;
+        }
+
+        // 4. Commanded motor voltage
         double appliedVolts = 0.0;
         switch (driveCommand.mode)
         {
@@ -201,10 +257,10 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
             break;
         case Control::MotorControlMode::TorqueCurrent:
         {
-            double r = driveParams.motor.GetResistance();
+            double res = driveParams.motor.GetResistance();
             double ke = driveParams.motor.GetBackEmfConstantKe();
             double motorRadps = state.wheelVelocity * driveParams.motor.GetGearRatio();
-            appliedVolts = std::clamp(driveCommand.demand * r + ke * motorRadps, -busVoltage, busVoltage);
+            appliedVolts = std::clamp(driveCommand.demand * res + ke * motorRadps, -busVoltage, busVoltage);
             break;
         }
         case Control::MotorControlMode::Disabled:
@@ -214,31 +270,53 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
         Actuation::AffineMotorTorque affine = driveParams.motor.CalculateAffineTorqueTerms(appliedVolts);
         double maxStatorTorque = driveParams.motor.CalculateStatorTorqueLimit(driveCommand.statorCurrentLimit);
-        affine.stallTorqueCommanded = std::clamp(affine.stallTorqueCommanded, -maxStatorTorque, maxStatorTorque);
+
+        double naturalTorque = affine.stallTorqueCommanded - (affine.electricalDamping * state.wheelVelocity);
+        if (naturalTorque > maxStatorTorque)
+        {
+            affine.stallTorqueCommanded = maxStatorTorque;
+            affine.electricalDamping = 0.0;
+        }
+        else if (naturalTorque < -maxStatorTorque)
+        {
+            affine.stallTorqueCommanded = -maxStatorTorque;
+            affine.electricalDamping = 0.0;
+        }
+
+        if (driveCommand.mode == Control::MotorControlMode::Disabled &&
+            driveCommand.neutralMode == Control::NeutralMode::Coast)
+        {
+            affine.electricalDamping = 0.0;
+        }
 
         double jAxle = tireModel.GetParams().wheelAxleInertia +
             (driveParams.motor.GetRotorInertia() * driveParams.motor.GetGearRatio() * driveParams.motor.GetGearRatio());
 
-        // Slip velocity at contact patch
-        double r = tireModel.GetParams().wheelRadius;
-        glm::vec2 slipVel(patchUx - (r * state.wheelVelocity), patchUy);
+        double mu = tireModel.CalculateEffectiveFrictionCoefficient(0.0, normalForce);
+        double kBristle = (mu * normalForce) / std::max(1e-5, tireModel.GetParams().preSlideDisplacement);
+        constexpr double effectiveQuarterMass = 12.5;
+        constexpr double bristleZeta = 0.707;
+        double cBristle = 2.0 * bristleZeta * std::sqrt(kBristle * effectiveQuarterMass);
+        double kEff = (kBristle * deltaTime) + cBristle;
 
-        // 4. Update friction forces and bristle state via radial return plasticity
+        // 5. Implicit wheel axle velocity update
+        double lambda = (jAxle / deltaTime) + affine.electricalDamping + (r * r * kEff);
+        double numA = (jAxle * state.wheelVelocity / deltaTime) + affine.stallTorqueCommanded + (kBristle * r * state.contactState.bristleDeflection.x);
+        double a = numA / lambda;
+        state.wheelVelocity = a + (r * kEff / lambda) * patchUx;
+
+        // 6. Update friction forces and bristle state via radial return plasticity
+        glm::vec2 slipVel(patchUx - (r * state.wheelVelocity), patchUy);
         glm::vec2 fTangential = tireModel.UpdateFrictionAndState(normalForce, slipVel, deltaTime, state.contactState);
 
-        // 5. Wheel angular acceleration: J_axle * dOmega/dt = tau_motor - r * Fx
-        double motorTorque = affine.stallTorqueCommanded - (affine.electricalDamping * state.wheelVelocity);
-        double netAxleTorque = motorTorque - (r * fTangential.x);
-
-        state.driveAppliedTorque = netAxleTorque;
-        state.wheelVelocity += (netAxleTorque / jAxle) * deltaTime;
+        state.driveAppliedTorque = affine.stallTorqueCommanded - (affine.electricalDamping * state.wheelVelocity) - (r * fTangential.x);
         state.wheelPosition += state.wheelVelocity * deltaTime;
         state.linearVelocity = state.wheelVelocity * r;
         state.distanceTraveled += state.linearVelocity * deltaTime;
 
         state.driveStatorCurrent = driveParams.motor.CalculateCurrent(appliedVolts, state.wheelVelocity);
 
-        // 6. Total 3D force delivered to chassis in world NWU coordinates
+        // 7. Total 3D force delivered to chassis in world NWU coordinates
         glm::vec3 worldForce = (eX * static_cast<float>(fTangential.x)) +
             (eY * static_cast<float>(fTangential.y)) +
             (surfaceNormal * static_cast<float>(normalForce));

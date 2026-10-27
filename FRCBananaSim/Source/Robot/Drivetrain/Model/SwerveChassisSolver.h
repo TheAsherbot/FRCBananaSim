@@ -34,9 +34,13 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
     {
         glm::vec3 contactPoint{ 0.0f, 0.0f, 0.0f };  ///< World coordinates of contact patch (m).
         glm::vec3 surfaceNormal{ 0.0f, 0.0f, 1.0f }; ///< Terrain upward unit normal vector.
+        glm::vec3 wheelHeading{ 1.0f, 0.0f, 0.0f };  ///< Steering wheel forward rolling unit vector.
         double penetrationDepth = 0.0;               ///< Static compression depth (m).
+        double springStiffnessKt = 0.0;              ///< Radial spring stiffness kt (N/m).
         double normalStiffnessKn = 0.0;              ///< Effective normal stiffness Kn = kt * dt + ct.
         EffectiveTireStiffness tangentialStiffness;  ///< Kx, Ky, and intercept force vector f0.
+        double muX = 1.20;                           ///< Longitudinal friction coefficient.
+        double muY = 1.20;                           ///< Lateral friction coefficient.
         bool hasContact = false;                     ///< True if wheel is touching terrain.
     };
 
@@ -59,12 +63,13 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         SwerveChassisSolver();
 
         /**
-         * @brief Solves new linear and angular velocities (v', omega') over a sub-step dt.
-         * @param currentState Current 6-DOF velocity and orientation.
-         * @param wheelContacts Array of 4 contact impedances and geometric patch positions.
-         * @param deltaTime Integration sub-step duration in seconds.
-         * @param outNewLinearVelocity Output solved world linear velocity (m/s).
-         * @param outNewAngularVelocity Output solved world angular velocity (rad/s).
+         * @brief Solves 6-DOF linear velocity and angular velocity at step t + dt via implicit integration.
+         * Incorporates gravity, gyroscopic torque, and multi-pass tire friction saturation.
+         * @param currentState Current 6-DOF pose and spatial velocity.
+         * @param wheelContacts Contact geometric properties and linearized impedance from each wheel.
+         * @param deltaTime Integration timestep duration (s).
+         * @param outNewLinearVelocity Output resolved linear velocity (m/s).
+         * @param outNewAngularVelocity Output resolved angular velocity (rad/s).
          */
         void SolveStep(const ChassisMotionState& currentState,
             const std::array<SolverWheelContact, 4>& wheelContacts,
@@ -73,13 +78,13 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
             glm::vec3& outNewAngularVelocity) const;
 
         /**
-         * @brief Updates chassis mass properties.
-         * @param chassis New mass, dimensions, and inertia tensor.
+         * @brief Updates chassis mass and geometric inertia properties.
+         * @param chassis New chassis configuration parameters.
          */
         void SetChassisParams(const ChassisParams& chassis);
 
         /**
-         * @brief Retrieves current chassis parameters.
+         * @brief Accessor for current chassis parameters.
          * @return Const reference to ChassisParams.
          */
         const ChassisParams& GetChassisParams() const;

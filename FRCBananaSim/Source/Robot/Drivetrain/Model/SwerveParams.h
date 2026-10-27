@@ -62,11 +62,12 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
     /**
      * @struct DriveModuleParams
-     * @brief Drive wheel gearbox electromechanics.
+     * @brief Drive wheel gearbox electromechanics and axle friction.
      */
     struct DriveModuleParams
     {
         Actuation::DCMotorModel motor = Actuation::DCMotorModel::KrakenX60(5.27, 0.96); ///< MK5n R3 drive motor.
+        double coulombFrictionTorque = 1.8;                                              ///< Drive train static Coulomb friction at wheel axle (N*m).
     };
 
     /**
@@ -98,7 +99,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
         /**
          * @brief Factory creating reference SDS MK5n R3 swerve configuration (Kraken X60 / X44).
-         * @return Configured SwerveDrivetrainConfig.
+         * @return Standard MK5n R3 configuration configured with reference mass and gearboxes.
          */
         static SwerveDrivetrainConfig CreateMK5nR3Reference();
     };

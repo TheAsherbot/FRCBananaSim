@@ -135,6 +135,21 @@
     <ClCompile Include="Source\Robot\RobotSpawner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveParams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Robot\Drivetrain\Model\TireContactModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveModuleModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveChassisSolver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveDrivetrainModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Utils\Log.h">
@@ -282,6 +297,24 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Source\Robot\RobotSpawner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Drivetrain\Model\TerrainProvider.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Drivetrain\Model\SwerveParams.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Drivetrain\Model\TireContactModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Drivetrain\Model\SwerveModuleModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Drivetrain\Model\SwerveChassisSolver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Drivetrain\Model\SwerveDrivetrainModel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -57,6 +57,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
         // Drive ratio 5.27:1 with Kraken X60
         config.drive.motor = Actuation::DCMotorModel::KrakenX60(5.27, 0.96);
+        config.drive.coulombFrictionTorque = 1.8;
 
         // 4. Module Placements in NWU (+X Forward, +Y Left):
         // Trackwidth = 0.56m, Wheelbase = 0.56m (Half-extents: 0.28m)

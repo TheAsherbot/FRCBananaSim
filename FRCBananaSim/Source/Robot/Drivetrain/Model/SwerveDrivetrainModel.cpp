@@ -5,7 +5,7 @@
 
 #include "Robot/Drivetrain/Model/SwerveDrivetrainModel.h"
 #include "Telemetry/TelemetryMacros.h"
-#include <glm/gtx/quaternion.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -22,7 +22,9 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
             modules[i] = SwerveModuleModel(config.modules[i], config.steer, config.drive, config.tire);
         }
 
-        chassisMotion.position = glm::vec3(0.0f, 0.0f, static_cast<float>(config.chassis.centerOfMassHeight));
+        // Initialize at exact static equilibrium sag to prevent artificial launch heave
+        double staticSag = (config.chassis.mass * 9.80665) / (4.0 * config.tire.radialStiffness);
+        chassisMotion.position = glm::vec3(0.0f, 0.0f, static_cast<float>(config.chassis.centerOfMassHeight - staticSag));
     }
 
     void SwerveDrivetrainModel::Step(double tickDeltaTime, const Control::SimInputs& inputs,
@@ -42,23 +44,43 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
         for (uint32_t step = 0; step < subSteps; ++step)
         {
-            // 1. Solve closed-form battery voltage from aggregate motor power
-            double totalPowerWatts = 0.0;
+            // 1. Compute realistic active motor electrical supply current through buck PWM duty cycle
+            double totalSupplyCurrent = 0.0;
             if (inputs.robotEnabled && !isBrownedOutState)
             {
                 for (uint32_t i = 0; i < 4; ++i)
                 {
-                    double steerVolts = inputs.motorCommands[i].demand;
-                    double steerRes = modules[i].GetSteerMotor().GetResistance();
-                    totalPowerWatts += (steerVolts * steerVolts) / std::max(1e-4, steerRes);
+                    // Steer motor power
+                    double steerCmdVolts = inputs.motorCommands[i].demand;
+                    double steerAppliedVolts = std::clamp(steerCmdVolts, -terminalVoltage, terminalVoltage);
+                    double steerCurrent = modules[i].GetSteerMotor().CalculateCurrent(
+                        steerAppliedVolts, modules[i].GetState().steerVelocity);
+                    steerCurrent = std::clamp(std::abs(steerCurrent), 0.0, inputs.motorCommands[i].statorCurrentLimit);
+                    double steerBackEmf = modules[i].GetSteerMotor().GetBackEmfConstantKe() *
+                        (modules[i].GetState().steerVelocity * modules[i].GetSteerMotor().GetGearRatio());
+                    double steerVw = steerCurrent * modules[i].GetSteerMotor().GetResistance() + std::abs(steerBackEmf);
+                    double steerDuty = std::clamp(steerVw / std::max(1.0, terminalVoltage), 0.0, 1.0);
+                    totalSupplyCurrent += std::min(40.0, steerDuty * steerCurrent);
 
-                    double driveVolts = inputs.motorCommands[4 + i].demand;
-                    double driveRes = modules[i].GetDriveMotor().GetResistance();
-                    totalPowerWatts += (driveVolts * driveVolts) / std::max(1e-4, driveRes);
+                    // Drive motor power
+                    double driveCmdVolts = inputs.motorCommands[4 + i].demand;
+                    double driveAppliedVolts = std::clamp(driveCmdVolts, -terminalVoltage, terminalVoltage);
+                    double driveCurrent = modules[i].GetDriveMotor().CalculateCurrent(
+                        driveAppliedVolts, modules[i].GetState().wheelVelocity);
+                    driveCurrent = std::clamp(std::abs(driveCurrent), 0.0, inputs.motorCommands[4 + i].statorCurrentLimit);
+                    double driveBackEmf = modules[i].GetDriveMotor().GetBackEmfConstantKe() *
+                        (modules[i].GetState().wheelVelocity * modules[i].GetDriveMotor().GetGearRatio());
+                    double driveVw = driveCurrent * modules[i].GetDriveMotor().GetResistance() + std::abs(driveBackEmf);
+                    double driveDuty = std::clamp(driveVw / std::max(1.0, terminalVoltage), 0.0, 1.0);
+                    totalSupplyCurrent += std::min(40.0, driveDuty * driveCurrent);
                 }
             }
 
-            terminalVoltage = batteryModel.SolveBusVoltageClosedForm(totalPowerWatts, isBrownedOutState, isBrownedOutState);
+            // Sagged battery terminal voltage with double-layer RC filtering (tau ~ 5ms at 800 Hz)
+            double targetTerminalVoltage = batteryModel.CalculateTerminalVoltage(totalSupplyCurrent);
+            constexpr double batteryFilterAlpha = 0.20;
+            terminalVoltage += batteryFilterAlpha * (targetTerminalVoltage - terminalVoltage);
+            isBrownedOutState = batteryModel.IsBrownoutCritical(terminalVoltage);
 
             // 2. Step steer azimuth heading ODEs
             for (uint32_t i = 0; i < 4; ++i)
@@ -79,17 +101,25 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
                 WheelContactProbe probe = terrain.QueryWheelContact(worldHubPos, config.tire.wheelRadius, config.tire.wheelWidth);
 
+                double cosA = std::cos(modules[i].GetState().steerAngle);
+                double sinA = std::sin(modules[i].GetState().steerAngle);
+                glm::vec3 localHeading(cosA, sinA, 0.0f);
+                wheelContacts[i].wheelHeading = rotMatrix * localHeading;
+
                 wheelContacts[i].contactPoint = probe.contactPoint;
                 wheelContacts[i].surfaceNormal = probe.surfaceNormal;
                 wheelContacts[i].penetrationDepth = probe.penetrationDepth;
                 wheelContacts[i].hasContact = probe.hasContact;
+                wheelContacts[i].springStiffnessKt = config.tire.radialStiffness;
+                wheelContacts[i].muX = config.tire.muStatic;
+                wheelContacts[i].muY = config.tire.muStatic * config.tire.lateralFrictionRatio;
 
                 if (probe.hasContact)
                 {
                     wheelContacts[i].normalStiffnessKn = (config.tire.radialStiffness * subDt) + config.tire.radialDamping;
                     wheelContacts[i].tangentialStiffness = modules[i].ComputeTangentialStiffness(
                         inputs.motorCommands[4 + i], terminalVoltage,
-                        wheelContacts[i].normalStiffnessKn * probe.penetrationDepth, subDt);
+                        config.tire.radialStiffness * probe.penetrationDepth, subDt);
                 }
             }
 
@@ -116,7 +146,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                     normalForce = std::max(0.0, normalForce);
 
                     modules[i].FinalizeDriveStep(inputs.motorCommands[4 + i], terminalVoltage,
-                        normalForce, patchVel, wheelContacts[i].surfaceNormal, subDt);
+                        normalForce, patchVel, wheelContacts[i].surfaceNormal,
+                        wheelContacts[i].wheelHeading, subDt);
                 }
 
                 sumCurrents += modules[i].GetState().steerStatorCurrent + modules[i].GetState().driveStatorCurrent;
@@ -207,9 +238,6 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
     void SwerveDrivetrainModel::RestoreSnapshot(const DrivetrainSnapshot& snapshot)
     {
         chassisMotion = snapshot.chassisMotion;
-        previousLinearVel = chassisMotion.linearVelocity;
-        previousAngularVel = chassisMotion.angularVelocity;
-
         for (uint32_t i = 0; i < 4; ++i)
         {
             modules[i].GetState() = snapshot.moduleStates[i];

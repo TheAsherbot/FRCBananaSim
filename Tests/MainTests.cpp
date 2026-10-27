@@ -1,6 +1,6 @@
 /**
  * @file MainTests.cpp
- * @brief Entry point for headless CTest suites (Units, Parameters, Determinism, Motor & Battery, Joint Stability, Swerve Physical Drive, Robot Spawner, Swerve Mass Ratio).
+ * @brief Entry point for headless CTest suites including analytic swerve model verification.
  */
 
 #include "TestFramework.h"
@@ -12,6 +12,7 @@
 #include "SwervePhysicalDriveTest.h"
 #include "RobotSpawnerTest.h"
 #include "SwerveMassRatioTest.h"
+#include "SwerveModelTest.h"
 
 #include <iostream>
 #include <string>
@@ -25,6 +26,7 @@ using FRCBananaSim::Tests::RunJointStabilityTest;
 using FRCBananaSim::Tests::RunSwervePhysicalDriveTest;
 using FRCBananaSim::Tests::RunRobotSpawnerTest;
 using FRCBananaSim::Tests::RunSwerveMassRatioTest;
+using FRCBananaSim::Tests::RunSwerveModelTest;
 
 int main(int argc, char* argv[])
 {
@@ -78,6 +80,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunSwerveMassRatioTest(ctx);
         }
+        else if (arg == "--swerve-model")
+        {
+            runAll = false;
+            RunSwerveModelTest(ctx);
+        }
     }
 
     if (runAll)
@@ -90,6 +97,7 @@ int main(int argc, char* argv[])
         RunSwervePhysicalDriveTest(ctx);
         RunRobotSpawnerTest(ctx);
         RunSwerveMassRatioTest(ctx);
+        RunSwerveModelTest(ctx);
     }
 
     std::cout << "======================================\n";
