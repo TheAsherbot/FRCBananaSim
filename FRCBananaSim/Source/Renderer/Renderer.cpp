@@ -592,8 +592,18 @@ void main()
             static_cast<GLsizeiptr>(debugData.depthTestedLines.size() * sizeof(DebugLineVertex)),
             debugData.depthTestedLines.data(), GL_DYNAMIC_DRAW);
 
+        // Configure vertex attributes (Location 0: Position, Location 1: Color)
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(DebugLineVertex),
+            reinterpret_cast<void*>(offsetof(DebugLineVertex, position)));
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(DebugLineVertex),
+            reinterpret_cast<void*>(offsetof(DebugLineVertex, color)));
+
         if (depthTestedCount > 0)
         {
+            glEnable(GL_DEPTH_TEST);
             glDrawArrays(GL_LINES, 0, depthTestedCount);
         }
 
@@ -603,6 +613,9 @@ void main()
             glDrawArrays(GL_LINES, depthTestedCount, alwaysOnTopCount);
             glEnable(GL_DEPTH_TEST);
         }
+
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
 
     void Renderer::EndFrame()

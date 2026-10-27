@@ -84,16 +84,12 @@ namespace FRCBananaSim::Robot::Drivetrain::Systems
             return probe;
         }
 
-        // Coordinate conversion NWU -> Jolt Engine (+X Right, +Y Up, +Z Forward):
-        // X_eng = -Y_nwu (Right = -Left)
-        // Y_eng =  Z_nwu (Up = Up)
-        // Z_eng =  X_nwu (Forward = Forward)
+        // Coordinate conversion NWU -> Jolt Engine (+X Left, +Y Up, +Z Forward):
         JPH::RVec3 joltHubPos(
-            static_cast<double>(-hubPosition.y),
+            static_cast<double>(hubPosition.y),
             static_cast<double>(hubPosition.z),
             static_cast<double>(hubPosition.x)
         );
-
         // In Jolt, Cylinder axis is along Y (+Y Up).
         // A rolling wheel axle lies horizontally along engine X (+X Right).
         // Rotate 90 degrees around Z to orient cylinder axis along +X Right:
@@ -141,12 +137,9 @@ namespace FRCBananaSim::Robot::Drivetrain::Systems
             }
 
             // Convert normal from Jolt Engine back to NWU:
-            // n_x_nwu =  n_z_eng (Forward)
-            // n_y_nwu = -n_x_eng (Left)
-            // n_z_nwu =  n_y_eng (Up)
             glm::vec3 normalNWU(
                 groundNormalEng.GetZ(),
-                -groundNormalEng.GetX(),
+                groundNormalEng.GetX(),
                 groundNormalEng.GetY()
             );
 

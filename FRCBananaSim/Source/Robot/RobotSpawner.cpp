@@ -220,10 +220,10 @@ namespace FRCBananaSim::Robot
 
         // C. Module Layout parsing
         std::array<glm::vec2, 4> defaultLocations = {
-            glm::vec2(-trackwidth * 0.5f,  wheelbase * 0.5f), // FrontLeft  [-X, +Z]
-            glm::vec2(trackwidth * 0.5f,  wheelbase * 0.5f), // FrontRight [+X, +Z]
-            glm::vec2(-trackwidth * 0.5f, -wheelbase * 0.5f), // BackLeft   [-X, -Z]
-            glm::vec2(trackwidth * 0.5f, -wheelbase * 0.5f)  // BackRight  [+X, -Z]
+            glm::vec2(trackwidth * 0.5f,  wheelbase * 0.5f), // FrontLeft  [+X (Left),  +Z (Fwd)]
+            glm::vec2(-trackwidth * 0.5f,  wheelbase * 0.5f), // FrontRight [-X (Right), +Z (Fwd)]
+            glm::vec2(trackwidth * 0.5f, -wheelbase * 0.5f), // BackLeft   [+X (Left),  -Z (Back)]
+            glm::vec2(-trackwidth * 0.5f, -wheelbase * 0.5f)  // BackRight  [-X (Right), -Z (Back)]
         };
 
         std::array<uint32_t, 4> defaultSteerCAN = { 1, 3, 5, 7 };

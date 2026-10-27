@@ -94,10 +94,10 @@ namespace FRCBananaSim::Robot::Drivetrain::System
         SwerveDrivetrainConfig config = SwerveDrivetrainConfig::CreateMK5nR3Reference();
         config.chassis.mass = chassisComp->chassisMass;
 
-        // Ingest initial pose from ECS transform (+X Right, +Y Up, +Z Forward -> NWU: X Fwd, Y Left, Z Up)
-        glm::vec3 posNWU(chassisTransform->position.z, -chassisTransform->position.x, chassisTransform->position.y);
+        // Ingest initial pose from ECS transform (+X Left, +Y Up, +Z Forward -> NWU: X Fwd, Y Left, Z Up)
+        glm::vec3 posNWU(chassisTransform->position.z, chassisTransform->position.x, chassisTransform->position.y);
         glm::quat q = chassisTransform->rotation;
-        glm::quat rotNWU(q.w, q.z, -q.x, q.y);
+        glm::quat rotNWU(q.w, q.z, q.x, q.y);
 
         BatteryModel battery = BatteryModel::FRCStandard();
         if (chassisComp->batteryEntity != invalidEntity)
@@ -155,12 +155,12 @@ namespace FRCBananaSim::Robot::Drivetrain::System
             JPH::Vec3 joltLinVel = bodyInterface.GetLinearVelocity(chassisRb->bodyID);
             JPH::Vec3 joltAngVel = bodyInterface.GetAngularVelocity(chassisRb->bodyID);
 
-            // Convert Jolt Engine frame (+X Right, +Y Up, +Z Forward) to NWU (+X Fwd, +Y Left, +Z Up)
-            glm::vec3 posNWU(static_cast<float>(joltPos.GetZ()), static_cast<float>(-joltPos.GetX()), static_cast<float>(joltPos.GetY()));
-            glm::quat rotNWU(joltRot.GetW(), joltRot.GetZ(), -joltRot.GetX(), joltRot.GetY());
+            // Convert Jolt Engine frame to NWU (+X Fwd, +Y Left, +Z Up)
+            glm::vec3 posNWU(static_cast<float>(joltPos.GetZ()), static_cast<float>(joltPos.GetX()), static_cast<float>(joltPos.GetY()));
+            glm::quat rotNWU(joltRot.GetW(), joltRot.GetZ(), joltRot.GetX(), joltRot.GetY());
 
-            glm::vec3 linVelNWU(joltLinVel.GetZ(), -joltLinVel.GetX(), joltLinVel.GetY());
-            glm::vec3 angVelNWU(joltAngVel.GetZ(), -joltAngVel.GetX(), joltAngVel.GetY());
+            glm::vec3 linVelNWU(joltLinVel.GetZ(), joltLinVel.GetX(), joltLinVel.GetY());
+            glm::vec3 angVelNWU(joltAngVel.GetZ(), joltAngVel.GetX(), joltAngVel.GetY());
 
             // Fold in stored delta to maintain continuous momentum across external collisions
             linVelNWU += velocityDeltaLin;
@@ -187,8 +187,8 @@ namespace FRCBananaSim::Robot::Drivetrain::System
             JPH::BodyInterface& bodyInterface = joltContext->GetBodyInterface();
 
             // Convert NWU -> Jolt Engine
-            JPH::Vec3 midLinVelEng(-midLinVelNWU.y, midLinVelNWU.z, midLinVelNWU.x);
-            JPH::Vec3 midAngVelEng(-midAngVelNWU.y, midAngVelNWU.z, midAngVelNWU.x);
+            JPH::Vec3 midLinVelEng(midLinVelNWU.y, midLinVelNWU.z, midLinVelNWU.x);
+            JPH::Vec3 midAngVelEng(midAngVelNWU.y, midAngVelNWU.z, midAngVelNWU.x);
 
             bodyInterface.SetLinearAndAngularVelocity(chassisRb->bodyID, midLinVelEng, midAngVelEng);
         }

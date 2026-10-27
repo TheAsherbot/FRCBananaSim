@@ -1,6 +1,6 @@
 /**
  * @file Main.cpp
- * @brief Dynamic actuator, battery, joint, and 6-DOF terrain-aware analytic swerve drivetrain sandbox with real-time telemetry.
+ * @brief Dedicated 6-DOF terrain-aware analytic swerve drivetrain simulation sandbox with real-time telemetry.
  */
 
 #include "Core/Engine.h"
@@ -12,21 +12,16 @@
 #include "Physics/JoltContext.h"
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Physics/Components/ColliderComponent.h"
-#include "Physics/Components/JointComponent.h"
 #include "Physics/Systems/PhysicsSystem.h"
 #include "Physics/Systems/PhysicsDebugDrawSystem.h"
-#include "Physics/Systems/JointSystem.h"
 #include "Actuation/BatteryModel.h"
-#include "Actuation/DCMotorModel.h"
-#include "Actuation/ServoModel.h"
 #include "Actuation/Components/BatteryComponent.h"
-#include "Actuation/Components/MotorComponent.h"
-#include "Actuation/Components/ServoComponent.h"
 #include "Robot/RobotSpawner.h"
 #include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
 #include "Robot/Drivetrain/Components/SwerveModuleComponent.h"
 #include "Robot/Drivetrain/Systems/SwerveDriveSystem.h"
 #include "Robot/Drivetrain/Model/SwerveDrivetrainModel.h"
+#include "Robot/Drivetrain/Model/TerrainProvider.h"
 #include "Control/SimControlBoundary.h"
 #include "Core/Units/Units.h"
 #include "Renderer/Renderer.h"
@@ -66,21 +61,12 @@ using FRCBananaSim::Physics::PhysicsConfig;
 using FRCBananaSim::Physics::JoltContext;
 using FRCBananaSim::Physics::Components::RigidBodyComponent;
 using FRCBananaSim::Physics::Components::ColliderComponent;
-using FRCBananaSim::Physics::Components::JointComponent;
-using FRCBananaSim::Physics::Components::JointType;
-using FRCBananaSim::Physics::Components::JointMotorMode;
 using FRCBananaSim::Physics::Components::BodyMotionType;
 using FRCBananaSim::Physics::Components::ColliderShape;
 using FRCBananaSim::Physics::Systems::PhysicsSystem;
 using FRCBananaSim::Physics::Systems::PhysicsDebugDrawSystem;
-using FRCBananaSim::Physics::Systems::JointSystem;
 using FRCBananaSim::Actuation::BatteryModel;
-using FRCBananaSim::Actuation::DCMotorModel;
-using FRCBananaSim::Actuation::ServoModel;
-using FRCBananaSim::Actuation::ServoMode;
 using FRCBananaSim::Actuation::Components::BatteryComponent;
-using FRCBananaSim::Actuation::Components::MotorComponent;
-using FRCBananaSim::Actuation::Components::ServoComponent;
 using FRCBananaSim::Robot::RobotSpawner;
 using FRCBananaSim::Robot::SpawnedRobot;
 using FRCBananaSim::Robot::Drivetrain::Components::SwerveChassisComponent;
@@ -89,6 +75,8 @@ using FRCBananaSim::Robot::Drivetrain::System::SwerveDriveSystem;
 using FRCBananaSim::Robot::Drivetrain::Model::SwerveDrivetrainModel;
 using FRCBananaSim::Robot::Drivetrain::Model::SwerveModuleState;
 using FRCBananaSim::Robot::Drivetrain::Model::ChassisMotionState;
+using FRCBananaSim::Robot::Drivetrain::Model::ITerrainProvider;
+using FRCBananaSim::Robot::Drivetrain::Model::WheelContactProbe;
 using namespace FRCBananaSim::Control;
 using FRCBananaSim::Renderer::Renderer;
 using FRCBananaSim::Renderer::Components::MeshComponent;
@@ -102,42 +90,212 @@ using FRCBananaSim::Telemetry::FrameSummary;
 using FRCBananaSim::Utils::DebugDraw;
 
 /**
- * @brief Constructs a DCMotorModel for any of the 9 standard motor presets with custom gear ratio and efficiency.
- * @param presetIndex Index in standard motors array [0..8].
- * @param gearRatio Mechanical reduction ratio.
- * @param efficiency Transmission efficiency (0.0 to 1.0).
- * @return Configured DCMotorModel.
+ * @class AnalyticFieldTerrain
+ * @brief Standalone analytic ground terrain provider modeling flat carpet, the 15° ramp, and 3 cm cable bump without Jolt.
  */
-static DCMotorModel CreateMotorPreset(int presetIndex, double gearRatio = 1.0, double efficiency = 1.0)
+class AnalyticFieldTerrain : public ITerrainProvider
 {
-    switch (presetIndex)
+public:
+    virtual WheelContactProbe QueryWheelContact(const glm::vec3& hubPosition,
+        double wheelRadius, double /*wheelWidth*/) const override
     {
-    case 0: return DCMotorModel::KrakenX60(gearRatio, efficiency);
-    case 1: return DCMotorModel::KrakenX44(gearRatio, efficiency);
-    case 2: return DCMotorModel::Falcon500(gearRatio, efficiency);
-    case 3: return DCMotorModel::NEOVortex(gearRatio, efficiency);
-    case 4: return DCMotorModel::Minion(gearRatio, efficiency);
-    case 5: return DCMotorModel::NEO1(gearRatio, efficiency);
-    case 6: return DCMotorModel::NEO2(gearRatio, efficiency);
-    case 7: return DCMotorModel::NEO550(gearRatio, efficiency);
-    case 8: return DCMotorModel::GoBilda5202(gearRatio, efficiency);
-    default: return DCMotorModel::Falcon500(gearRatio, efficiency);
+        WheelContactProbe probe;
+
+        double hubX = hubPosition.x; // NWU +X Forward
+        double hubY = hubPosition.y; // NWU +Y Left
+        double hubZ = hubPosition.z; // NWU +Z Up
+
+        double groundZ = 0.0;
+        glm::vec3 normal(0.0f, 0.0f, 1.0f);
+
+        // Station 5 track lateral bounds in NWU: Y in [2.2, 4.2] (centered at Y = 3.2m)
+        bool inTrack = (hubY >= 2.2 && hubY <= 4.2);
+
+        if (inTrack && hubX >= 2.5 && hubX <= 4.5)
+        {
+            // 15° Inclined ramp section: rises from X = 2.5 to 4.5 along NWU +X
+            constexpr double rampAngle = 0.2617993877991494; // 15 degrees in radians
+            double distAlongRamp = hubX - 2.5;
+            groundZ = distAlongRamp * std::tan(rampAngle);
+            normal = glm::vec3(-std::sin(rampAngle), 0.0f, std::cos(rampAngle));
+        }
+        else if (inTrack && hubX >= 6.9 && hubX <= 7.1)
+        {
+            // 3 cm Cable protector bump
+            groundZ = 0.03;
+            normal = glm::vec3(0.0f, 0.0f, 1.0f);
+        }
+
+        double distAboveGround = (hubZ - groundZ);
+        double depth = wheelRadius - distAboveGround;
+
+        if (depth > 0.0)
+        {
+            probe.hasContact = true;
+            probe.penetrationDepth = depth;
+            probe.surfaceNormal = normal;
+            probe.contactPoint = hubPosition - normal * static_cast<float>(wheelRadius);
+        }
+        else
+        {
+            probe.hasContact = false;
+            probe.penetrationDepth = 0.0;
+            probe.surfaceNormal = normal;
+            probe.contactPoint = glm::vec3(hubX, hubY, static_cast<float>(groundZ));
+        }
+
+        return probe;
     }
+};
+
+/**
+ * @brief Draws oriented bounding box (OBB) wireframes using DebugDraw lines.
+ */
+static void DrawOrientedBox(const glm::vec3& center, const glm::quat& orientation,
+    const glm::vec3& halfExtents, const glm::vec3& color, bool alwaysOnTop)
+{
+    glm::vec3 c[8] = {
+        center + orientation * glm::vec3(-halfExtents.x, -halfExtents.y, -halfExtents.z),
+        center + orientation * glm::vec3(halfExtents.x, -halfExtents.y, -halfExtents.z),
+        center + orientation * glm::vec3(halfExtents.x,  halfExtents.y, -halfExtents.z),
+        center + orientation * glm::vec3(-halfExtents.x,  halfExtents.y, -halfExtents.z),
+        center + orientation * glm::vec3(-halfExtents.x, -halfExtents.y,  halfExtents.z),
+        center + orientation * glm::vec3(halfExtents.x, -halfExtents.y,  halfExtents.z),
+        center + orientation * glm::vec3(halfExtents.x,  halfExtents.y,  halfExtents.z),
+        center + orientation * glm::vec3(-halfExtents.x,  halfExtents.y,  halfExtents.z)
+    };
+
+    bool depthTest = !alwaysOnTop;
+
+    // Bottom loop
+    DebugDraw::Line(c[0], c[1], color, depthTest);
+    DebugDraw::Line(c[1], c[2], color, depthTest);
+    DebugDraw::Line(c[2], c[3], color, depthTest);
+    DebugDraw::Line(c[3], c[0], color, depthTest);
+
+    // Top loop
+    DebugDraw::Line(c[4], c[5], color, depthTest);
+    DebugDraw::Line(c[5], c[6], color, depthTest);
+    DebugDraw::Line(c[6], c[7], color, depthTest);
+    DebugDraw::Line(c[7], c[4], color, depthTest);
+
+    // Vertical pillars
+    DebugDraw::Line(c[0], c[4], color, depthTest);
+    DebugDraw::Line(c[1], c[5], color, depthTest);
+    DebugDraw::Line(c[2], c[6], color, depthTest);
+    DebugDraw::Line(c[3], c[7], color, depthTest);
+
+    // Top face cross (X) for heading identification
+    DebugDraw::Line(c[4], c[6], color * 0.75f, depthTest);
+    DebugDraw::Line(c[5], c[7], color * 0.75f, depthTest);
 }
 
 /**
- * @brief Returns datasheet rated transit speed in seconds per 60 degrees.
- * @param servoPresetIndex 0 = goBILDA Torque, 1 = goBILDA Speed, 2 = Standard FTC.
- * @return Rated speed (s / 60 deg).
+ * @brief Renders wireframe debug visuals for all scene colliders and wheel contact patches.
  */
-static double GetServoRatedSecPer60Deg(int servoPresetIndex)
+static void RenderSceneColliderDebugDraw(Scene& scene, bool alwaysOnTop,
+    const SpawnedRobot& swerveRobot, SwerveDriveSystem& swerveSystem,
+    Entity groundEntity, Entity rampEntity, Entity bumpEntity, bool showWheels)
 {
-    switch (servoPresetIndex)
+    auto entities = scene.Query<ColliderComponent, TransformComponent>();
+
+    for (Entity entity : entities)
     {
-    case 0: return 0.20; // 0.20 s/60 deg (goBILDA 2000-0025-0002)
-    case 1: return 0.12; // 0.12 s/60 deg (goBILDA 2000-0025-0003)
-    case 2: return 0.18; // 0.18 s/60 deg (Standard FTC Hobby)
-    default: return 0.20;
+        auto* collider = scene.GetComponent<ColliderComponent>(entity);
+        auto* transform = scene.GetComponent<TransformComponent>(entity);
+        if (!collider || !transform)
+        {
+            continue;
+        }
+
+        glm::vec3 center = transform->position + transform->rotation * collider->localOffset;
+        glm::quat orientation = transform->rotation * collider->localRotation;
+
+        glm::vec3 color(0.2f, 0.9f, 0.3f);
+        if (entity == groundEntity)
+        {
+            color = glm::vec3(0.15f, 0.95f, 0.35f); // Vibrant Carpet Green
+        }
+        else if (entity == rampEntity)
+        {
+            color = glm::vec3(0.20f, 0.85f, 1.0f);  // Cyan Ramp
+        }
+        else if (entity == bumpEntity)
+        {
+            color = glm::vec3(1.0f, 0.85f, 0.15f);  // Amber Cable Bump
+        }
+        else if (entity == swerveRobot.chassisEntity)
+        {
+            color = glm::vec3(1.0f, 0.35f, 0.25f);  // Coral Chassis Bumper
+        }
+
+        switch (collider->shape)
+        {
+        case ColliderShape::Box:
+            DrawOrientedBox(center, orientation, collider->boxHalfExtents, color, alwaysOnTop);
+            break;
+        case ColliderShape::Sphere:
+            DebugDraw::Sphere(center, collider->radius, color, 16, !alwaysOnTop);
+            break;
+        case ColliderShape::Cylinder:
+        case ColliderShape::Capsule:
+            DebugDraw::Cylinder(center, collider->radius, collider->halfHeight, color, 16, !alwaysOnTop);
+            break;
+        }
+    }
+
+    // Wheel visualizer
+    if (showWheels && swerveRobot.isSuccess)
+    {
+        auto* model = swerveSystem.GetModel();
+        constexpr int kSegments = 16;
+        constexpr float kRadius = 0.0508f; // 2 inches radius = 4" wheel
+
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            if (swerveRobot.wheelEntities[i] == invalidEntity)
+            {
+                continue;
+            }
+
+            auto* wheelT = scene.GetComponent<TransformComponent>(swerveRobot.wheelEntities[i]);
+            if (!wheelT)
+            {
+                continue;
+            }
+
+            glm::vec3 wheelPos = wheelT->position;
+            glm::quat wheelRot = wheelT->rotation;
+
+            // Rolling circumference circle in wheel local YZ plane
+            glm::vec3 prevPoint = wheelPos + wheelRot * glm::vec3(0.0f, kRadius, 0.0f);
+            for (int s = 1; s <= kSegments; ++s)
+            {
+                float angle = (static_cast<float>(s) / static_cast<float>(kSegments)) * 6.2831853f;
+                glm::vec3 localPt(0.0f, std::cos(angle) * kRadius, std::sin(angle) * kRadius);
+                glm::vec3 worldPt = wheelPos + wheelRot * localPt;
+                DebugDraw::Line(prevPoint, worldPt, glm::vec3(1.0f, 0.85f, 0.2f), !alwaysOnTop);
+                prevPoint = worldPt;
+            }
+
+            // Normal contact load indicator
+            double normalF = 0.0;
+            if (model)
+            {
+                normalF = model->GetModule(i).GetState().contactState.normalForce;
+            }
+
+            glm::vec3 bottomPt = wheelPos - glm::vec3(0.0f, kRadius, 0.0f);
+            if (normalF > 0.0)
+            {
+                float spikeH = static_cast<float>(std::min(0.20, normalF / 800.0));
+                DebugDraw::Line(bottomPt, bottomPt + glm::vec3(0.0f, spikeH, 0.0f), glm::vec3(0.1f, 1.0f, 0.2f), !alwaysOnTop);
+            }
+            else
+            {
+                DebugDraw::Line(bottomPt, bottomPt + glm::vec3(0.0f, 0.04f, 0.0f), glm::vec3(1.0f, 0.2f, 0.2f), !alwaysOnTop);
+            }
+        }
     }
 }
 
@@ -150,9 +308,9 @@ int main(int argc, char* argv[])
     // 2. Initialize Visual Renderer
     Renderer renderer(1600, 900, "FRC Banana Simulator - 6-DOF Terrain Swerve Sandbox");
 
-    // Camera initial viewpoint (framed behind Station 5 looking towards ramp and bump along +Z)
-    renderer.GetCamera().position = glm::vec3(3.2f, 3.2f, -3.8f);
-    renderer.GetCamera().pitchDegrees = -16.0f;
+    // Camera initial viewpoint (framed behind robot looking along the track towards ramp and bump)
+    renderer.GetCamera().position = glm::vec3(3.2f, 2.6f, -3.2f);
+    renderer.GetCamera().pitchDegrees = -14.0f;
     renderer.GetCamera().yawDegrees = 90.0f;
     renderer.GetCamera().moveSpeed = 8.0f;
 
@@ -173,14 +331,13 @@ int main(int argc, char* argv[])
     Scene scene;
     scene.SetFixedDeltaTime(PhysicsConfig::fixedDeltaTime);
 
-    scene.AddSystem(std::make_unique<JointSystem>(scene, joltContext));
     scene.AddSystem(std::make_unique<PhysicsSystem>(scene, joltContext));
     scene.AddSystem(std::make_unique<TransformPropagationSystem>(scene));
-    scene.AddSystem(std::make_unique<PhysicsDebugDrawSystem>(scene));
     scene.AddSystem(std::make_unique<RenderSystem>(scene, renderer));
 
     // Helper lambda to assign both local and world transforms at creation
-    auto assignTransforms = [&](Entity entity, const glm::vec3& pos, const glm::vec3& scale, const glm::quat& rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
+    auto assignTransforms = [&](Entity entity, const glm::vec3& pos, const glm::vec3& scale,
+        const glm::quat& rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
         {
             TransformComponent transform;
             transform.position = pos;
@@ -199,7 +356,7 @@ int main(int argc, char* argv[])
     // 6. Environment Setup
     // -------------------------------------------------------------------------
 
-    // A. Field Carpet
+    // A. Field Carpet (28m x 18m)
     Entity groundEntity = scene.CreateEntity();
     {
         assignTransforms(groundEntity, glm::vec3(0.0f, -0.05f, 0.0f), glm::vec3(28.0f, 0.1f, 18.0f));
@@ -221,7 +378,54 @@ int main(int argc, char* argv[])
         scene.AddComponent(groundEntity, collider);
     }
 
-    // B. Central Robot Battery Entity (High-contrast casing with red/blue terminal posts)
+    // B. Obstacle 1: 15° Inclined Ramp (Centered at X = 3.2m, Z = 3.5m)
+    Entity rampEntity = scene.CreateEntity();
+    {
+        glm::vec3 rampPos(3.2f, 0.259f, 3.5f);
+        glm::quat rampRot = glm::angleAxis(glm::radians(-15.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        assignTransforms(rampEntity, rampPos, glm::vec3(1.8f, 0.08f, 2.0f), rampRot);
+
+        MeshComponent mesh;
+        mesh.shape = PrimitiveShape::Cube;
+        mesh.color = glm::vec3(0.35f, 0.45f, 0.65f); // Slate Blue
+        scene.AddComponent(rampEntity, mesh);
+
+        RigidBodyComponent rigidBody;
+        rigidBody.motionType = BodyMotionType::Static;
+        rigidBody.friction = 0.8f;
+        rigidBody.restitution = 0.05f;
+        scene.AddComponent(rampEntity, rigidBody);
+
+        ColliderComponent collider;
+        collider.shape = ColliderShape::Box;
+        collider.boxHalfExtents = glm::vec3(0.9f, 0.04f, 1.0f);
+        scene.AddComponent(rampEntity, collider);
+    }
+
+    // C. Obstacle 2: 3 cm Cable-Protector Bump (Centered at X = 3.2m, Z = 7.0m)
+    Entity bumpEntity = scene.CreateEntity();
+    {
+        glm::vec3 bumpPos(3.2f, 0.015f, 7.0f);
+        assignTransforms(bumpEntity, bumpPos, glm::vec3(1.8f, 0.03f, 0.20f));
+
+        MeshComponent mesh;
+        mesh.shape = PrimitiveShape::Cube;
+        mesh.color = glm::vec3(0.95f, 0.80f, 0.10f); // Hazard Yellow
+        scene.AddComponent(bumpEntity, mesh);
+
+        RigidBodyComponent rigidBody;
+        rigidBody.motionType = BodyMotionType::Static;
+        rigidBody.friction = 0.8f;
+        rigidBody.restitution = 0.05f;
+        scene.AddComponent(bumpEntity, rigidBody);
+
+        ColliderComponent collider;
+        collider.shape = ColliderShape::Box;
+        collider.boxHalfExtents = glm::vec3(0.9f, 0.015f, 0.10f);
+        scene.AddComponent(bumpEntity, collider);
+    }
+
+    // D. Central Robot Battery Entity
     const glm::vec3 batteryPos = glm::vec3(0.0f, 0.35f, -2.8f);
     Entity batteryEntity = scene.CreateEntity();
     {
@@ -248,211 +452,8 @@ int main(int argc, char* argv[])
         scene.AddComponent(batteryEntity, battery);
     }
 
-    // Battery Positive Terminal
-    Entity batPosTerminal = scene.CreateEntity();
-    {
-        assignTransforms(batPosTerminal, batteryPos + glm::vec3(0.25f, 0.40f, 0.0f), glm::vec3(0.15f, 0.20f, 0.15f));
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.95f, 0.15f, 0.15f);
-        scene.AddComponent(batPosTerminal, mesh);
-    }
-
-    // Battery Negative Terminal
-    Entity batNegTerminal = scene.CreateEntity();
-    {
-        assignTransforms(batNegTerminal, batteryPos + glm::vec3(-0.25f, 0.40f, 0.0f), glm::vec3(0.15f, 0.20f, 0.15f));
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.15f, 0.35f, 0.95f);
-        scene.AddComponent(batNegTerminal, mesh);
-    }
-
     // -------------------------------------------------------------------------
-    // C. Station 1: High-Speed Flywheel Shooter Test Stand (FRC Brushless)
-    // -------------------------------------------------------------------------
-    const glm::vec3 st1Pos = glm::vec3(-4.8f, 0.0f, 0.0f);
-    Entity st1Pedestal = scene.CreateEntity();
-    {
-        assignTransforms(st1Pedestal, st1Pos + glm::vec3(0.0f, 0.60f, 0.0f), glm::vec3(0.7f, 1.2f, 0.7f));
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.45f, 0.50f, 0.60f);
-        scene.AddComponent(st1Pedestal, mesh);
-
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Static;
-        scene.AddComponent(st1Pedestal, rigidBody);
-
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(0.35f, 0.60f, 0.35f);
-        scene.AddComponent(st1Pedestal, collider);
-    }
-
-    Entity st1Flywheel = scene.CreateEntity();
-    {
-        assignTransforms(st1Flywheel, st1Pos + glm::vec3(0.0f, 1.50f, 0.0f), glm::vec3(1.1f, 0.16f, 1.1f));
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.98f, 0.80f, 0.15f);
-        scene.AddComponent(st1Flywheel, mesh);
-
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Dynamic;
-        rigidBody.mass = 1.5f;
-        rigidBody.friction = 0.2f;
-        rigidBody.restitution = 0.1f;
-        scene.AddComponent(st1Flywheel, rigidBody);
-
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(0.55f, 0.08f, 0.55f);
-        scene.AddComponent(st1Flywheel, collider);
-    }
-
-    Entity st1JointEntity = scene.CreateEntity();
-    {
-        JointComponent joint;
-        joint.type = JointType::Hinge;
-        joint.parentEntity = invalidEntity;
-        joint.childEntity = st1Flywheel;
-        joint.SetWorldSpace(st1Pos + glm::vec3(0.0f, 1.50f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        joint.motorMode = JointMotorMode::Velocity;
-        joint.maxMotorTorque = 15.0f;
-        joint.maxFrictionTorque = 0.005f;
-        scene.AddComponent(st1JointEntity, joint);
-
-        MotorComponent motor;
-        motor.motorModel = CreateMotorPreset(0, 1.0, 0.98); // Kraken X60 direct drive
-        motor.commandedVoltage = 8.0_V;
-        motor.statorCurrentLimit = 60.0_A;
-        scene.AddComponent(st1JointEntity, motor);
-    }
-
-    // -------------------------------------------------------------------------
-    // D. Station 2: Articulated Heavy Arm Test Stand (High-Reduction Gearboxes)
-    // -------------------------------------------------------------------------
-    const glm::vec3 st2Pos = glm::vec3(-1.6f, 0.0f, 0.0f);
-    Entity st2Tower = scene.CreateEntity();
-    {
-        assignTransforms(st2Tower, st2Pos + glm::vec3(0.0f, 1.20f, 0.0f), glm::vec3(0.45f, 2.4f, 0.45f));
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.38f, 0.40f, 0.45f);
-        scene.AddComponent(st2Tower, mesh);
-
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Static;
-        scene.AddComponent(st2Tower, rigidBody);
-
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(0.225f, 1.20f, 0.225f);
-        scene.AddComponent(st2Tower, collider);
-    }
-
-    Entity st2Arm = scene.CreateEntity();
-    {
-        assignTransforms(st2Arm, st2Pos + glm::vec3(0.0f, 1.75f, 0.45f), glm::vec3(0.18f, 1.2f, 0.18f));
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(1.0f, 0.50f, 0.08f);
-        scene.AddComponent(st2Arm, mesh);
-
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Dynamic;
-        rigidBody.mass = 3.5f;
-        rigidBody.friction = 0.5f;
-        rigidBody.restitution = 0.05f;
-        scene.AddComponent(st2Arm, rigidBody);
-
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(0.09f, 0.60f, 0.09f);
-        scene.AddComponent(st2Arm, collider);
-    }
-
-    Entity st2JointEntity = scene.CreateEntity();
-    {
-        JointComponent joint;
-        joint.type = JointType::Hinge;
-        joint.parentEntity = invalidEntity;
-        joint.childEntity = st2Arm;
-        joint.SetWorldSpace(st2Pos + glm::vec3(0.0f, 2.30f, 0.45f), glm::vec3(1.0f, 0.0f, 0.0f));
-        joint.hasLimits = true;
-        joint.minLimit = -glm::radians(75.0f);
-        joint.maxLimit = glm::radians(75.0f);
-        joint.motorMode = JointMotorMode::Position;
-        joint.springFrequency = 14.0f;
-        joint.springDamping = 1.0f;
-        joint.maxMotorTorque = 65.0f;
-        scene.AddComponent(st2JointEntity, joint);
-
-        MotorComponent motor;
-        motor.motorModel = CreateMotorPreset(5, 25.0, 0.95); // NEO 1.1 at 25:1
-        motor.commandedVoltage = 0.0_V;
-        motor.statorCurrentLimit = 60.0_A;
-        scene.AddComponent(st2JointEntity, motor);
-    }
-
-    // -------------------------------------------------------------------------
-    // E. Station 5 Obstacles: 15° Inclined Ramp & 3 cm Cable-Protector Bump
-    // -------------------------------------------------------------------------
-
-    // 1. 15-Degree Inclined Ramp (Centered at X = 3.2m, Z = 3.5m)
-    Entity rampEntity = scene.CreateEntity();
-    {
-        glm::vec3 rampPos(3.2f, 0.259f, 3.5f);
-        glm::quat rampRot = glm::angleAxis(glm::radians(-15.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-        assignTransforms(rampEntity, rampPos, glm::vec3(1.8f, 0.08f, 2.0f), rampRot);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.35f, 0.45f, 0.65f); // Slate Blue
-        scene.AddComponent(rampEntity, mesh);
-
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Static;
-        rigidBody.friction = 0.8f;
-        rigidBody.restitution = 0.05f;
-        scene.AddComponent(rampEntity, rigidBody);
-
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(0.9f, 0.04f, 1.0f);
-        scene.AddComponent(rampEntity, collider);
-    }
-
-    // 2. 3 cm Cable-Protector Bump (Centered at X = 3.2m, Z = 7.0m)
-    Entity bumpEntity = scene.CreateEntity();
-    {
-        glm::vec3 bumpPos(3.2f, 0.015f, 7.0f);
-        assignTransforms(bumpEntity, bumpPos, glm::vec3(1.8f, 0.03f, 0.20f));
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.95f, 0.80f, 0.10f); // Hazard Yellow
-        scene.AddComponent(bumpEntity, mesh);
-
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Static;
-        rigidBody.friction = 0.8f;
-        rigidBody.restitution = 0.05f;
-        scene.AddComponent(bumpEntity, rigidBody);
-
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(0.9f, 0.015f, 0.10f);
-        scene.AddComponent(bumpEntity, collider);
-    }
-
-    // -------------------------------------------------------------------------
-    // F. Station 5: Swerve Robot Drivetrain on Field Carpet
+    // 7. Swerve Robot Spawning & Visual Attachment
     // -------------------------------------------------------------------------
     const glm::vec3 swerveSpawnPos = glm::vec3(3.2f, 0.248f, 0.0f);
     SpawnedRobot swerveRobot = RobotSpawner::SpawnFromJsonFile(scene,
@@ -494,21 +495,31 @@ int main(int argc, char* argv[])
         }
     }
 
-    // Swerve drive system initialized with Jolt context for real-time terrain collision queries
+    // Drivetrain Adapter initialized with Jolt context for terrain probes
     SwerveDriveSystem swerveSystem(scene, &joltContext);
+    auto analyticTerrain = std::make_shared<AnalyticFieldTerrain>();
+
     SimInputs swerveInputs;
     SimOutputs swerveOutputs;
+
+    // Simulation Backend Selection: true = Jolt Middleware, false = No Jolt (Pure Analytic Math)
+    bool useJoltPhysics = true;
+
+    // Debug Draw Options
+    bool showColliderDebugDraw = true;
+    bool debugDrawAlwaysOnTop = false;
+    bool showWheelContactDebugDraw = true;
 
     bool swerveEnabled = true;
     bool swervePinChassis = false;
     float swerveDriveVolts = 0.0f;
     float swerveTargetSteerAngle = 0.0f;
-    int swerveNeutralModeIndex = 0; // Brake
+    int swerveNeutralModeIndex = 0; // 0 = Brake, 1 = Coast
 
     bool swerveRunStressTest = false;
     double swerveStressElapsed = 0.0;
 
-    // Helper lambda to reset robot position and momentum
+    // Helper lambda to reposition the robot cleanly
     auto resetRobotToPosition = [&](const glm::vec3& worldPos, const glm::quat& worldRot)
         {
             if (!swerveRobot.isSuccess)
@@ -546,9 +557,9 @@ int main(int argc, char* argv[])
             auto* model = swerveSystem.GetModel();
             if (model)
             {
-                // Convert Engine (+X Right, +Y Up, +Z Forward) to NWU (+X Fwd, +Y Left, +Z Up)
-                glm::vec3 posNWU(worldPos.z, -worldPos.x, worldPos.y);
-                glm::quat rotNWU(worldRot.w, worldRot.z, -worldRot.x, worldRot.y);
+                // Convert Engine (+X Left, +Y Up, +Z Forward) to NWU (+X Fwd, +Y Left, +Z Up)
+                glm::vec3 posNWU(worldPos.z, worldPos.x, worldPos.y);
+                glm::quat rotNWU(worldRot.w, worldRot.z, worldRot.x, worldRot.y);
                 model->ApplyExternalCorrections(posNWU, rotNWU, glm::vec3(0.0f), glm::vec3(0.0f));
 
                 for (uint32_t i = 0; i < 4; ++i)
@@ -562,274 +573,174 @@ int main(int argc, char* argv[])
         };
 
     // -------------------------------------------------------------------------
-    // 7. Interactive State, Speed Control & Station Isolation
+    // 8. Interactive State & Simulation Stepper
     // -------------------------------------------------------------------------
     double simSpeed = 1.0;
     double simAccumulator = 0.0;
     bool doSingleStep = false;
     uint64_t totalSimSteps = 0;
 
-    bool triggerStallSpike = false;
-    int activeStationIndex = 5; // Focus on Swerve Robot
-
-    float st1CommandedVolts = 8.0f;
-
-    float st2TargetAngleDegrees = 0.0f;
-    bool st2AutoOscillate = true;
-    double st2OscillationTime = 0.0;
-
-    int spawnedCount = 0;
     double accumulatedPhysicsMs = 0.0;
     double currentUpdateMs = 0.0;
 
-    // -------------------------------------------------------------------------
-    // Simulation Step Function
-    // -------------------------------------------------------------------------
     auto executeSimulationStep = [&](double fixedDeltaTime)
         {
-            auto* battery = scene.GetComponent<BatteryComponent>(batteryEntity);
-            if (!battery)
+            if (!swerveRobot.isSuccess)
             {
                 return;
             }
 
-            double totalActuatorSupplyCurrent = 0.0;
+            auto* battery = scene.GetComponent<BatteryComponent>(batteryEntity);
 
-            // --- A. Station 1: Flywheel ---
-            auto* m1 = scene.GetComponent<MotorComponent>(st1JointEntity);
-            auto* j1 = scene.GetComponent<JointComponent>(st1JointEntity);
-            auto* rb1 = scene.GetComponent<RigidBodyComponent>(st1Flywheel);
-            if (m1 && j1 && rb1)
+            // 1. Pin/Unpin chassis via motion type (in Jolt mode)
+            auto* chassisRb = scene.GetComponent<RigidBodyComponent>(swerveRobot.chassisEntity);
+            if (useJoltPhysics && chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
             {
-                bool st1Active = (activeStationIndex == 0 || activeStationIndex == 1);
-                float speed = glm::dot(rb1->angularVelocity, j1->parentAxis);
-                m1->angularVelocity = speed;
-
-                if (!st1Active)
+                JPH::BodyInterface& bi = joltContext.GetBodyInterface();
+                JPH::EMotionType targetMotion = swervePinChassis ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic;
+                if (bi.GetMotionType(chassisRb->bodyID) != targetMotion)
                 {
-                    m1->commandedVoltage = 0.0_V;
-                    m1->appliedVoltage = 0.0_V;
-                    m1->statorCurrent = 0.0_A;
-                    m1->supplyCurrent = 0.0_A;
-                    m1->outputTorque = 0.0;
-                    j1->motorMode = JointMotorMode::Velocity;
-                    j1->targetVelocity = 0.0f;
-                    j1->maxMotorTorque = 0.1f;
-                }
-                else
-                {
-                    m1->commandedVoltage = static_cast<double>(st1CommandedVolts);
-                    double rawStatorCurrent = m1->motorModel.CalculateCurrent(m1->commandedVoltage, speed);
-                    m1->statorCurrent = std::clamp(rawStatorCurrent, -m1->statorCurrentLimit, m1->statorCurrentLimit);
-
-                    if (battery->isBrownoutCritical)
-                    {
-                        m1->appliedVoltage = 0.0_V;
-                    }
-                    else
-                    {
-                        m1->appliedVoltage = battery->batteryModel.ApplySupplyCurrentLimit(
-                            m1->commandedVoltage, m1->statorCurrent, battery->terminalVoltage);
-                    }
-
-                    double power = std::abs(m1->statorCurrent * m1->appliedVoltage);
-                    m1->supplyCurrent = (battery->terminalVoltage > 0.01_V) ? (power / battery->terminalVoltage) : 0.0_A;
-                    totalActuatorSupplyCurrent += m1->supplyCurrent;
-
-                    constexpr double kFlywheelInertia = 0.08;
-                    m1->outputTorque = m1->motorModel.CalculateTorque(
-                        m1->appliedVoltage, speed, kFlywheelInertia, fixedDeltaTime);
-
-                    j1->motorMode = JointMotorMode::Velocity;
-                    j1->targetVelocity = (m1->appliedVoltage >= 0.0) ? 2000.0f : -2000.0f;
-                    j1->maxMotorTorque = static_cast<float>(std::abs(m1->outputTorque));
+                    bi.SetMotionType(chassisRb->bodyID, targetMotion, JPH::EActivation::Activate);
                 }
             }
 
-            // --- B. Station 2: Arm ---
-            auto* m2 = scene.GetComponent<MotorComponent>(st2JointEntity);
-            auto* j2 = scene.GetComponent<JointComponent>(st2JointEntity);
-            auto* rb2 = scene.GetComponent<RigidBodyComponent>(st2Arm);
-            if (m2 && j2 && rb2)
+            // 2. Control demands
+            if (swerveRunStressTest)
             {
-                bool st2Active = (activeStationIndex == 0 || activeStationIndex == 2);
-                float currentArmAngle = j2->currentAngle;
-                float speed = j2->currentVelocity;
-                m2->angularPosition = currentArmAngle;
-                m2->angularVelocity = speed;
+                swerveStressElapsed += fixedDeltaTime;
+                swerveInputs.robotEnabled = true;
 
-                if (!st2Active)
+                for (uint32_t i = 0; i < 4; ++i)
                 {
-                    j2->motorMode = JointMotorMode::Position;
-                    j2->targetAngle = 0.0f;
-                    j2->maxMotorTorque = 0.1f;
+                    swerveInputs.motorCommands[i].mode = MotorControlMode::Voltage;
+                    swerveInputs.motorCommands[i].demand = 12.0;
+                    swerveInputs.motorCommands[i].statorCurrentLimit = 60.0;
+                    swerveInputs.motorCommands[i].neutralMode = NeutralMode::Brake;
+
+                    swerveInputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
+                    swerveInputs.motorCommands[4 + i].demand = 12.0;
+                    swerveInputs.motorCommands[4 + i].statorCurrentLimit = 60.0;
+                    swerveInputs.motorCommands[4 + i].neutralMode = NeutralMode::Brake;
                 }
-                else
+
+                if (swerveStressElapsed >= 60.0)
                 {
-                    if (st2AutoOscillate)
+                    swerveRunStressTest = false;
+                    SIM_LOG_INFO("60-Second Real-Time Swerve Stress Test Complete!");
+                }
+            }
+            else
+            {
+                swerveInputs.robotEnabled = swerveEnabled;
+                NeutralMode nMode = (swerveNeutralModeIndex == 0) ? NeutralMode::Brake : NeutralMode::Coast;
+
+                // Closed-loop azimuth heading hold via simulated encoder feedback
+                constexpr double kSteerP = 12.0;
+                constexpr double kSteerD = 0.6;
+
+                for (uint32_t i = 0; i < 4; ++i)
+                {
+                    double currentAngle = swerveOutputs.encoderPositions[i];
+                    double currentVel = swerveOutputs.encoderVelocities[i];
+                    double angleError = static_cast<double>(swerveTargetSteerAngle) - currentAngle;
+
+                    while (angleError > 3.14159265358979323846)
                     {
-                        st2OscillationTime += fixedDeltaTime;
-                        st2TargetAngleDegrees = static_cast<float>(std::sin(st2OscillationTime * 1.8) * 60.0);
+                        angleError -= 2.0 * 3.14159265358979323846;
+                    }
+                    while (angleError < -3.14159265358979323846)
+                    {
+                        angleError += 2.0 * 3.14159265358979323846;
                     }
 
-                    float desiredAngleRad = glm::radians(st2TargetAngleDegrees);
-                    j2->motorMode = JointMotorMode::Position;
-                    j2->targetAngle = desiredAngleRad;
+                    double steerDemandVolts = std::clamp((angleError * kSteerP) - (currentVel * kSteerD), -12.0, 12.0);
 
-                    float angleError = desiredAngleRad - currentArmAngle;
-                    double demandedVolts = std::clamp(static_cast<double>(angleError * 14.0f), -12.0, 12.0);
-                    m2->commandedVoltage = demandedVolts;
+                    swerveInputs.motorCommands[i].mode = MotorControlMode::Voltage;
+                    swerveInputs.motorCommands[i].demand = steerDemandVolts;
+                    swerveInputs.motorCommands[i].statorCurrentLimit = 60.0;
+                    swerveInputs.motorCommands[i].neutralMode = NeutralMode::Brake;
 
-                    double rawStatorCurrent = m2->motorModel.CalculateCurrent(m2->commandedVoltage, speed);
-                    m2->statorCurrent = std::clamp(rawStatorCurrent, -m2->statorCurrentLimit, m2->statorCurrentLimit);
-
-                    if (battery->isBrownoutCritical)
-                    {
-                        m2->appliedVoltage = 0.0_V;
-                    }
-                    else
-                    {
-                        m2->appliedVoltage = battery->batteryModel.ApplySupplyCurrentLimit(
-                            m2->commandedVoltage, m2->statorCurrent, battery->terminalVoltage);
-                    }
-
-                    double power = std::abs(m2->statorCurrent * m2->appliedVoltage);
-                    m2->supplyCurrent = (battery->terminalVoltage > 0.01_V) ? (power / battery->terminalVoltage) : 0.0_A;
-                    totalActuatorSupplyCurrent += m2->supplyCurrent;
-
-                    constexpr double kArmInertia = 0.45;
-                    m2->outputTorque = m2->motorModel.CalculateTorque(
-                        m2->appliedVoltage, speed, kArmInertia, fixedDeltaTime);
-
-                    j2->maxMotorTorque = static_cast<float>(std::abs(m2->outputTorque) + 5.0);
+                    swerveInputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
+                    swerveInputs.motorCommands[4 + i].demand = swerveDriveVolts;
+                    swerveInputs.motorCommands[4 + i].statorCurrentLimit = 60.0;
+                    swerveInputs.motorCommands[4 + i].neutralMode = nMode;
                 }
             }
 
-            // --- C. Station 5: Swerve Robot Simulation ---
-            if (swerveRobot.isSuccess)
+            // 3. Advance Swerve Drivetrain Simulation
+            swerveSystem.SetInputs(swerveInputs);
+            swerveSystem.FixedUpdate(fixedDeltaTime);
+            swerveOutputs = swerveSystem.GetOutputs();
+
+            // 4. Central Battery Bus Update
+            if (battery)
             {
-                // Pin/Unpin chassis via motion type
-                auto* chassisRb = scene.GetComponent<RigidBodyComponent>(swerveRobot.chassisEntity);
-                if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
-                {
-                    JPH::BodyInterface& bi = joltContext.GetBodyInterface();
-                    JPH::EMotionType targetMotion = swervePinChassis ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic;
-                    if (bi.GetMotionType(chassisRb->bodyID) != targetMotion)
-                    {
-                        bi.SetMotionType(chassisRb->bodyID, targetMotion, JPH::EActivation::Activate);
-                    }
-                }
-
-                if (swerveRunStressTest)
-                {
-                    swerveStressElapsed += fixedDeltaTime;
-                    swerveInputs.robotEnabled = true;
-
-                    for (uint32_t i = 0; i < 4; ++i)
-                    {
-                        // Full 12V drive and steer stall stress test
-                        swerveInputs.motorCommands[i].mode = MotorControlMode::Voltage;
-                        swerveInputs.motorCommands[i].demand = 12.0;
-                        swerveInputs.motorCommands[i].statorCurrentLimit = 60.0;
-                        swerveInputs.motorCommands[i].neutralMode = NeutralMode::Brake;
-
-                        swerveInputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
-                        swerveInputs.motorCommands[4 + i].demand = 12.0;
-                        swerveInputs.motorCommands[4 + i].statorCurrentLimit = 60.0;
-                        swerveInputs.motorCommands[4 + i].neutralMode = NeutralMode::Brake;
-                    }
-
-                    if (swerveStressElapsed >= 60.0)
-                    {
-                        swerveRunStressTest = false;
-                        SIM_LOG_INFO("60-Second Real-Time Swerve Stress Test Complete!");
-                    }
-                }
-                else
-                {
-                    swerveInputs.robotEnabled = swerveEnabled;
-                    NeutralMode nMode = (swerveNeutralModeIndex == 0) ? NeutralMode::Brake : NeutralMode::Coast;
-
-                    // Azimuth Closed-Loop Heading Hold using feedback from swerveOutputs encoders
-                    constexpr double kSteerP = 12.0;
-                    constexpr double kSteerD = 0.6;
-
-                    for (uint32_t i = 0; i < 4; ++i)
-                    {
-                        double currentAngle = swerveOutputs.encoderPositions[i];
-                        double currentVel = swerveOutputs.encoderVelocities[i];
-                        double angleError = static_cast<double>(swerveTargetSteerAngle) - currentAngle;
-
-                        while (angleError > 3.14159265358979323846)
-                        {
-                            angleError -= 2.0 * 3.14159265358979323846;
-                        }
-                        while (angleError < -3.14159265358979323846)
-                        {
-                            angleError += 2.0 * 3.14159265358979323846;
-                        }
-
-                        double steerDemandVolts = std::clamp((angleError * kSteerP) - (currentVel * kSteerD), -12.0, 12.0);
-
-                        swerveInputs.motorCommands[i].mode = MotorControlMode::Voltage;
-                        swerveInputs.motorCommands[i].demand = steerDemandVolts;
-                        swerveInputs.motorCommands[i].statorCurrentLimit = 60.0;
-                        swerveInputs.motorCommands[i].neutralMode = NeutralMode::Brake;
-
-                        swerveInputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
-                        swerveInputs.motorCommands[4 + i].demand = swerveDriveVolts;
-                        swerveInputs.motorCommands[4 + i].statorCurrentLimit = 60.0;
-                        swerveInputs.motorCommands[4 + i].neutralMode = nMode;
-                    }
-                }
-
-                swerveSystem.SetInputs(swerveInputs);
-                swerveSystem.FixedUpdate(fixedDeltaTime);
-                swerveOutputs = swerveSystem.GetOutputs();
-
-                totalActuatorSupplyCurrent += swerveOutputs.totalBusCurrent;
+                double totalActuatorSupplyCurrent = swerveOutputs.totalBusCurrent;
+                battery->terminalVoltage = battery->batteryModel.CalculateTerminalVoltage(totalActuatorSupplyCurrent);
+                battery->totalCurrent = totalActuatorSupplyCurrent + battery->batteryModel.GetQuiescentCurrent();
+                battery->isBrownoutWarning = battery->batteryModel.IsBrownoutWarning(battery->terminalVoltage);
+                battery->isBrownoutCritical = battery->batteryModel.IsBrownoutCritical(battery->terminalVoltage);
             }
 
-            // --- Central Battery Bus Update ---
-            if (triggerStallSpike)
+            // 5. Physics Integration Mode
+            if (useJoltPhysics)
             {
-                totalActuatorSupplyCurrent += 320.0_A;
-            }
+                // Jolt physics integration pass
+                scene.SetFixedDeltaTime(fixedDeltaTime);
+                scene.FixedUpdateSystems();
 
-            battery->terminalVoltage = battery->batteryModel.CalculateTerminalVoltage(totalActuatorSupplyCurrent);
-            battery->totalCurrent = totalActuatorSupplyCurrent + battery->batteryModel.GetQuiescentCurrent();
-            battery->isBrownoutWarning = battery->batteryModel.IsBrownoutWarning(battery->terminalVoltage);
-            battery->isBrownoutCritical = battery->batteryModel.IsBrownoutCritical(battery->terminalVoltage);
-
-            // Step ECS physics
-            scene.SetFixedDeltaTime(fixedDeltaTime);
-            scene.FixedUpdateSystems();
-
-            // Synchronize simulated transforms into WorldTransformComponent for immediate visual rendering
-            auto syncWorldTransform = [&](Entity e)
+                // Sync chassis transform into WorldTransformComponent
+                auto* t = scene.GetComponent<TransformComponent>(swerveRobot.chassisEntity);
+                auto* wt = scene.GetComponent<WorldTransformComponent>(swerveRobot.chassisEntity);
+                if (t && wt)
                 {
-                    auto* t = scene.GetComponent<TransformComponent>(e);
-                    auto* wt = scene.GetComponent<WorldTransformComponent>(e);
-                    if (t && wt)
-                    {
-                        wt->worldPosition = t->position;
-                        wt->worldRotation = t->rotation;
-                        wt->worldScale = t->scale;
-                    }
-                };
-
-            syncWorldTransform(st1Flywheel);
-            syncWorldTransform(st2Arm);
-            if (swerveRobot.isSuccess)
+                    wt->worldPosition = t->position;
+                    wt->worldRotation = t->rotation;
+                    wt->worldScale = t->scale;
+                }
+            }
+            else
             {
-                syncWorldTransform(swerveRobot.chassisEntity);
+                // No-Jolt Mode: SwerveDrivetrainModel already integrated its 6-DOF pose in Step()
+                auto* model = swerveSystem.GetModel();
+                if (model)
+                {
+                    const auto& motion = model->GetChassisState();
+                    // NWU (+X Fwd, +Y Left, +Z Up) -> Engine (+X Left, +Y Up, +Z Forward)
+                    glm::vec3 posEng(motion.position.y, motion.position.z, motion.position.x);
+                    glm::quat rotEng(motion.orientation.w, motion.orientation.y, motion.orientation.z, motion.orientation.x);
+
+                    auto* chassisT = scene.GetComponent<TransformComponent>(swerveRobot.chassisEntity);
+                    if (chassisT)
+                    {
+                        chassisT->position = posEng;
+                        chassisT->rotation = rotEng;
+                    }
+
+                    auto* chassisWt = scene.GetComponent<WorldTransformComponent>(swerveRobot.chassisEntity);
+                    if (chassisWt)
+                    {
+                        chassisWt->worldPosition = posEng;
+                        chassisWt->worldRotation = rotEng;
+                    }
+
+                    // Keep Jolt body position synchronized in background for seamless transitions
+                    if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
+                    {
+                        JPH::BodyInterface& bi = joltContext.GetBodyInterface();
+                        bi.SetPositionAndRotation(chassisRb->bodyID,
+                            JPH::RVec3(posEng.x, posEng.y, posEng.z),
+                            JPH::Quat(rotEng.x, rotEng.y, rotEng.z, rotEng.w),
+                            JPH::EActivation::DontActivate);
+                    }
+                }
             }
 
             ++totalSimSteps;
         };
 
     // -------------------------------------------------------------------------
-    // 8. Engine Loop Configuration
+    // 9. Engine Loop Configuration
     // -------------------------------------------------------------------------
     Engine engine(200.0, 0.0);
 
@@ -863,7 +774,7 @@ int main(int argc, char* argv[])
         });
 
     // -------------------------------------------------------------------------
-    // 9. Per-Frame Update Callback & ImGui HUD
+    // 10. Per-Frame Update Callback & ImGui HUD
     // -------------------------------------------------------------------------
     engine.SetUpdateCallback([&](double deltaTime)
         {
@@ -898,11 +809,11 @@ int main(int argc, char* argv[])
                 // Steer Azimuth Angle (Left / Right)
                 if (input.IsKeyDown(GLFW_KEY_LEFT) || input.IsKeyDown(GLFW_KEY_KP_4))
                 {
-                    swerveTargetSteerAngle += static_cast<float>(deltaTime * 2.5); // Slew Left
+                    swerveTargetSteerAngle += static_cast<float>(deltaTime * 2.5); // Slew Left (+Y NWU)
                 }
                 else if (input.IsKeyDown(GLFW_KEY_RIGHT) || input.IsKeyDown(GLFW_KEY_KP_6))
                 {
-                    swerveTargetSteerAngle -= static_cast<float>(deltaTime * 2.5); // Slew Right
+                    swerveTargetSteerAngle -= static_cast<float>(deltaTime * 2.5); // Slew Right (-Y NWU)
                 }
                 else
                 {
@@ -959,19 +870,29 @@ int main(int argc, char* argv[])
 
             // Render Frame
             renderer.BeginFrame();
+
+            // 1. Queue all collider wireframes (Green carpet, Cyan ramp, Amber bump, Coral chassis)
+            if (showColliderDebugDraw)
+            {
+                RenderSceneColliderDebugDraw(scene, debugDrawAlwaysOnTop, swerveRobot, swerveSystem,
+                    groundEntity, rampEntity, bumpEntity, showWheelContactDebugDraw);
+            }
+
+            // 2. Render solid meshes
             scene.RenderUpdateSystems();
             swerveSystem.RenderUpdate();
 
-            // Render Telemetry HUD
-            telemetryOverlay.Render();
+            // 3. Flush all queued debug wireframes to screen
+            renderer.FlushDebugDraw();
 
-            auto* battery = scene.GetComponent<BatteryComponent>(batteryEntity);
+            // 4. Render Telemetry HUD
+            telemetryOverlay.Render();
 
             // --- ImGui Interactive Control Center ---
             ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize(ImVec2(500.0f, 740.0f), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize(ImVec2(520.0f, 760.0f), ImGuiCond_FirstUseEver);
 
-            if (ImGui::Begin("FRCBananaSim — 6-DOF Multi-Actuator Control"))
+            if (ImGui::Begin("FRCBananaSim — 6-DOF Terrain Swerve Sandbox"))
             {
                 // Simulation Speed Controls
                 ImGui::Text("Simulation Time: %.2f s | Speed: %.2fx",
@@ -984,19 +905,60 @@ int main(int argc, char* argv[])
 
                 ImGui::Separator();
 
+                // -------------------------------------------------------------
+                // SIMULATION BACKEND SELECTION: JOLT VS. NO-JOLT
+                // -------------------------------------------------------------
+                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "SIMULATION BACKEND MODE:");
+                if (ImGui::RadioButton("Jolt Physics (Middleware)", useJoltPhysics))
+                {
+                    if (!useJoltPhysics)
+                    {
+                        useJoltPhysics = true;
+                        swerveSystem.SetCustomTerrainProvider(nullptr); // Restores Jolt CollideShape probe
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("No Jolt (Pure Analytic Math)", !useJoltPhysics))
+                {
+                    if (useJoltPhysics)
+                    {
+                        useJoltPhysics = false;
+                        swerveSystem.SetCustomTerrainProvider(analyticTerrain);
+                    }
+                }
+
+                if (useJoltPhysics)
+                {
+                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "Active: Jolt 6-DOF Body + Jolt Terrain CollideShape Queries");
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.2f, 0.9f, 1.0f, 1.0f), "Active: Pure Analytic Math + AnalyticFieldTerrain (Jolt Bypassed)");
+                }
+
+                ImGui::Separator();
+
+                // -------------------------------------------------------------
+                // DEBUG DRAW OPTIONS
+                // -------------------------------------------------------------
+                ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.85f, 1.0f), "COLLIDER DEBUG DRAW OPTIONS:");
+                ImGui::Checkbox("Draw All Colliders (Wireframe OBBs)", &showColliderDebugDraw);
+                ImGui::SameLine();
+                ImGui::Checkbox("Always On Top (No Depth Occlusion)", &debugDrawAlwaysOnTop);
+                ImGui::Checkbox("Draw Wheel Contact Patches & Load Spikes", &showWheelContactDebugDraw);
+
+                ImGui::Separator();
+
                 // Main Tab Bar
                 if (ImGui::BeginTabBar("MainTabs"))
                 {
                     // =============================================================
                     // TAB 1: SWERVE ROBOT (DRIVE & 6-DOF TERRAIN)
                     // =============================================================
-                    if (ImGui::BeginTabItem("Swerve Robot (Gate 1)"))
+                    if (ImGui::BeginTabItem("Swerve Robot"))
                     {
-                        ImGui::TextColored(ImVec4(0.2f, 0.9f, 1.0f, 1.0f), "STATION 5: 6-DOF TERRAIN-AWARE SWERVE CHASSIS (50 KG)");
-                        ImGui::Spacing();
-
                         // Reset Shortcuts
-                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "OBSTACLE COURSE & BENCH POSITIONS");
+                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "OBSTACLE COURSE BENCH POSITIONS");
                         if (ImGui::Button("Reset to Start Line", ImVec2(180.0f, 26.0f)))
                         {
                             resetRobotToPosition(glm::vec3(3.2f, 0.248f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
@@ -1011,10 +973,10 @@ int main(int argc, char* argv[])
                         ImGui::Spacing();
 
                         // Mode: Test Stand vs Field Drive
-                        ImGui::Checkbox("Pin Chassis to Stand (Kinematic)", &swervePinChassis);
+                        ImGui::Checkbox("Pin Chassis to Stand", &swervePinChassis);
                         if (ImGui::IsItemHovered())
                         {
-                            ImGui::SetTooltip("When checked, the chassis body is held Kinematic so stall torque and peak RPM can be tested safely.\nUncheck to let the robot drive across carpet, ramps, and bumps.");
+                            ImGui::SetTooltip("When checked, the chassis body is held stationary so stall torque and peak RPM can be tested safely.\nUncheck to let the robot drive across carpet, ramps, and bumps.");
                         }
 
                         ImGui::Checkbox("Robot Enabled", &swerveEnabled);
@@ -1094,21 +1056,21 @@ int main(int argc, char* argv[])
                             glm::degrees(swerveOutputs.gyroYaw), glm::degrees(swerveOutputs.gyroPitch), glm::degrees(swerveOutputs.gyroRoll));
                         ImGui::Text("Yaw Rate:  %.1f deg/s", glm::degrees(swerveOutputs.gyroYawRate));
 
-                        // Chassis linear velocity & altitude from Jolt
+                        // Chassis linear velocity & altitude
                         auto* chassisT = scene.GetComponent<TransformComponent>(swerveRobot.chassisEntity);
-                        auto* chassisRb = scene.GetComponent<RigidBodyComponent>(swerveRobot.chassisEntity);
                         glm::vec3 chassisLinVel(0.0f);
-                        if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
+                        auto* model = swerveSystem.GetModel();
+                        if (model)
                         {
-                            JPH::Vec3 vel = joltContext.GetBodyInterface().GetLinearVelocity(chassisRb->bodyID);
-                            chassisLinVel = glm::vec3(vel.GetX(), vel.GetY(), vel.GetZ());
+                            // Model linear velocity in NWU -> Engine (+X Left, +Y Up, +Z Forward)
+                            const auto& motion = model->GetChassisState();
+                            chassisLinVel = glm::vec3(motion.linearVelocity.y, motion.linearVelocity.z, motion.linearVelocity.x);
                         }
                         float groundSpeed = glm::length(glm::vec2(chassisLinVel.x, chassisLinVel.z));
                         float elevationY = chassisT ? chassisT->position.y : 0.0f;
                         ImGui::Text("Speed:     %.2f m/s (%.1f ft/s) | Elev (Y): %.3f m", groundSpeed, groundSpeed * 3.28084f, elevationY);
 
                         // Energy Ledger
-                        auto* model = swerveSystem.GetModel();
                         if (model)
                         {
                             const auto& ledger = model->GetEnergyLedger();
@@ -1182,85 +1144,15 @@ int main(int argc, char* argv[])
                     }
 
                     // =============================================================
-                    // TAB 2: FLYWHEEL TEST STAND
+                    // TAB 2: CONTROLS & CAMERA
                     // =============================================================
-                    if (ImGui::BeginTabItem("Flywheel"))
-                    {
-                        ImGui::Text("Station 1: High-Speed Flywheel Test Stand (Uncapped RPM)");
-                        ImGui::SliderFloat("Commanded Voltage##1", &st1CommandedVolts, -12.0f, 12.0f, "%.1f V");
-                        if (ImGui::Button("Stop (0V)##1")) st1CommandedVolts = 0.0f; ImGui::SameLine();
-                        if (ImGui::Button("12.0 V##1")) st1CommandedVolts = 12.0f;
-
-                        auto* m1 = scene.GetComponent<MotorComponent>(st1JointEntity);
-                        if (m1)
-                        {
-                            double rpm = (m1->angularVelocity * 60.0) / (2.0 * 3.1415926535);
-                            ImGui::Text("Output Speed:    %.0f RPM", rpm);
-                            ImGui::Text("Applied Voltage: %.2f V", m1->appliedVoltage);
-                            ImGui::Text("Current Draw:    %.1f A", m1->statorCurrent);
-                        }
-                        ImGui::EndTabItem();
-                    }
-
-                    // =============================================================
-                    // TAB 3: ARTICULATED ARM
-                    // =============================================================
-                    if (ImGui::BeginTabItem("Geared Arm"))
-                    {
-                        ImGui::Text("Station 2: Heavy Articulated Arm (High Reduction)");
-                        ImGui::Checkbox("Auto Oscillate Arm", &st2AutoOscillate);
-                        if (!st2AutoOscillate)
-                        {
-                            ImGui::SliderFloat("Target Angle##2", &st2TargetAngleDegrees, -70.0f, 70.0f, "%.1f deg");
-                        }
-
-                        auto* m2 = scene.GetComponent<MotorComponent>(st2JointEntity);
-                        auto* j2 = scene.GetComponent<JointComponent>(st2JointEntity);
-                        if (m2 && j2)
-                        {
-                            ImGui::Text("Arm Angle:       %.1f deg", glm::degrees(j2->currentAngle));
-                            ImGui::Text("Holding Torque:  %.2f N*m", m2->outputTorque);
-                        }
-                        ImGui::EndTabItem();
-                    }
-
-                    // =============================================================
-                    // TAB 4: CONTROLS & CAMERA
-                    // =============================================================
-                    if (ImGui::BeginTabItem("Controls & Sandbox"))
+                    if (ImGui::BeginTabItem("Controls & Camera"))
                     {
                         ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "Camera Flight Controls:");
                         ImGui::BulletText("Hold Right Mouse Button + WASD to fly camera freely.");
                         ImGui::BulletText("Hold Space to ascend, Left Shift to descend.");
                         ImGui::BulletText("Press F3 to toggle Profiler & Flame Graph.");
                         ImGui::BulletText("Press 0..9 on keyboard to change simulation speed.");
-                        ImGui::Spacing();
-                        ImGui::Separator();
-
-                        if (ImGui::Button("Spawn Dynamic Test Box (Falls from ceiling)"))
-                        {
-                            ++spawnedCount;
-                            Entity dropEntity = scene.CreateEntity();
-                            float offsetX = static_cast<float>((spawnedCount % 5) - 2) * 1.5f;
-                            assignTransforms(dropEntity, glm::vec3(offsetX, 5.0f, 0.2f), glm::vec3(0.5f, 0.5f, 0.5f));
-
-                            MeshComponent mesh;
-                            mesh.shape = (spawnedCount % 2 == 0) ? PrimitiveShape::Cube : PrimitiveShape::Sphere;
-                            mesh.color = glm::vec3(0.95f, 0.85f, 0.15f);
-                            scene.AddComponent(dropEntity, mesh);
-
-                            RigidBodyComponent rigidBody;
-                            rigidBody.motionType = BodyMotionType::Dynamic;
-                            rigidBody.mass = 2.0f;
-                            scene.AddComponent(dropEntity, rigidBody);
-
-                            ColliderComponent collider;
-                            collider.shape = (mesh.shape == PrimitiveShape::Cube) ? ColliderShape::Box : ColliderShape::Sphere;
-                            collider.boxHalfExtents = glm::vec3(0.25f, 0.25f, 0.25f);
-                            collider.radius = 0.25f;
-                            scene.AddComponent(dropEntity, collider);
-                        }
-                        ImGui::Text("Total Dynamic Boxes Spawned: %d", spawnedCount);
                         ImGui::EndTabItem();
                     }
 
@@ -1289,10 +1181,10 @@ int main(int argc, char* argv[])
             accumulatedPhysicsMs = 0.0;
         });
 
-    // 10. Run Engine Loop
+    // 11. Run Engine Loop
     engine.Run();
 
-    // 11. Clean Teardown
+    // 12. Clean Teardown
     if (profilerWindow.IsOpen())
     {
         profilerWindow.Close(renderer.GetWindow());

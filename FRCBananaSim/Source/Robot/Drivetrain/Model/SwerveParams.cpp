@@ -293,8 +293,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                     // If JSON stores [X, Y], locationOnChassis: X=Forward, Y=Left
                     float rawX = mod["location_m"][0].get<float>();
                     float rawY = mod["location_m"][1].get<float>();
-                    // When positive forward/right is used in JSON:
-                    config.modules[i].locationOnChassis = glm::vec2(rawY, -rawX);
+                    // rawY is Engine Z (Forward), rawX is Engine X (Left)
+                    config.modules[i].locationOnChassis = glm::vec2(rawY, rawX);
                 }
 
                 config.modules[i].steerCANId = mod.value("steerCAN", config.modules[i].steerCANId);
