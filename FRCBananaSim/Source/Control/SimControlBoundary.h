@@ -1,25 +1,32 @@
 /**
  * @file SimControlBoundary.h
- * @brief Decoupled control boundary structs exchanged with WPILib HALSim or headless test harnesses.
+ * @brief Decoupled control boundary structs exchanged with WPILib HALSim or test harnesses.
  */
 
 #pragma once
 
 #include <array>
 #include <cstdint>
+#include <glm/vec3.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 namespace FRCBananaSim::Control
 {
+    constexpr size_t MAX_MOTOR_SLOTS = 24;   ///< [0..3] Steer, [4..7] Drive, [8..23] Mechanisms
+    constexpr size_t MAX_CANCODER_SLOTS = 12;
+
     /**
      * @enum MotorControlMode
      * @brief Control mode for an individual actuator demand.
      */
     enum class MotorControlMode : uint8_t
     {
-        Voltage = 0,       ///< Commanded in Volts (-12.0V to +12.0V).
-        DutyCycle = 1,     ///< Fractional duty cycle (-1.0 to +1.0).
-        TorqueCurrent = 2, ///< Commanded stator current in Amperes (CTRE TorqueCurrentFOC).
-        Disabled = 3       ///< Motor output disabled.
+        Voltage = 0,         ///< Commanded in Volts (-12.0V to +12.0V).
+        DutyCycle = 1,       ///< Fractional duty cycle (-1.0 to +1.0).
+        TorqueCurrent = 2,   ///< Commanded stator current in Amperes.
+        PositionVoltage = 3, ///< Sim-side 1 kHz closed-loop position PID + FF.
+        VelocityVoltage = 4, ///< Sim-side 1 kHz closed-loop velocity PID + FF.
+        Disabled = 5         ///< Motor output disabled.
     };
 
     /**
@@ -33,15 +40,31 @@ namespace FRCBananaSim::Control
     };
 
     /**
+     * @struct ClosedLoopGains
+     * @brief PID and feedforward gains for sim-side closed-loop motor control.
+     */
+    struct ClosedLoopGains
+    {
+        double kP = 0.0; ///< Proportional gain.
+        double kI = 0.0; ///< Integral gain.
+        double kD = 0.0; ///< Derivative gain.
+        double kS = 0.0; ///< Static friction feedforward.
+        double kV = 0.0; ///< Velocity feedforward.
+        double kA = 0.0; ///< Acceleration feedforward.
+        double kG = 0.0; ///< Gravity feedforward.
+    };
+
+    /**
      * @struct MotorCommand
      * @brief Per-motor control demand and current limit settings.
      */
     struct MotorCommand
     {
-        MotorControlMode mode = MotorControlMode::Voltage;
-        double demand = 0.0;             ///< Volts, fraction (-1..1), or Amps depending on mode.
-        double statorCurrentLimit = 60.0; ///< Stator current clamp threshold (A).
-        NeutralMode neutralMode = NeutralMode::Brake; ///< Neutral mode setting.
+        MotorControlMode mode = MotorControlMode::Voltage; ///< Commanded control mode.
+        double demand = 0.0;                               ///< Volts, fraction (-1..1), Amps, or target setpoint.
+        double statorCurrentLimit = 60.0;                  ///< Stator current clamp threshold (A).
+        NeutralMode neutralMode = NeutralMode::Brake;      ///< Neutral mode setting.
+        ClosedLoopGains gains = {};                        ///< Optional closed-loop PID gains for sim-side control.
     };
 
     /**
@@ -52,8 +75,8 @@ namespace FRCBananaSim::Control
      */
     struct SimInputs
     {
-        // 8 motors: [0..3] = Steer (FL, FR, BL, BR), [4..7] = Drive (FL, FR, BL, BR)
-        std::array<MotorCommand, 8> motorCommands;
+        // 24 motors: [0..3] = Steer (FL, FR, BL, BR), [4..7] = Drive (FL, FR, BL, BR), [8..23] = Mechanisms
+        std::array<MotorCommand, MAX_MOTOR_SLOTS> motorCommands;
         uint32_t digitalOutputs = 0; ///< Solenoids / pneumatic bitfield.
         bool robotEnabled = false;   ///< DriverStation enable state.
         bool isAutonomous = false;  ///< Autonomous vs Teleop mode.
@@ -67,22 +90,33 @@ namespace FRCBananaSim::Control
      */
     struct SimOutputs
     {
-        // 8 encoders: [0..3] = Steer (rad, continuous unwrapped), [4..7] = Drive (rad, continuous)
-        std::array<double, 8> encoderPositions = { 0.0 };
-        std::array<double, 8> encoderVelocities = { 0.0 };
-        std::array<double, 8> motorCurrents = { 0.0 }; ///< Instantaneous stator current (A).
+        // Rotor & Joint Feedback per Motor Slot [0..23]
+        std::array<double, MAX_MOTOR_SLOTS> encoderPositions = { 0.0 };      ///< Joint rad or meters.
+        std::array<double, MAX_MOTOR_SLOTS> encoderVelocities = { 0.0 };     ///< Joint rad/s or m/s.
+        std::array<double, MAX_MOTOR_SLOTS> rotorPositionsRot = { 0.0 };     ///< Ungeared rotor rotations.
+        std::array<double, MAX_MOTOR_SLOTS> rotorVelocitiesRps = { 0.0 };    ///< Ungeared rotor RPS.
+        std::array<double, MAX_MOTOR_SLOTS> motorCurrents = { 0.0 };         ///< Stator current (A).
+        std::array<double, MAX_MOTOR_SLOTS> motorSupplyCurrents = { 0.0 };   ///< Supply current (A).
+        std::array<bool, MAX_MOTOR_SLOTS> forwardLimitTriggered = { false }; ///< Forward hardware limit switch state.
+        std::array<bool, MAX_MOTOR_SLOTS> reverseLimitTriggered = { false }; ///< Reverse hardware limit switch state.
 
-        // CTRE Pigeon 2 IMU (WPILib NWU Standard: CCW positive)
-        // Standard coordinates: +X Right, +Y Up, +Z Forward
-        double gyroYaw = 0.0;     ///< Heading in radians (CCW positive: 0 facing +Z, +pi/2 facing -X left).
-        double gyroPitch = 0.0;   ///< Pitch in radians (nose up positive).
-        double gyroRoll = 0.0;    ///< Roll in radians (right bank positive).
-        double gyroYawRate = 0.0; ///< Rotational velocity around vertical axis (rad/s, CCW positive).
+        // Standalone Absolute/Relative Encoders (CANcoders)
+        std::array<double, MAX_CANCODER_SLOTS> cancoderPositionsRot = { 0.0 };  ///< CANcoder raw position (rotations).
+        std::array<double, MAX_CANCODER_SLOTS> cancoderVelocitiesRps = { 0.0 }; ///< CANcoder velocity (RPS).
 
-        // Electrical telemetry
+        // CTRE Pigeon 2 / navX IMU (WPILib NWU Standard)
+        double gyroYaw = 0.0;                                                ///< Continuous CCW-positive yaw (rad).
+        double gyroPitch = 0.0;                                              ///< Pitch (rad).
+        double gyroRoll = 0.0;                                               ///< Roll (rad).
+        double gyroYawRate = 0.0;                                            ///< Yaw angular rate around vertical (rad/s).
+        glm::dvec3 gyroAngularVelocityRadPerSec = { 0.0, 0.0, 0.0 };          ///< 3-axis angular velocity in NWU (rad/s).
+        glm::dvec3 accelSpecificForceMetersPerSec2 = { 0.0, 0.0, 9.80665 };   ///< 3-axis specific force in NWU (m/s^2).
+        glm::dquat imuOrientationQuat = { 1.0, 0.0, 0.0, 0.0 };               ///< Orientation quaternion in NWU.
+
+        // Electrical & Digital I/O
         double batteryTerminalVoltage = 12.60; ///< Terminal voltage post-sag (V).
         double totalBusCurrent = 1.5;          ///< Instantaneous bus current draw (A).
-        uint32_t digitalInputs = 0;            ///< Beam breaks, limit switches bitfield.
+        uint32_t digitalInputs = 0;            ///< Bit i = DIO channel i (beam breaks, limit switches).
         bool isBrownedOut = false;             ///< Brownout stage active.
     };
 }

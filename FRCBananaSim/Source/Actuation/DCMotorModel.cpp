@@ -99,6 +99,26 @@ namespace FRCBananaSim::Actuation
         return DCMotorModel(12.0_V, 0.25_Nm, 9.2_A, 6000.0_rpm, 0.25_A, 1.0e-6, gearRatio, efficiency);
     }
 
+    DCMotorModel DCMotorModel::WithMotorCount(uint32_t count) const
+    {
+        if (count <= 1)
+        {
+            return *this;
+        }
+
+        double n = static_cast<double>(count);
+        return DCMotorModel(
+            nominalVoltage,
+            stallTorque * n,
+            stallCurrent * n,
+            freeSpeedRadPerSec,
+            freeCurrent * n,
+            rotorInertia * n,
+            gearRatio,
+            gearboxEfficiency
+        );
+    }
+
     AffineMotorTorque DCMotorModel::CalculateAffineTorqueTerms(double appliedVoltage) const
     {
         AffineMotorTorque terms;

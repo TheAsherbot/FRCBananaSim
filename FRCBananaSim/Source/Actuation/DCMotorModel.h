@@ -64,6 +64,17 @@ namespace FRCBananaSim::Actuation
         static DCMotorModel GoBilda5202(double gearRatio = 1.0, double efficiency = 1.0);
 
         /**
+         * @brief Returns an equivalent DCMotorModel scaled for multiple identical motors in a single gearbox.
+         *
+         * Multiplies stall torque, stall current, free current, and rotor inertia by motor count,
+         * while dividing winding resistance by motor count. Free speed and nominal voltage remain invariant.
+         *
+         * @param count Number of identical motors coupled together (N >= 1).
+         * @return Scaled DCMotorModel instance.
+         */
+        DCMotorModel WithMotorCount(uint32_t count) const;
+
+        /**
          * @brief Calculates unconditionally stable semi-implicit torque at the gearbox output shaft.
          * @param appliedVoltage Voltage across the motor windings (V).
          * @param currentAngularVelocity Output shaft angular velocity at start of step (rad/s).
