@@ -162,20 +162,22 @@ namespace FRCBananaSim::Robot::Schema
 
     /**
      * @struct SensorConfig
-     * @brief Sensory transducer specification (IMUs, CANcoders, limit switches, beam breaks).
+     * @brief Sensory transducer specification (IMUs, CANcoders, analog sensors, I2C/SPI devices, limit switches).
      */
     struct SensorConfig
     {
         std::string name;
-        std::string type; ///< "imu_pigeon2", "imu_navx", "cancoder", "limit_switch", "beam_break"
+        std::string type; ///< "imu_pigeon2", "imu_navx", "cancoder", "limit_switch", "beam_break", "analog_input", "laser_can", "color_sensor", "custom"
+        std::string bus = "rio"; ///< "rio", "canivore", "i2c_onboard", "i2c_mxp", "spi", "analog"
         uint32_t canId = 0;
-        std::string canBus = "rio";
+        uint32_t dioChannel = 0;
+        uint32_t analogChannel = 0;     ///< AnalogIn channel [0..7] for potentiometers / pressure transducers
+        uint32_t i2cAddress = 0;        ///< 7-bit I2C device address
+        uint32_t attachToControllerCanId = 0; ///< Motor controller CAN ID for hard-wired limit switches
         std::string parentLink;
         std::string targetJoint;
         std::string contactZone;
-        uint32_t dioChannel = 0;
-        uint32_t attachToControllerCanId = 0;
-        std::string limitDirection; ///< "forward" or "reverse"
+        std::string limitDirection;     ///< "forward" or "reverse"
         double triggerMin = 0.0;
         double triggerMax = 0.0;
         bool normallyClosed = false;
@@ -189,6 +191,10 @@ namespace FRCBananaSim::Robot::Schema
         double sensorToMechanismRatio = 1.0;
         uint32_t cpr = 4096;
         double offsetRad = 0.0;
+
+        // Custom / vendor-specific metadata for arbitrary sensors
+        std::unordered_map<std::string, double> customNumericParams;
+        std::unordered_map<std::string, std::string> customStringParams;
     };
 
     /**

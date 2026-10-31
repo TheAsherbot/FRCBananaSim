@@ -14,6 +14,7 @@ namespace FRCBananaSim::Control
 {
     constexpr size_t MAX_MOTOR_SLOTS = 24;   ///< [0..3] Steer, [4..7] Drive, [8..23] Mechanisms
     constexpr size_t MAX_CANCODER_SLOTS = 12;
+    constexpr size_t MAX_ANALOG_INPUTS = 8;  ///< Standard RoboRIO Analog In channels [0..7] (0.0V to 5.0V)
 
     /**
      * @enum MotorControlMode
@@ -113,10 +114,11 @@ namespace FRCBananaSim::Control
         glm::dvec3 accelSpecificForceMetersPerSec2 = { 0.0, 0.0, 9.80665 };   ///< 3-axis specific force in NWU (m/s^2).
         glm::dquat imuOrientationQuat = { 1.0, 0.0, 0.0, 0.0 };               ///< Orientation quaternion in NWU.
 
-        // Electrical & Digital I/O
-        double batteryTerminalVoltage = 12.60; ///< Terminal voltage post-sag (V).
-        double totalBusCurrent = 1.5;          ///< Instantaneous bus current draw (A).
-        uint32_t digitalInputs = 0;            ///< Bit i = DIO channel i (beam breaks, limit switches).
-        bool isBrownedOut = false;             ///< Brownout stage active.
+        // Electrical & Digital/Analog I/O
+        double batteryTerminalVoltage = 12.60;                         ///< Terminal voltage post-sag (V).
+        double totalBusCurrent = 1.5;                                  ///< Instantaneous bus current draw (A).
+        uint32_t digitalInputs = 0;                                    ///< Bit i = DIO channel i (beam breaks, limit switches).
+        std::array<double, MAX_ANALOG_INPUTS> analogInputs = { 0.0 };  ///< Analog input voltages (0.0V to 5.0V).
+        bool isBrownedOut = false;                                     ///< Brownout stage active.
     };
 }
