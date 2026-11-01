@@ -49,7 +49,7 @@ This Revision 2 updates the external plan to reconcile directly with the existin
 |---|---|
 | **Timeline** | October 30 – November 5, 2026 (7 Days) |
 | **Prerequisites** | Block 1 & Block 2 complete; Analytic Swerve (`SwerveDrivetrainModel`, 24/24 passing), `DCMotorModel`, `BatteryModel`, `JointSystem`, `ParameterStore`, `Units`, and `HALSimWebSocketServer` v0 operational. |
-| **Primary Deliverables** | 1. **Robot Data Schema v1**: Formal JSON schema (`manifest.json`, `sidecar.json`, `materials.json`) + `RobotSchemaLoader` and `RobotAssembler`.<br>2. **Mechanisms**: Single/cascade/continuous Elevators, single/double-jointed Arms with hard stops, closed-loop Four-Bar linkage, Gear/Chain joint couplings, and 1D ODE Flywheels.<br>3. **Sensor Suite**: Gear-scaled & quantized Encoders (`CANcoder`), 6-axis IMU (`Pigeon2` / `navX`) with specific force, bias, and noise, Limit Switches, and `ObjectLayers::SENSOR` Beam Breaks.<br>4. **Vendor `SimDevice` Dispatcher & Lockstep**: Maps CTRE Phoenix 6 (`TalonFXSimState`, `CANcoderSimState`, `Pigeon2SimState`) and REVLib (`SparkMaxSim`) over `halsim_ws` to `sidecar.json` CAN IDs, stepping in lockstep via `frc::sim::PauseTiming()` + `StepTiming(20_ms)` with 10x deterministic PID fallback.<br>5. **CAD Prep**: Fusion 360 test assembly (chassis, swerve module, elevator, arm, four-bar) built with real joints and physical materials by Nov 5. |
+| **Primary Deliverables** | 1. **Robot Data Schema v1**: Formal JSON schema (`manifest.json`, `sidecar.json`, `materials.json`) featuring pairwise contact friction/restitution matrix + `RobotSchemaLoader` and `RobotAssembler`.<br>2. **Mechanisms**: Single/cascade/continuous Elevators, single/double-jointed Arms with hard stops, closed-loop Four-Bar linkage, unified `PowerCoupling` transmissions (gears, timing belts, roller chains, cables) with efficiency and backlash, and 1D ODE Flywheels.<br>3. **Sensor Suite**: 8-channel Analog inputs ($0\text{--}5\text{ V}$), custom I²C/SPI/CAN sensors via generic parameter dictionaries, gear-scaled & quantized Encoders (`CANcoder`), 6-axis IMU (`Pigeon2` / `navX`) with specific force, bias, and noise, Limit Switches, and `ObjectLayers::SENSOR` Beam Breaks. ...
 | **Gate 2a (Mechanism Stability)** | A complete robot (analytic swerve + 4-bar intake + 2-stage elevator + double-jointed arm + flywheel) loads from Schema v1 JSON and runs all mechanisms simultaneously for **5 simulated minutes (60,000 steps at 200 Hz)** with zero NaNs, energy ledger closure within $1.5\%$, and four-bar loop drift **$< 1.5\text{ mm}$** under a $15\text{ kg}$ load. |
 | **Gate 2b (`SimDevice` Lockstep)** | Real C++ robot subsystem code drives all mechanisms via `halsim_ws` lockstep (`PauseTiming()` + `StepTiming(20_ms)`) at both `1x` and `10x` speeds. If Phoenix 6 background threads drift at `10x`, the built-in deterministic `OnControllerPIDModel` fallback activates cleanly. |
 | **Gate 3 (Schema v1 Freeze)** | Schema v1 is frozen and passes round-trip validation by **Nov 5** so the Block 4 Fusion exporter starts on schedule on Nov 6. |
@@ -82,7 +82,7 @@ flowchart TD
 
     subgraph ControlBoundary["FRCBananaSim: Expanded Control Boundary (Control/SimControlBoundary.h)"]
         SimInputs["struct SimInputs (24 MotorCommand Slots [0..7 Swerve, 8..23 Mech], Solenoids)"]
-        SimOutputs["struct SimOutputs (24 Encoders, 12 CANcoders, 6-Axis IMU, DIOs, V_bus)"]
+        SimOutputs["struct SimOutputs (24 Encoders, 12 CANcoders, 6-Axis IMU, DIOs, 8 Analog Ins, V_bus)"]
         Dispatcher --> SimInputs
         ClosedLoopFallback --> SimInputs
         SimOutputs --> Dispatcher
@@ -192,11 +192,13 @@ A planar four-bar linkage consists of 4 links: Base/Chassis ($L_0$), Crank/Drive
 
 ---
 
-### 3.5 Gear & Chain Coupling Between Joints
+### 3.5 Unified Power Coupling (Gears, Timing Belts, Roller Chains, Cables)
 
-Robots frequently couple two joints mechanically—for example, a chain-and-sprocket virtual four-bar where wrist angle $\theta_2$ tracks shoulder angle $\theta_1$ by ratio $\rho$, or dual counter-rotating intake linkages ($\theta_2 = -\theta_1$):
-*   **Primary Implementation (`JPH::GearConstraint`):** Connects Hinge $A$ and Hinge $B$ via `JPH::GearConstraintSettings` with `mRatio = rho`, calling `SetConstraints(hingeA, hingeB)` so Jolt enforces $\omega_B + \rho \omega_A = 0$ inside the velocity and position solver.
-*   **Fallback / Analytic Bilateral Coupling:** For non-adjacent links where Jolt's `GearConstraint` parent topology does not apply, a stiff implicit bilateral coupling torque $\tau_c = k_{\text{couple}}(\rho \theta_A - \theta_B) + c_{\text{couple}}(\rho \omega_A - \omega_B)$ is applied symmetrically to both joints.
+All two-joint mechanical power transmissions share identical kinematics and dynamics governed by ratio $\rho$, inversion flag $s \in \{-1, +1\}$, efficiency $\eta \in [0, 1]$, and backlash $\delta$:
+$$\omega_B = s \cdot \rho \cdot \omega_A, \qquad \tau_B = s \cdot \frac{\eta}{\rho} \tau_A - \tau_{\text{loss}}$$
+Deadband play is enforced across backlash window $|\theta_B - s \cdot \rho \cdot \theta_A| \le \frac{\delta}{2}$.
+* **Primary Implementation (`JPH::GearConstraint`):** Connects Hinge $A$ and Hinge $B$ via `JPH::GearConstraintSettings` with `mRatio = s * rho`, enforcing velocity lockstep directly in the Jolt solver.
+* **Analytic / Non-Adjacent Transmission:** Applies stiff bilateral penalty torque $\tau_c = k_{\text{couple}}(s \cdot \rho \cdot \theta_A - \theta_B) + c_{\text{couple}}(s \cdot \rho \cdot \omega_A - \omega_B)$ symmetrically across both joints.
 
 ---
 
@@ -546,11 +548,17 @@ Data is partitioned into three JSON files:
     },
     {
       "name": "shoulder_wrist_leveling_chain",
-      "type": "chain_ratio",
+      "type": "power_coupling",
       "solverMode": "jolt_constraint",
-      "masterJoint": "arm_shoulder_hinge",
-      "slaveJoint": "arm_wrist_hinge",
-      "ratio": -1.0
+      "powerCoupling": {
+        "transmissionType": "chain",
+        "masterJoint": "arm_shoulder_hinge",
+        "slaveJoint": "arm_wrist_hinge",
+        "ratio": 1.0,
+        "inverted": true,
+        "efficiency": 0.92,
+        "backlashRad": 0.005
+      }
     }
   ],
   "sensors": [
@@ -606,6 +614,31 @@ Data is partitioned into three JSON files:
       "dioChannel": 2,
       "debounceTime_s": 0.010,
       "inverted": true
+    },
+    {
+      "name": "arm_shoulder_potentiometer",
+      "type": "analog_input",
+      "bus": "analog",
+      "analogChannel": 0,
+      "targetJoint": "arm_shoulder_hinge",
+      "customNumericParams": {
+        "minVolts": 0.5,
+        "maxVolts": 4.5,
+        "minAngleRad": -1.5708,
+        "maxAngleRad": 1.5708
+      }
+    },
+    {
+      "name": "intake_distance_sensor",
+      "type": "laser_can",
+      "bus": "rio",
+      "canId": 35,
+      "parentLink": "intake_coupler_link",
+      "mountOffset_m": [0.12, 0.0, 0.0],
+      "customNumericParams": {
+        "maxRangeMeters": 2.0,
+        "stdDevMeters": 0.003
+      }
     }
   ]
 }
@@ -634,6 +667,7 @@ namespace FRCBananaSim::Control
 {
     constexpr size_t MAX_MOTOR_SLOTS = 24;   ///< [0..3] Steer, [4..7] Drive, [8..23] Mechanisms
     constexpr size_t MAX_CANCODER_SLOTS = 12;
+    constexpr size_t MAX_ANALOG_INPUTS = 12;
 
     enum class MotorControlMode : uint8_t
     {
@@ -683,12 +717,14 @@ namespace FRCBananaSim::Control
     struct SimOutputs
     {
         // Rotor & Joint Feedback per Motor Slot [0..23]
-        std::array<double, MAX_MOTOR_SLOTS> encoderPositions = { 0.0 };      ///< Joint rad or meters
-        std::array<double, MAX_MOTOR_SLOTS> encoderVelocities = { 0.0 };     ///< Joint rad/s or m/s
-        std::array<double, MAX_MOTOR_SLOTS> rotorPositionsRot = { 0.0 };     ///< Ungeared rotor rotations
-        std::array<double, MAX_MOTOR_SLOTS> rotorVelocitiesRps = { 0.0 };    ///< Ungeared rotor RPS
-        std::array<double, MAX_MOTOR_SLOTS> motorCurrents = { 0.0 };         ///< Stator current (A)
-        std::array<double, MAX_MOTOR_SLOTS> motorSupplyCurrents = { 0.0 };   ///< Supply current (A)
+        std::array<double, MAX_MOTOR_SLOTS> encoderPositions = { 0.0 };      ///< Joint rad or meters.
+        std::array<double, MAX_MOTOR_SLOTS> encoderVelocities = { 0.0 };     ///< Joint rad/s or m/s.
+        std::array<double, MAX_MOTOR_SLOTS> rotorPositionsRot = { 0.0 };     ///< Ungeared rotor rotations.
+        std::array<double, MAX_MOTOR_SLOTS> rotorVelocitiesRps = { 0.0 };    ///< Ungeared rotor RPS.
+        std::array<double, MAX_MOTOR_SLOTS> motorCurrents = { 0.0 };         ///< Stator current (A).
+        std::array<double, MAX_MOTOR_SLOTS> motorSupplyCurrents = { 0.0 };   ///< Supply current (A).
+        std::array<bool, MAX_MOTOR_SLOTS> forwardLimitTriggered = { false }; ///< Forward hardware limit switch state.
+        std::array<bool, MAX_MOTOR_SLOTS> reverseLimitTriggered = { false }; ///< Reverse hardware limit switch state.
         std::array<bool, MAX_MOTOR_SLOTS> forwardLimitTriggered = { false };
         std::array<bool, MAX_MOTOR_SLOTS> reverseLimitTriggered = { false };
 
@@ -778,7 +814,7 @@ flowchart LR
 *   **Tasks:**
     1. Update `FRCBananaSim/Source/Control/SimControlBoundary.h`: Expand `motorCommands` to 24 slots, add 12 CANcoder slots, 6-axis IMU vectors, and limit flags while preserving `MotorCommand` and existing field names.
     2. Add `DCMotorModel::WithMotorCount(uint32_t count)` to `DCMotorModel.h/.cpp` (scales $\tau_{\text{stall}}$ and $I_{\text{stall}}$ by $N$, divides $R$ by $N$, scales $J_{\text{rotor}}$ by $N$).
-    3. Create `FRCBananaSim/Source/Robot/Schema/RobotManifest.h`, `RobotSidecar.h`, `MaterialLibrary.h`, and `RobotSchemaLoader.h/.cpp`:
+    3. Create `FRCBananaSim/Source/Robot/Schema/RobotManifest.h`, `RobotSidecar.h` (with PowerCouplingConfig), `MaterialLibrary.h` (with pairwise contact matrix), and `RobotSchemaLoader.h/.cpp`:
        * Load `manifest.json`, `sidecar.json`, and `materials.json` using `nlohmann::json` and `Units`.
        * Validate `schemaVersion == "1.0.0"`.
        * Verify that every `link` has `mass_kg > 0.0` and a positive-definite inertia tensor.
@@ -802,7 +838,7 @@ flowchart LR
     2. Create `ArmComponent.h`, `FourBarComponent.h`, `CouplingComponent.h`, and `FlywheelComponent.h` under `FRCBananaSim/Source/Robot/Mechanisms/Components/`.
     3. Configure `JPH::GroupFilterTable` in `JoltContext` so links within the same mechanism assembly ignore internal collisions.
     4. Implement `MechanismSystem.h/.cpp`:
-       * In `MechanismSystem::FixedUpdate(dt)`, compute semi-implicit joint torques for single/double-jointed arms (with reflected inertia $J_{\text{rotor}} G^2$ and critically damped hard stops $f = 40\text{ Hz}, \zeta = 1.0$) and four-bar cranks, applying torques to Jolt hinge bodies and updating gear/chain couplings.
+       * In `MechanismSystem::FixedUpdate(dt)`, compute semi-implicit joint torques for single/double-jointed arms (with reflected inertia $J_{\text{rotor}} G^2$ and critically damped hard stops $f = 40\text{ Hz}, \zeta = 1.0$) and four-bar cranks, applying torques to Jolt hinge bodies and updating gear/chain couplings. Compute hinge torques for arms and four-bar cranks, updating unified PowerCoupling transmissions (gears, belts, chains).
     5. Implement `FlywheelSystem.h/.cpp`:
        * In `FlywheelSystem::FixedUpdate(dt)`, sub-step the 1D semi-implicit rotational ODE 4 times ($\Delta t_s = 1.25\text{ ms}$), apply net reaction recoil torque to the parent Jolt body, and sync visual transforms in `RenderUpdate`.
     6. Implement `CompositeMassSystem.h/.cpp`:
@@ -816,7 +852,7 @@ flowchart LR
     2. Create `FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.h/.cpp` (3-axis gyro + 3-axis specific-force accelerometer in NWU frame with lever-arm $\dot{\boldsymbol{\omega}} \times \mathbf{r} + \boldsymbol{\omega} \times (\boldsymbol{\omega} \times \mathbf{r})$, Gauss-Markov bias random walk, and Gaussian white noise).
     3. Create `LimitSwitchComponent.h`, `BeamBreakComponent.h`, and `ContactZoneComponent.h` under `FRCBananaSim/Source/Robot/Sensors/Components/`.
     4. Implement `SensorSystem.h/.cpp`:
-       * In `SensorSystem::FixedUpdate(dt)` (executed immediately after `PhysicsSystem::FixedUpdate(dt)`), read post-step joint coordinates, link velocities, and `ObjectLayers::SENSOR` contact overlaps, apply quantization, IMU noise, and beam-break debounce filtering, and pack readings into `SimOutputs`.
+       * In `SensorSystem::FixedUpdate(dt)` (executed immediately after `PhysicsSystem::FixedUpdate(dt)`), read post-step joint coordinates, link velocities, and `ObjectLayers::SENSOR` contact overlaps, apply quantization, IMU noise, and beam-break debounce filtering, and pack readings into `SimOutputs`. Read post-step joint coordinates, compute analogInputs voltages, evaluate beam breaks and custom sensor parameters, and pack readings into SimOutputs.
     5. Implement `Tests/SensorSuiteTest.h/.cpp` verifying encoder quantization steps, IMU $+9.80665\text{ m/s}^2$ Z reading at rest, ramp tilt readout, centripetal acceleration on a spinning chassis, limit switch tripping at elevator stops, and beam break DIO activation.
 
 ### Day 5 (Nov 3): HALSim `SimDevice` Dispatcher & Lockstep Coordinator

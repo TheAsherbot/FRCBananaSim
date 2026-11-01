@@ -83,10 +83,10 @@ Your **C++ Robot Code** (WPILib GradleRIO) runs unmodified as a native desktop p
 │  └──────────────────┬───────────────┘   └───────────▲───────────────────┘  │
 │                     │ Translates to Structs         │                      │
 │                     ▼                               │ Camera Poses & Tags  │
-│  ┌──────────────────────────────────┐               │                      │
-│  │ SimInputs (Volts, PWM, Solenoid) │               │                      │
-│  │ SimOutputs (Encoders, IMU, DIO)  │               │                      │
-│  └──────────────────┬───────────────┘               │                      │
+│  ┌─────────────────────────────────────────┐        │                      │
+│  │ SimInputs (Volts, PWM, Solenoid)        │        │                      │
+│  │ SimOutputs (Encoders, IMU, DIO, Analog) │        │                      │
+│  └──────────────────┬──────────────────────┘        │                      │
 └─────────────────────┼───────────────────────────────┼──────────────────────┘
                       │ Joint Demands                 │
 ┌─────────────────────▼───────────────────────────────┴──────────────────────┐
@@ -155,12 +155,12 @@ Your **C++ Robot Code** (WPILib GradleRIO) runs unmodified as a native desktop p
 1. **CAD & Configuration Ingestion (Load-Time)**
    - **Fusion 360 Python Exporter**: Traverses assembly hierarchy, clusters rigid joints into kinematic links, queries `PhysicalProperties` (High accuracy) for link mass, center of mass, and body-frame inertia tensors ($I_{xx}, I_{yy}, I_{zz}, I_{xy}, I_{xz}, I_{yz}$), extracts joint types and motion limits, and tessellates collision/visual meshes.
    - **Sidecar Config (`sidecar.json`)**: Ingests metadata not encoded in CAD: motor presets, gear ratios, current limits, CAN device IDs (`canId`, `canBus`), collider proxies, and mechanism roles.
-   - **Layered Parameter Store (`materials.json` / `calibrated.json`)**: Cascading parameter overrides (`defaults -> measured -> calibrated`) with explicit physical units and confidence intervals for friction ($\mu$), restitution ($e$), foam stiffness ($k, n$), damping ($c$), and carpet grip.
+   - **Layered Parameter Store (`materials.json` / `calibrated.json`)**: Cascading parameter overrides (`defaults -> measured -> calibrated`) with pairwise interfacial contact matrices (`materialPairs`) storing calibrated friction ($\mu_s, \mu_k$) and restitution ($e$) between specific material pairs (e.g., Colson rubber on carpet vs. foam on polycarbonate), with fallback geometric mean mixing.
    - **C++ Importer & Mass Reconciliation**: Assembles ECS entities and Jolt constraints, cross-checks total/subsystem mass against real scale readings, and distributes unmodeled mass offsets.
 
 2. **User C++ Robot Code & Hardware Interface Layer (Zero Code Duplication)**
    - **Unmodified Robot Code Execution**: Your C++ robot project enables `wpi.sim.addWebsocketsClient()` in `build.gradle` and compiles natively via `./gradlew simulateNative`.
-   - **WPILib HALSim WebSocket Server**: `FRCBananaSim` hosts a WebSocket server (`ws://127.0.0.1:3300/wpilibws` in 1x mode, or ports `3300..3300+N` in Fleet mode). It parses incoming motor commands into `SimInputs` and sends `SimOutputs` (encoders, gyro yaw/pitch/roll, DIO beam breaks, battery voltage) back into the HAL.
+   - **WPILib HALSim WebSocket Server**: `FRCBananaSim` hosts a WebSocket server (`ws://127.0.0.1:3300/wpilibws` in 1x mode, or ports `3300..3300+N` in Fleet mode). It parses incoming motor commands into `SimInputs` and sends `SimOutputs` (encoders, gyro yaw/pitch/roll, DIO beam breaks, 8-channel AnalogIn voltages, battery voltage) back into the HAL.
    - **Dynamic `SimDevice` Dispatching**: CTRE Phoenix 6 (`TalonFXSimState`) and REVLib (`SparkMaxSim`) expose their simulation state as `SimDevice` entries over WebSockets. The bridge maps those device strings and CAN IDs to the corresponding motors in `sidecar.json`.
    - **Lockstep Time Stepping (Option A Fleet Mode)**: A lightweight hook in your robot project's `SimulationInit()` calls `frc::sim::PauseTiming()` when launched in Fleet mode. Each time `FRCBananaSim` finishes 4 physics substeps (20 ms), it sends a step sync message over the WebSocket; the robot process runs `frc::sim::StepTiming(20_ms)` inline and replies with the new motor voltages.
    - **NetworkTables 4 (NT4) Limelight Server**: `FRCBananaSim` embeds `ntcore` and publishes `/limelight/tv`, `tx`, `ty`, `ta`, `tid`, `/limelight/botpose_wpiblue`, and pipeline latency `cl`. Your C++ vision subsystem reads NT4 exactly as it does on the real robot.
@@ -230,10 +230,10 @@ Your **C++ Robot Code** (WPILib GradleRIO) runs unmodified as a native desktop p
   - Elevators: slider plus motor, with cascade and continuous rigging coupling. Try Jolt's gear or rack-and-pinion constraints first, and a kinematic coupling if that is less stable. Not yet tested.
   - Arms: single and double-jointed, with gravity torque and hard stops from joint limits.
   - Four-bar linkage under motor load (the bake-off showed 1.26 mm drift with a 15 kg load).
-  - Gear and chain coupling between joints.
+  - Unified `PowerCoupling` transmission between joints (gears, timing belts, roller chains, cables) with velocity ratio, inversion, efficiency, and backlash.
   - A flywheel as a motor-driven joint, with no piece interaction yet.
 - **Robot data schema v1:** Links with mass, center of mass and full inertia tensor about the center of mass (kg and m). Joints with type, axis, origin and limits. Gear ratios. Motor presets keyed by name (Kraken X60, Falcon 500, NEO, NEO Vortex), with constants taken from WPILib's `DCMotor` (verify the values). Intake and shooter contact zones. Material names. The **sidecar format** for what CAD can't hold (motors, CAN IDs, gear ratios, roles).
-- **Sensors:** encoders (gear scaling, quantization), 6-axis IMU with bias and noise, limit switches, beam breaks.
+- **Sensors:** encoders (gear scaling, quantization), 6-axis IMU with bias and noise, limit switches, beam breaks, 8-channel Analog inputs ($0\text{--}5\text{ V}$), and custom I²C/SPI/CAN sensors via generic parameter dictionaries.
 - **HALSim `SimDevice` Dispatcher & Lockstep Hook:**
   - Maps CTRE Phoenix 6 (`TalonFXSimState`) and REVLib (`SparkMaxSim`) `SimDevice` messages to the CAN IDs in `sidecar.json`.
   - Test whether Phoenix 6 on-controller closed-loop modes (`PositionVoltage`, `VelocityVoltage`) step cleanly under `frc::sim::PauseTiming()` + `StepTiming(20_ms)`. If Phoenix's background thread drifts at 10x, fall back to outputting motor voltage from robot code or running WPILib-side PID in sim.

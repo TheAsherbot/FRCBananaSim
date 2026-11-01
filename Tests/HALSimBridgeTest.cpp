@@ -79,8 +79,8 @@ namespace FRCBananaSim::Tests
         // 5. Inbound SimDevice (Talon FX) JSON Dispatching
         {
             HALSimWebSocketServer server;
-            // Talon FX[2] = FrontLeft Drive (Index 4)
-            std::string talonJson = "{\"type\":\"SimDevice\",\"device\":\"Talon FX[2]\",\"data\":{\">motorVoltage\":10.5}}";
+            // Talon FX[0] = FrontLeft Drive (Index 4)
+            std::string talonJson = "{\"type\":\"SimDevice\",\"device\":\"Talon FX[0]\",\"data\":{\">motorVoltage\":10.5}}";
             bool handled = server.DispatchIncomingJson(talonJson);
 
             TEST_EXPECT_TRUE(ctx, handled);

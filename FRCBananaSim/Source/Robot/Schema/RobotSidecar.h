@@ -136,28 +136,33 @@ namespace FRCBananaSim::Robot::Schema
     };
 
     /**
-     * @struct ChainCouplingConfig
-     * @brief Joint-to-joint gear/chain coupling (e.g., leveling wrist).
+     * @struct PowerCouplingConfig
+     * @brief Unified mechanical power transmission coupling between two joints (gears, timing belts, chains, cables).
      */
-    struct ChainCouplingConfig
+    struct PowerCouplingConfig
     {
         std::string masterJoint;
         std::string slaveJoint;
-        double ratio = 1.0;
+        std::string transmissionType = "gear"; ///< "gear", "belt", "chain", "cable", "virtual_fourbar"
+        double ratio = 1.0;                    ///< Kinematic velocity ratio (omega_slave / omega_master)
+        bool inverted = false;                 ///< Inverts direction of slave relative to master
+        double efficiency = 0.95;              ///< Mechanical torque transmission efficiency (0.0 to 1.0)
+        double backlashRad = 0.0;              ///< Mechanical backlash / deadband play (rad or meters)
     };
 
     /**
      * @struct CouplingConfig
-     * @brief Generic joint mechanical coupling configuration.
+     * @brief Generic mechanical coupling entry in sidecar.json.
      */
     struct CouplingConfig
     {
         std::string name;
-        std::string type; ///< "elevator_cascade", "four_bar_loop", "chain_ratio"
+        std::string type; ///< "power_coupling", "elevator_cascade", "four_bar_loop"
         std::string solverMode = "analytic_coupled"; ///< "analytic_coupled" or "jolt_constraint"
-        std::vector<StageCouplingConfig> stages;
+
+        PowerCouplingConfig powerCoupling;
+        std::vector<StageCouplingConfig> cascadeStages;
         FourBarCouplingConfig fourBar;
-        ChainCouplingConfig chain;
     };
 
     /**

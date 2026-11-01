@@ -162,6 +162,15 @@
     <ClCompile Include="Source\Telemetry\DrivetrainLogger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Robot\Schema\RobotManifest.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Robot\Schema\RobotSidecar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Robot\Schema\MaterialLibrary.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Utils\Log.h">
@@ -339,6 +348,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Source\Telemetry\DrivetrainLogger.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Schema\RobotManifest.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Schema\RobotSidecar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Robot\Schema\MaterialLibrary.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
