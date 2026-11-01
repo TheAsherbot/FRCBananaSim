@@ -1,0 +1,359 @@
+{
+  "schemaVersion": "1.0.0",
+  "robotName": "FRC_Reference_Robot_2026",
+  "units": "SI",
+  "coordinateSystem": "NWU",
+  "massSummary": {
+    "totalMass_kg": 54.20,
+    "centerOfMass_m": [ 0.012, 0.0, 0.215 ]
+  },
+  "links": [
+    {
+      "name": "base_link",
+      "isRoot": true,
+      "mass_kg": 38.50,
+      "centerOfMass_m": [ 0.0, 0.0, 0.085 ],
+      "inertiaTensor_kgm2": {
+        "ixx": 1.85,
+        "iyy": 1.92,
+        "izz": 3.45,
+        "ixy": 0.0,
+        "ixz": 0.02,
+        "iyz": 0.0
+      },
+      "material": "aluminum_6061",
+      "visualMesh": "Meshes/base_link.glb",
+      "colliders": [
+        {
+          "name": "chassis_bumper_box",
+          "type": "box",
+          "origin_m": [ 0.0, 0.0, 0.09 ],
+          "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+          "dimensions_m": [ 0.85, 0.85, 0.16 ],
+          "material": "bumper_fabric"
+        }
+      ]
+    },
+    {
+      "name": "elevator_stage_1",
+      "isRoot": false,
+      "mass_kg": 2.40,
+      "centerOfMass_m": [ 0.15, 0.0, 0.45 ],
+      "inertiaTensor_kgm2": {
+        "ixx": 0.18,
+        "iyy": 0.19,
+        "izz": 0.04,
+        "ixy": 0.0,
+        "ixz": 0.0,
+        "iyz": 0.0
+      },
+      "material": "aluminum_6061",
+      "visualMesh": "Meshes/elevator_stage_1.glb",
+      "colliders": [
+        {
+          "name": "stage1_proxy",
+          "type": "box",
+          "origin_m": [ 0.15, 0.0, 0.45 ],
+          "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+          "dimensions_m": [ 0.06, 0.42, 0.70 ],
+          "material": "aluminum_6061"
+        }
+      ]
+    },
+    {
+      "name": "elevator_carriage",
+      "isRoot": false,
+      "mass_kg": 3.10,
+      "centerOfMass_m": [ 0.18, 0.0, 0.50 ],
+      "inertiaTensor_kgm2": {
+        "ixx": 0.08,
+        "iyy": 0.09,
+        "izz": 0.05,
+        "ixy": 0.0,
+        "ixz": 0.0,
+        "iyz": 0.0
+      },
+      "material": "aluminum_6061",
+      "visualMesh": "Meshes/elevator_carriage.glb",
+      "colliders": [
+        {
+          "name": "carriage_proxy",
+          "type": "box",
+          "origin_m": [ 0.18, 0.0, 0.50 ],
+          "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+          "dimensions_m": [ 0.08, 0.36, 0.25 ],
+          "material": "aluminum_6061"
+        }
+      ]
+    },
+    {
+      "name": "arm_shoulder_link",
+      "isRoot": false,
+      "mass_kg": 3.50,
+      "centerOfMass_m": [ 0.25, 0.0, 0.0 ],
+      "inertiaTensor_kgm2": {
+        "ixx": 0.05,
+        "iyy": 0.28,
+        "izz": 0.28,
+        "ixy": 0.0,
+        "ixz": 0.0,
+        "iyz": 0.0
+      },
+      "material": "aluminum_6061",
+      "visualMesh": "Meshes/arm_shoulder.glb",
+      "colliders": [
+        {
+          "name": "shoulder_tube_proxy",
+          "type": "box",
+          "origin_m": [ 0.25, 0.0, 0.0 ],
+          "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+          "dimensions_m": [ 0.50, 0.08, 0.08 ],
+          "material": "aluminum_6061"
+        }
+      ]
+    },
+    {
+      "name": "arm_wrist_link",
+      "isRoot": false,
+      "mass_kg": 2.20,
+      "centerOfMass_m": [ 0.15, 0.0, 0.0 ],
+      "inertiaTensor_kgm2": {
+        "ixx": 0.03,
+        "iyy": 0.12,
+        "izz": 0.12,
+        "ixy": 0.0,
+        "ixz": 0.0,
+        "iyz": 0.0
+      },
+      "material": "aluminum_6061",
+      "visualMesh": "Meshes/arm_wrist.glb",
+      "colliders": [
+        {
+          "name": "wrist_proxy",
+          "type": "box",
+          "origin_m": [ 0.15, 0.0, 0.0 ],
+          "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+          "dimensions_m": [ 0.30, 0.15, 0.10 ],
+          "material": "aluminum_6061"
+        }
+      ]
+    },
+    {
+      "name": "intake_crank_link",
+      "isRoot": false,
+      "mass_kg": 0.85,
+      "centerOfMass_m": [ 0.12, 0.0, 0.0 ],
+      "inertiaTensor_kgm2": {
+        "ixx": 0.005,
+        "iyy": 0.03,
+        "izz": 0.03,
+        "ixy": 0.0,
+        "ixz": 0.0,
+        "iyz": 0.0
+      },
+      "material": "aluminum_6061",
+      "visualMesh": "Meshes/fourbar_crank.glb",
+      "colliders": []
+    },
+    {
+      "name": "intake_follower_link",
+      "isRoot": false,
+      "mass_kg": 0.80,
+      "centerOfMass_m": [ 0.12, 0.0, 0.0 ],
+      "inertiaTensor_kgm2": {
+        "ixx": 0.005,
+        "iyy": 0.03,
+        "izz": 0.03,
+        "ixy": 0.0,
+        "ixz": 0.0,
+        "iyz": 0.0
+      },
+      "material": "aluminum_6061",
+      "visualMesh": "Meshes/fourbar_follower.glb",
+      "colliders": []
+    },
+    {
+      "name": "intake_coupler_link",
+      "isRoot": false,
+      "mass_kg": 1.80,
+      "centerOfMass_m": [ 0.10, 0.0, 0.0 ],
+      "inertiaTensor_kgm2": {
+        "ixx": 0.02,
+        "iyy": 0.08,
+        "izz": 0.08,
+        "ixy": 0.0,
+        "ixz": 0.0,
+        "iyz": 0.0
+      },
+      "material": "polycarbonate",
+      "visualMesh": "Meshes/intake_coupler.glb",
+      "colliders": [
+        {
+          "name": "intake_roller_proxy",
+          "type": "box",
+          "origin_m": [ 0.10, 0.0, 0.0 ],
+          "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+          "dimensions_m": [ 0.24, 0.48, 0.12 ],
+          "material": "polycarbonate"
+        }
+      ]
+    },
+    {
+      "name": "shooter_flywheel_visual",
+      "isRoot": false,
+      "mass_kg": 0.50,
+      "centerOfMass_m": [ 0.0, 0.0, 0.0 ],
+      "inertiaTensor_kgm2": {
+        "ixx": 0.001,
+        "iyy": 0.002,
+        "izz": 0.001,
+        "ixy": 0.0,
+        "ixz": 0.0,
+        "iyz": 0.0
+      },
+      "material": "steel_4140",
+      "visualMesh": "Meshes/flywheel_wheel.glb",
+      "colliders": []
+    }
+  ],
+  "joints": [
+    {
+      "name": "elevator_stage1_slider",
+      "type": "prismatic",
+      "parentLink": "base_link",
+      "childLink": "elevator_stage_1",
+      "origin_m": [ 0.15, 0.0, 0.10 ],
+      "axis": [ 0.0, 0.0, 1.0 ],
+      "limits": {
+        "hasLimits": true,
+        "lower": 0.0,
+        "upper": 0.60,
+        "unit": "m",
+        "springFrequency_Hz": 40.0,
+        "springDampingRatio": 1.0
+      }
+    },
+    {
+      "name": "elevator_carriage_slider",
+      "type": "prismatic",
+      "parentLink": "elevator_stage_1",
+      "childLink": "elevator_carriage",
+      "origin_m": [ 0.03, 0.0, 0.0 ],
+      "axis": [ 0.0, 0.0, 1.0 ],
+      "limits": {
+        "hasLimits": true,
+        "lower": 0.0,
+        "upper": 0.60,
+        "unit": "m",
+        "springFrequency_Hz": 40.0,
+        "springDampingRatio": 1.0
+      }
+    },
+    {
+      "name": "arm_shoulder_hinge",
+      "type": "revolute",
+      "parentLink": "elevator_carriage",
+      "childLink": "arm_shoulder_link",
+      "origin_m": [ 0.05, 0.0, 0.10 ],
+      "axis": [ 0.0, 1.0, 0.0 ],
+      "limits": {
+        "hasLimits": true,
+        "lower": -0.20,
+        "upper": 1.95,
+        "unit": "rad",
+        "springFrequency_Hz": 40.0,
+        "springDampingRatio": 1.0
+      }
+    },
+    {
+      "name": "arm_wrist_hinge",
+      "type": "revolute",
+      "parentLink": "arm_shoulder_link",
+      "childLink": "arm_wrist_link",
+      "origin_m": [ 0.50, 0.0, 0.0 ],
+      "axis": [ 0.0, 1.0, 0.0 ],
+      "limits": {
+        "hasLimits": true,
+        "lower": -1.60,
+        "upper": 1.60,
+        "unit": "rad",
+        "springFrequency_Hz": 40.0,
+        "springDampingRatio": 1.0
+      }
+    },
+    {
+      "name": "fourbar_crank_hinge",
+      "type": "revolute",
+      "parentLink": "base_link",
+      "childLink": "intake_crank_link",
+      "origin_m": [ 0.35, 0.0, 0.12 ],
+      "axis": [ 0.0, 1.0, 0.0 ],
+      "limits": {
+        "hasLimits": true,
+        "lower": -0.10,
+        "upper": 1.60,
+        "unit": "rad",
+        "springFrequency_Hz": 40.0,
+        "springDampingRatio": 1.0
+      }
+    },
+    {
+      "name": "fourbar_coupler_hinge",
+      "type": "revolute",
+      "parentLink": "intake_crank_link",
+      "childLink": "intake_coupler_link",
+      "origin_m": [ 0.24, 0.0, 0.0 ],
+      "axis": [ 0.0, 1.0, 0.0 ],
+      "limits": {
+        "hasLimits": false,
+        "lower": 0.0,
+        "upper": 0.0,
+        "unit": "rad",
+        "springFrequency_Hz": 40.0,
+        "springDampingRatio": 1.0
+      }
+    },
+    {
+      "name": "fourbar_follower_hinge",
+      "type": "revolute",
+      "parentLink": "base_link",
+      "childLink": "intake_follower_link",
+      "origin_m": [ 0.20, 0.0, 0.12 ],
+      "axis": [ 0.0, 1.0, 0.0 ],
+      "limits": {
+        "hasLimits": true,
+        "lower": -0.10,
+        "upper": 1.60,
+        "unit": "rad",
+        "springFrequency_Hz": 40.0,
+        "springDampingRatio": 1.0
+      }
+    }
+  ],
+  "contactZones": [
+    {
+      "name": "intake_capture_zone",
+      "role": "intake",
+      "parentLink": "intake_coupler_link",
+      "shape": "box",
+      "origin_m": [ 0.08, 0.0, -0.02 ],
+      "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+      "dimensions_m": [ 0.22, 0.45, 0.14 ],
+      "tangentAxis": [ -1.0, 0.0, 0.0 ],
+      "compressionAxis": [ 0.0, 0.0, 1.0 ],
+      "nominalGap_m": 0.11
+    },
+    {
+      "name": "shooter_engagement_zone",
+      "role": "shooter",
+      "parentLink": "arm_wrist_link",
+      "shape": "box",
+      "origin_m": [ 0.15, 0.0, 0.04 ],
+      "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+      "dimensions_m": [ 0.18, 0.30, 0.10 ],
+      "tangentAxis": [ 1.0, 0.0, 0.0 ],
+      "compressionAxis": [ 0.0, 0.0, 1.0 ],
+      "nominalGap_m": 0.09
+    }
+  ]
+}

@@ -14,6 +14,7 @@
 #include "SwerveAdapterTest.h"
 #include "HALSimBridgeTest.h"
 #include "DrivetrainLoggerTest.h"
+#include "RobotSchemaTest.h"
 
 #include <iostream>
 #include <string>
@@ -29,6 +30,7 @@ using FRCBananaSim::Tests::RunSwerveModelTest;
 using FRCBananaSim::Tests::RunSwerveAdapterTest;
 using FRCBananaSim::Tests::RunHALSimBridgeTest;
 using FRCBananaSim::Tests::RunDrivetrainLoggerTest;
+using FRCBananaSim::Tests::RunRobotSchemaTest;
 
 int main(int argc, char* argv[])
 {
@@ -92,6 +94,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunDrivetrainLoggerTest(ctx);
         }
+        else if (arg == "--schema")
+        {
+            runAll = false;
+            RunRobotSchemaTest(ctx);
+        }
     }
 
     if (runAll)
@@ -106,6 +113,7 @@ int main(int argc, char* argv[])
         RunSwerveAdapterTest(ctx);
         RunHALSimBridgeTest(ctx);
         RunDrivetrainLoggerTest(ctx);
+        RunRobotSchemaTest(ctx);
     }
 
     std::cout << "======================================\n";
