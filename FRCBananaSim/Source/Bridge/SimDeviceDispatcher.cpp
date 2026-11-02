@@ -23,7 +23,7 @@ namespace FRCBananaSim::Bridge
     SimDeviceDispatcher::~SimDeviceDispatcher()
     {}
 
-    void SimDeviceDispatcher::ConfigureFromSidecar(const Schema::RobotSidecar& sidecar)
+    void SimDeviceDispatcher::ConfigureFromSidecar(const FRCBananaSim::Robot::Schema::RobotSidecar& sidecar)
     {
         motorsByCanId.clear();
         cancodersByCanId.clear();
@@ -35,10 +35,10 @@ namespace FRCBananaSim::Bridge
             const auto& mod = sidecar.swerve.modules[i];
 
             // Steer Motor -> Motor Slot i
-            RegisterMotor(mod.steerMotorCanId, static_cast<uint32_t>(i), "talonfx", mod.canBus, false);
+            RegisterMotor(mod.steerCanId, static_cast<uint32_t>(i), "talonfx", mod.canBus, false);
 
             // Drive Motor -> Motor Slot 4 + i
-            RegisterMotor(mod.driveMotorCanId, static_cast<uint32_t>(4 + i), "talonfx", mod.canBus, false);
+            RegisterMotor(mod.driveCanId, static_cast<uint32_t>(4 + i), "talonfx", mod.canBus, false);
 
             // CANcoder -> CANcoder Slot i
             RegisterCANcoder(mod.cancoderId, static_cast<uint32_t>(i), mod.canBus);
@@ -46,20 +46,21 @@ namespace FRCBananaSim::Bridge
 
         // 2. Mechanisms Controllers Mapping
         uint32_t nextMechanismSlot = 8;
-        for (const auto& mechPair : sidecar.mechanisms)
+        for (const auto& mech : sidecar.mechanisms)
         {
-            const auto& mech = mechPair.second;
             uint32_t mechanismPrimarySlot = nextMechanismSlot;
+            uint32_t leaderCanId = 0;
 
             for (const auto& ctrl : mech.controllers)
             {
-                if (ctrl.role == "leader")
+                if (ctrl.role == "leader" || leaderCanId == 0)
                 {
-                    RegisterMotor(ctrl.canId, mechanismPrimarySlot, ctrl.controllerType, ctrl.canBus, ctrl.inverted);
+                    leaderCanId = ctrl.canId;
+                    RegisterMotor(ctrl.canId, mechanismPrimarySlot, ctrl.vendor, ctrl.canBus, ctrl.inverted);
                 }
-                else if (ctrl.role == "follower")
+                else
                 {
-                    RegisterFollower(ctrl.canId, ctrl.leaderCanId, ctrl.inverted);
+                    RegisterFollower(ctrl.canId, leaderCanId, ctrl.inverted);
                 }
             }
 

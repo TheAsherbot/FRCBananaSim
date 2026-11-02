@@ -287,6 +287,27 @@ namespace FRCBananaSim::Bridge
             return false;
         }
 
+        // Check if lockstep coordinator acknowledges incoming frame
+        if (lockstepCoordinator && lockstepCoordinator->IsEnabled())
+        {
+            lockstepCoordinator->ProcessIncomingFrame(jsonText);
+        }
+
+        // Check if SimDeviceDispatcher handles this frame
+        if (simDispatcher)
+        {
+            std::lock_guard<std::mutex> lock(inputsMutex);
+            if (simDispatcher->DispatchIncomingFrame(jsonText, currentInputs))
+            {
+                hasNewInputs = true;
+                if (lockstepCoordinator && lockstepCoordinator->IsEnabled())
+                {
+                    lockstepCoordinator->OnRobotStepAcknowledged();
+                }
+                return true;
+            }
+        }
+
         auto processSingleMessage = [this](const nlohmann::json& j) -> bool
             {
                 if (!j.is_object() || !j.contains("type"))
@@ -503,6 +524,30 @@ namespace FRCBananaSim::Bridge
         return true;
     }
 
+    void HALSimWebSocketServer::SetDispatcher(std::shared_ptr<SimDeviceDispatcher> dispatcher)
+    {
+        std::lock_guard<std::mutex> lock(inputsMutex);
+        simDispatcher = dispatcher;
+    }
+
+    std::shared_ptr<SimDeviceDispatcher> HALSimWebSocketServer::GetDispatcher() const
+    {
+        std::lock_guard<std::mutex> lock(inputsMutex);
+        return simDispatcher;
+    }
+
+    void HALSimWebSocketServer::SetLockstepCoordinator(std::shared_ptr<LockstepCoordinator> coordinator)
+    {
+        std::lock_guard<std::mutex> lock(inputsMutex);
+        lockstepCoordinator = coordinator;
+    }
+
+    std::shared_ptr<LockstepCoordinator> HALSimWebSocketServer::GetLockstepCoordinator() const
+    {
+        std::lock_guard<std::mutex> lock(inputsMutex);
+        return lockstepCoordinator;
+    }
+
     void HALSimWebSocketServer::RunServerLoop()
     {
         SOCKET listenSock = static_cast<SOCKET>(listenSocket);
@@ -634,6 +679,13 @@ namespace FRCBananaSim::Bridge
                             handshaked = true;
                             isConnected = true;
                             SIM_LOG_INFO("WPILib robot code client connected successfully.");
+
+                            if (lockstepCoordinator && lockstepCoordinator->IsEnabled())
+                            {
+                                std::string pauseMsg = lockstepCoordinator->GeneratePauseTimingFrame();
+                                std::vector<uint8_t> f = EncodeTextFrame(pauseMsg);
+                                send(clientSock, reinterpret_cast<const char*>(f.data()), static_cast<int>(f.size()), 0);
+                            }
                         }
                     }
                 }
@@ -719,6 +771,20 @@ namespace FRCBananaSim::Bridge
                                 stats.bytesSent += f.size();
                             };
 
+                        if (simDispatcher)
+                        {
+                            auto frames = simDispatcher->DispatchOutgoingFrames(out);
+                            for (const auto& fStr : frames)
+                            {
+                                std::vector<uint8_t> f = EncodeTextFrame(fStr);
+                                send(clientSock, reinterpret_cast<const char*>(f.data()),
+                                    static_cast<int>(f.size()), 0);
+                                std::lock_guard<std::mutex> sLock(statsMutex);
+                                stats.packetsSent++;
+                                stats.bytesSent += f.size();
+                            }
+                        }
+
                         // A. Battery Voltage (prevents robot brownout cutoff)
                         sendJsonMsg({
                             { "type", "RoboRIO" },
@@ -785,6 +851,22 @@ namespace FRCBananaSim::Bridge
                                 } }
                                 });
                         }
+
+                        if (lockstepCoordinator && lockstepCoordinator->IsEnabled())
+                        {
+                            if (lockstepCoordinator->IsBarrierReached())
+                            {
+                                std::string stepMsg = lockstepCoordinator->GenerateStepTimingFrame(lockstepCoordinator->GetPeriodicIntervalMs());
+                                std::vector<uint8_t> f = EncodeTextFrame(stepMsg);
+                                send(clientSock, reinterpret_cast<const char*>(f.data()),
+                                    static_cast<int>(f.size()), 0);
+                                lockstepCoordinator->NotifyBarrierDispatched();
+                                std::lock_guard<std::mutex> sLock(statsMutex);
+                                stats.packetsSent++;
+                                stats.bytesSent += f.size();
+                            }
+                        }
+
                     }
                 }
             }

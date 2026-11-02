@@ -6,6 +6,8 @@
 #pragma once
 
 #include "Control/SimControlBoundary.h"
+#include "Bridge/SimDeviceDispatcher.h"
+#include "Bridge/LockstepCoordinator.h"
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -135,6 +137,30 @@ namespace FRCBananaSim::Bridge
         bool DumpSimDevices(const std::string& filepath) const;
 
         /**
+         * @brief Sets custom SimDeviceDispatcher for vendor frame mapping.
+         * @param dispatcher Shared pointer to dispatcher.
+         */
+        void SetDispatcher(std::shared_ptr<SimDeviceDispatcher> dispatcher);
+
+        /**
+         * @brief Gets current SimDeviceDispatcher.
+         * @return Shared pointer to dispatcher.
+         */
+        std::shared_ptr<SimDeviceDispatcher> GetDispatcher() const;
+
+        /**
+         * @brief Sets LockstepCoordinator for 4-tick (20 ms) lockstep synchronization.
+         * @param coordinator Shared pointer to coordinator.
+         */
+        void SetLockstepCoordinator(std::shared_ptr<LockstepCoordinator> coordinator);
+
+        /**
+         * @brief Gets current LockstepCoordinator.
+         * @return Shared pointer to coordinator.
+         */
+        std::shared_ptr<LockstepCoordinator> GetLockstepCoordinator() const;
+
+        /**
          * @brief Dispatches raw incoming JSON payload (public for unit testing without live network sockets).
          * @param jsonText Valid JSON message string.
          * @return True if message was recognized and handled.
@@ -181,6 +207,9 @@ namespace FRCBananaSim::Bridge
 
         std::thread workerThread;
         uintptr_t listenSocket = ~0ULL; // INVALID_SOCKET
+
+        std::shared_ptr<SimDeviceDispatcher> simDispatcher;
+        std::shared_ptr<LockstepCoordinator> lockstepCoordinator;
 
         void RunServerLoop();
     };
