@@ -12,7 +12,7 @@
 #include "Physics/JoltContext.h"
 #include <memory>
 
-namespace FRCBananaSim::Robot::Drivetrain::System
+namespace FRCBananaSim::Robot::Drivetrain::Systems
 {
     /**
      * @class SwerveDriveSystem
@@ -72,7 +72,7 @@ namespace FRCBananaSim::Robot::Drivetrain::System
 
     private:
         Physics::JoltContext* joltContext = nullptr;
-        std::unique_ptr<Systems::SwerveTerrainProbe> defaultProbe;
+        std::unique_ptr<SwerveTerrainProbe> defaultProbe;
         std::shared_ptr<Model::ITerrainProvider> activeTerrainProvider;
 
         Control::SimInputs currentInputs;

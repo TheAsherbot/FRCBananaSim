@@ -49,7 +49,7 @@ namespace FRCBananaSim::Robot
         std::unordered_map<std::string, Core::ECS::Core::Entity> contactZoneEntities;
 
         // Swerve Drivetrain Subsystem
-        std::shared_ptr<Drivetrain::System::SwerveDriveSystem> swerveSystem;
+        std::shared_ptr<Drivetrain::Systems::SwerveDriveSystem> swerveSystem;
 
         // SimDevice Dispatcher configured with CAN IDs from sidecar
         std::shared_ptr<Bridge::SimDeviceDispatcher> dispatcher;

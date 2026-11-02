@@ -15,7 +15,7 @@
 namespace FRCBananaSim::Actuation::Systems
 {
     ElectricalSystem::ElectricalSystem(Core::ECS::Core::Scene& scene,
-        FRCBananaSim::Robot::Drivetrain::System::SwerveDriveSystem* swerveSystem)
+        FRCBananaSim::Robot::Drivetrain::Systems::SwerveDriveSystem* swerveSystem)
         : ISystem(scene),
         swerveSystem(swerveSystem),
         externalOutputs(nullptr),
@@ -28,7 +28,7 @@ namespace FRCBananaSim::Actuation::Systems
     ElectricalSystem::~ElectricalSystem()
     {}
 
-    void ElectricalSystem::SetSwerveSystem(FRCBananaSim::Robot::Drivetrain::System::SwerveDriveSystem* system)
+    void ElectricalSystem::SetSwerveSystem(FRCBananaSim::Robot::Drivetrain::Systems::SwerveDriveSystem* system)
     {
         swerveSystem = system;
     }

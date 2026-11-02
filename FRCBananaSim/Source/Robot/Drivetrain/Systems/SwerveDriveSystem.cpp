@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace FRCBananaSim::Robot::Drivetrain::System
+namespace FRCBananaSim::Robot::Drivetrain::Systems
 {
     using namespace Control;
     using namespace Actuation;
@@ -39,7 +39,7 @@ namespace FRCBananaSim::Robot::Drivetrain::System
     {
         if (joltContext && joltContext->IsInitialized())
         {
-            defaultProbe = std::make_unique<Systems::SwerveTerrainProbe>(*joltContext);
+            defaultProbe = std::make_unique<SwerveTerrainProbe>(*joltContext);
             activeTerrainProvider = std::shared_ptr<Model::ITerrainProvider>(defaultProbe.get(), [](Model::ITerrainProvider*) {});
         }
     }

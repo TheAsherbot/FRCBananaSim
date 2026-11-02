@@ -171,29 +171,30 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Utils/Log.cpp
     Tests/Support/TestTerrain.cpp
     Tests/MainTests.cpp
-    Tests/UnitsTest.cpp
-    Tests/ParameterStoreTest.cpp
-    Tests/PhysicsDeterminismTest.cpp
-    Tests/MotorBatteryTest.cpp
-    Tests/JointStabilityTest.cpp
-    Tests/RobotSpawnerTest.cpp
-    Tests/SwerveModelTest.cpp
-    Tests/SwerveAdapterTest.cpp
-    Tests/HALSimBridgeTest.cpp
-    Tests/DrivetrainLoggerTest.cpp
-    Tests/RobotSchemaTest.cpp
-        Tests/ElevatorMechanismTest.cpp
-    Tests/ArmFourBarFlywheelTest.cpp
-    Tests/SensorSuiteTest.cpp
-    Tests/SimDeviceLockstepTest.cpp
-    Tests/RobotAssemblerTest.cpp
-    Tests/FullRobotEnduranceTest.cpp
+    Tests/Core/UnitsTest.cpp
+    Tests/Core/ParameterStoreTest.cpp
+    Tests/Physics/PhysicsDeterminismTest.cpp
+    Tests/Physics/JointStabilityTest.cpp
+    Tests/Actuation/MotorBatteryTest.cpp
+    Tests/Robot/RobotSpawnerTest.cpp
+    Tests/Robot/SwerveModelTest.cpp
+    Tests/Robot/SwerveAdapterTest.cpp
+    Tests/Bridge/HALSimBridgeTest.cpp
+    Tests/Telemetry/DrivetrainLoggerTest.cpp
+    Tests/Robot/RobotSchemaTest.cpp
+    Tests/Robot/ElevatorMechanismTest.cpp
+    Tests/Robot/ArmFourBarFlywheelTest.cpp
+    Tests/Robot/SensorSuiteTest.cpp
+    Tests/Bridge/SimDeviceLockstepTest.cpp
+    Tests/Robot/RobotAssemblerTest.cpp
+    Tests/Integration/FullRobotEnduranceTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
 
 target_include_directories(FRCBananaSim_Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/Tests/Support
 )
 
 target_link_directories(FRCBananaSim_Tests PRIVATE

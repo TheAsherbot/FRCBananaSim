@@ -28,7 +28,6 @@
 namespace FRCBananaSim::Tests
 {
     using namespace Robot;
-    using namespace Robot::Drivetrain::System;
     using namespace Robot::Drivetrain::Systems;
     using namespace Robot::Drivetrain::Components;
     using namespace Physics;

@@ -26,7 +26,7 @@ namespace FRCBananaSim::Actuation::Systems
          * @param swerveSystem Optional pointer to SwerveDriveSystem for drivetrain current aggregation.
          */
         ElectricalSystem(Core::ECS::Core::Scene& scene,
-            FRCBananaSim::Robot::Drivetrain::System::SwerveDriveSystem* swerveSystem = nullptr);
+            FRCBananaSim::Robot::Drivetrain::Systems::SwerveDriveSystem* swerveSystem = nullptr);
         
         /**
          * @brief Virtual destructor.
@@ -43,7 +43,7 @@ namespace FRCBananaSim::Actuation::Systems
          * @brief Sets pointer to SwerveDriveSystem for drivetrain current queries.
          * @param swerveSystem Pointer to SwerveDriveSystem.
          */
-        void SetSwerveSystem(FRCBananaSim::Robot::Drivetrain::System::SwerveDriveSystem* swerveSystem);
+        void SetSwerveSystem(FRCBananaSim::Robot::Drivetrain::Systems::SwerveDriveSystem* swerveSystem);
 
         /**
          * @brief Sets external SimOutputs destination for electrical telemetry.
@@ -76,7 +76,7 @@ namespace FRCBananaSim::Actuation::Systems
         void SetIdleCurrent(double idleCurrentA);
 
     private:
-        FRCBananaSim::Robot::Drivetrain::System::SwerveDriveSystem* swerveSystem = nullptr;
+        FRCBananaSim::Robot::Drivetrain::Systems::SwerveDriveSystem* swerveSystem = nullptr;
         Control::SimOutputs* externalOutputs = nullptr;
 
         double idleCurrentA = 1.5;

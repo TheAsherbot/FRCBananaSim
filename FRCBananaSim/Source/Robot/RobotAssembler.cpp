@@ -745,7 +745,7 @@ namespace FRCBananaSim::Robot
         // 10. Configure Swerve Drivetrain Subsystem & Attach SwerveChassisComponent
         if (sidecar.swerve.modules.size() == 4 && result.chassisEntity != Core::ECS::Core::invalidEntity)
         {
-            result.swerveSystem = std::make_shared<Drivetrain::System::SwerveDriveSystem>(scene, joltContext);
+            result.swerveSystem = std::make_shared<Drivetrain::Systems::SwerveDriveSystem>(scene, joltContext);
 
             Drivetrain::Components::SwerveChassisComponent chassisComp;
             chassisComp.batteryEntity = result.batteryEntity;
