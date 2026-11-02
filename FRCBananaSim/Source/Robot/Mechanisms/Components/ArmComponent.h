@@ -81,6 +81,12 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
         double currentVelocityRadPerSec = 0.0;   ///< Current relative joint velocity omega (rad/s).
 
         // Control Slot Mapping
-        uint32_t motorSlot = 9;                  ///< SimInputs motor slot index [8..23].
+        std::vector<uint32_t> motorSlots = { 9 }; ///< All SimInputs/SimOutputs motor slot indices for this mechanism.
+
+        /**
+         * @brief Gets the primary (leader) control slot index.
+         * @return Primary motor slot index, or 0 if empty.
+         */
+        uint32_t GetPrimaryMotorSlot() const { return motorSlots.empty() ? 0 : motorSlots[0]; }
     };
 }

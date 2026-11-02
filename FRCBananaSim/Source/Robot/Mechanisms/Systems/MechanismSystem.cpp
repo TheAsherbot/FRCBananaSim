@@ -8,6 +8,7 @@
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
+#include "Core/ECS/Core/Scene.h"
 
 #include <algorithm>
 #include <cmath>

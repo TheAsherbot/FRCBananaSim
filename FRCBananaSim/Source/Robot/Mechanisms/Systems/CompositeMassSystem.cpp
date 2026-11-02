@@ -6,6 +6,7 @@
 #include "Robot/Mechanisms/Systems/CompositeMassSystem.h"
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
+#include "Core/ECS/Core/Scene.h"
 #include "Robot/Schema/RobotSchemaLoader.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
