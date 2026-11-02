@@ -17,6 +17,7 @@
 #include "RobotSchemaTest.h"
 #include "ElevatorMechanismTest.h"
 #include "ArmFourBarFlywheelTest.h"
+#include "SensorSuiteTest.h"
 
 #include <iostream>
 #include <string>
@@ -35,6 +36,7 @@ using FRCBananaSim::Tests::RunDrivetrainLoggerTest;
 using FRCBananaSim::Tests::RunRobotSchemaTest;
 using FRCBananaSim::Tests::RunElevatorMechanismTest;
 using FRCBananaSim::Tests::RunArmFourBarFlywheelTest;
+using FRCBananaSim::Tests::RunSensorSuiteTest;
 
 int main(int argc, char* argv[])
 {
@@ -113,6 +115,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunArmFourBarFlywheelTest(ctx);
         }
+        else if (arg == "--sensors")
+        {
+            runAll = false;
+            RunSensorSuiteTest(ctx);
+        }
     }
 
     if (runAll)
@@ -130,6 +137,7 @@ int main(int argc, char* argv[])
         RunRobotSchemaTest(ctx);
         RunElevatorMechanismTest(ctx);
         RunArmFourBarFlywheelTest(ctx);
+        RunSensorSuiteTest(ctx);
     }
 
     std::cout << "======================================\n";
