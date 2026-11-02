@@ -209,6 +209,15 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         outMidpointLinearVel = 0.5f * (previousLinearVel + chassisMotion.linearVelocity);
         outMidpointAngularVel = 0.5f * (previousAngularVel + chassisMotion.angularVelocity);
     }
+    
+    void SwerveDrivetrainModel::SetMassProperties(double totalMass, const glm::mat3& inertiaTensor, const glm::vec3& cgOffset)
+    {
+        config.chassis.mass = std::max(totalMass, 1.0);
+        config.chassis.inertiaTensor = inertiaTensor;
+        config.chassis.centerOfMassOffset = cgOffset;
+        config.chassis.centerOfMassHeight = cgOffset.z; // In NWU, +Z is vertical height
+        chassisSolver.SetChassisParams(config.chassis);
+    }
 
     void SwerveDrivetrainModel::ApplyExternalCorrections(const glm::vec3& correctedPosition,
         const glm::quat& correctedOrientation,

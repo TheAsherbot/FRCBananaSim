@@ -78,6 +78,15 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
          * @param outMidpointAngularVel (w_initial + w_final) / 2 (rad/s).
          */
         void GetMidpointVelocities(glm::vec3& outMidpointLinearVel, glm::vec3& outMidpointAngularVel) const;
+        
+        /**
+         * @brief Dynamically updates total robot mass, inertia tensor, and center-of-mass offset.
+         * Used by CompositeMassSystem when articulated mechanisms (arms, elevators) shift the robot's CG.
+         * @param totalMass Aggregated robot mass in kg.
+         * @param inertiaTensor 3x3 rotational inertia tensor about composite CG in NWU frame (kg*m^2).
+         * @param cgOffset Center of mass offset from chassis geometric origin in NWU frame (m).
+         */
+        void SetMassProperties(double totalMass, const glm::mat3& inertiaTensor, const glm::vec3& cgOffset);
 
         /**
          * @brief Ingests post-step external collision corrections from middleware (Jolt).
