@@ -158,9 +158,8 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         double dRot = (flywheel.brakeMode || std::abs(appliedV) > 1e-3) ? affine.electricalDamping : 0.0;
         double dTotal = dRot + flywheel.viscousDampingNms;
 
-        // 3. Stator Current Limit Clamp on Commanded Torque
+        // 3. Stator Current Limit Threshold
         double maxStatorTorque = motor.CalculateStatorTorqueLimit(flywheel.statorCurrentLimitA);
-        tauCmd = std::clamp(tauCmd, -maxStatorTorque, maxStatorTorque);
 
         // 4. Sub-Stepped 1D Semi-Implicit Integration
         uint32_t nSub = std::clamp(flywheel.subSteps, 1u, 16u);
@@ -170,15 +169,18 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         double currentOmega = initialOmega;
         double currentTheta = flywheel.angularPositionRad;
         double jTotal = flywheel.totalRotationalInertiaKgm2;
+        double deliveredMotorTorque = 0.0;
 
         for (uint32_t s = 0; s < nSub; ++s)
         {
-            double denominator = 1.0 + ((dTotal * subDt) / jTotal);
-            double netDrivingTorque = tauCmd - flywheel.externalLoadTorqueNm;
+            double elecDenominator = 1.0 + ((dRot * subDt) / jTotal);
+            double tauMotor = (tauCmd - (dRot * currentOmega)) / elecDenominator;
+            tauMotor = std::clamp(tauMotor, -maxStatorTorque, maxStatorTorque);
+            deliveredMotorTorque = tauMotor;
 
-            // Semi-implicit velocity step:
-            // omega^{t+subDt} = (omega^t + (netDrivingTorque * subDt) / J) / (1 + (dTotal * subDt) / J)
-            currentOmega = (currentOmega + ((netDrivingTorque * subDt) / jTotal)) / denominator;
+            double viscDenominator = 1.0 + ((flywheel.viscousDampingNms * subDt) / jTotal);
+            double netTorque = tauMotor - flywheel.externalLoadTorqueNm;
+            currentOmega = (currentOmega + ((netTorque * subDt) / jTotal)) / viscDenominator;
 
             // 1D Coulomb bearing friction step
             if (flywheel.coulombFrictionNm > 1e-6)
@@ -204,8 +206,9 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         flywheel.angularVelocityRpm = currentOmega * radPerSecToRpm;
         flywheel.angularPositionRad = currentTheta;
         flywheel.appliedVoltage = appliedV;
-        flywheel.motorTorqueNm = tauCmd;
-        flywheel.statorCurrentA = motor.CalculateCurrent(appliedV, currentOmega);
+        flywheel.motorTorqueNm = deliveredMotorTorque;
+        double rawCurrent = motor.CalculateCurrent(appliedV, currentOmega);
+        flywheel.statorCurrentA = std::clamp(rawCurrent, -flywheel.statorCurrentLimitA, flywheel.statorCurrentLimitA);
 
         // 6. Newton's Third Law Recoil Torque Applied to Parent Rigid Body
         double deltaOmega = currentOmega - initialOmega;

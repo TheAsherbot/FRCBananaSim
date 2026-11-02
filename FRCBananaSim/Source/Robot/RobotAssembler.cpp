@@ -359,7 +359,8 @@ namespace FRCBananaSim::Robot
                 elev.statorCurrentLimitA = mech.statorCurrentLimitA;
                 elev.efficiency = mech.efficiency;
                 elev.motorSlots = { mechSlot };
-                elev.motorModel = CreateMotorFromPreset(mech.motorPreset, elev.gearRatio, elev.efficiency).WithMotorCount(elev.motorCount);
+                //elev.motorModel = CreateMotorFromPreset(mech.motorPreset, elev.gearRatio, elev.efficiency).WithMotorCount(elev.motorCount);
+                elev.motorModel = CreateMotorFromPreset(mech.motorPreset, elev.gearRatio, elev.efficiency);
 
                 auto jIt = result.jointEntities.find(mech.targetJoint);
                 if (jIt != result.jointEntities.end())
@@ -413,7 +414,8 @@ namespace FRCBananaSim::Robot
                 arm.statorCurrentLimitA = mech.statorCurrentLimitA;
                 arm.efficiency = mech.efficiency;
                 arm.motorSlots = { mechSlot };
-                arm.motorModel = CreateMotorFromPreset(mech.motorPreset, arm.gearRatio, arm.efficiency).WithMotorCount(arm.motorCount);
+                //arm.motorModel = CreateMotorFromPreset(mech.motorPreset, arm.gearRatio, arm.efficiency).WithMotorCount(arm.motorCount);
+                arm.motorModel = CreateMotorFromPreset(mech.motorPreset, arm.gearRatio, arm.efficiency);
 
                 auto jIt = result.jointEntities.find(mech.targetJoint);
                 if (jIt != result.jointEntities.end())
@@ -443,7 +445,8 @@ namespace FRCBananaSim::Robot
                             auto* linkRb = scene.GetComponent<Physics::Components::RigidBodyComponent>(arm.linkEntity);
                             if (linkRb)
                             {
-                                float reflI = static_cast<float>(arm.motorModel.GetRotorInertia() * arm.gearRatio * arm.gearRatio);
+                                //float reflI = static_cast<float>(arm.motorModel.GetRotorInertia() * arm.gearRatio * arm.gearRatio);
+                                float reflI = static_cast<float>(arm.motorModel.GetRotorInertia() * arm.motorCount * arm.gearRatio * arm.gearRatio);
                                 linkRb->hasCustomInertia = true;
                                 linkRb->inertiaTensor[0][0] += reflI;
                                 linkRb->inertiaTensor[1][1] += reflI;
@@ -472,7 +475,8 @@ namespace FRCBananaSim::Robot
                 fw.viscousDampingNms = (mech.viscousDamping > 1e-9) ? mech.viscousDamping : 0.0001;
                 fw.statorCurrentLimitA = mech.statorCurrentLimitA;
                 fw.motorSlots = { mechSlot };
-                fw.motorModel = CreateMotorFromPreset(mech.motorPreset, fw.gearRatio, fw.efficiency).WithMotorCount(fw.motorCount);
+                //fw.motorModel = CreateMotorFromPreset(mech.motorPreset, fw.gearRatio, fw.efficiency).WithMotorCount(fw.motorCount);
+                fw.motorModel = CreateMotorFromPreset(mech.motorPreset, fw.gearRatio, fw.efficiency);
 
                 auto pIt = result.linkEntities.find(mech.parentLink);
                 if (pIt != result.linkEntities.end())

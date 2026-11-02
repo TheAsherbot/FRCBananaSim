@@ -60,7 +60,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                     steerCurrent = std::clamp(std::abs(steerCurrent), 0.0, inputs.motorCommands[i].statorCurrentLimit);
                     double steerBackEmf = modules[i].GetSteerMotor().GetBackEmfConstantKe() *
                         (modules[i].GetState().steerVelocity * modules[i].GetSteerMotor().GetGearRatio());
-                    double steerVw = steerCurrent * modules[i].GetSteerMotor().GetResistance() + std::abs(steerBackEmf);
+                    double steerVw = std::min(std::abs(steerAppliedVolts),
+                        steerCurrent * modules[i].GetSteerMotor().GetResistance() + std::abs(steerBackEmf));
                     double steerDuty = std::clamp(steerVw / std::max(1.0, terminalVoltage), 0.0, 1.0);
                     totalSupplyCurrent += std::min(40.0, steerDuty * steerCurrent);
 
@@ -72,7 +73,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                     driveCurrent = std::clamp(std::abs(driveCurrent), 0.0, inputs.motorCommands[4 + i].statorCurrentLimit);
                     double driveBackEmf = modules[i].GetDriveMotor().GetBackEmfConstantKe() *
                         (modules[i].GetState().wheelVelocity * modules[i].GetDriveMotor().GetGearRatio());
-                    double driveVw = driveCurrent * modules[i].GetDriveMotor().GetResistance() + std::abs(driveBackEmf);
+                    double driveVw = std::min(std::abs(driveAppliedVolts),
+                        driveCurrent * modules[i].GetDriveMotor().GetResistance() + std::abs(driveBackEmf));
                     double driveDuty = std::clamp(driveVw / std::max(1.0, terminalVoltage), 0.0, 1.0);
                     totalSupplyCurrent += std::min(40.0, driveDuty * driveCurrent);
                 }

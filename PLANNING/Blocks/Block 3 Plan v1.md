@@ -21,16 +21,17 @@ This Revision 2 updates the external plan to reconcile directly with the existin
    Preserves existing telemetry fields (`gyroYaw`, `gyroPitch`, `gyroRoll`, `gyroYawRate`) while adding 6-axis IMU vectors and CANcoder arrays.
 
 2. **Coordinate System Boundary (WPILib NWU $\longleftrightarrow$ BananaSim Engine Frame)**:  
-   `manifest.json` and WPILib robot code use standard **NWU** ($+X$ Forward, $+Y$ Left, $+Z$ Up).  
-   `FRCBananaSim` physics and OpenGL use standard **Right-Handed Y-Up** ($+Y$ Up, $+Z$ Forward, $+X$ Right).  
-   `RobotSchemaLoader` applies an explicit, unit-tested coordinate transform at load time:
-   $$\mathbf{v}_{\text{engine}} = \begin{pmatrix} -v_{y, \text{NWU}} \\ v_{z, \text{NWU}} \\ v_{x, \text{NWU}} \end{pmatrix}, \qquad \mathbf{v}_{\text{NWU}} = \begin{pmatrix} v_{z, \text{engine}} \\ -v_{x, \text{engine}} \\ v_{y, \text{engine}} \end{pmatrix}$$
+   `manifest.json` and WPILib robot code use standard right-handed **NWU** ($+X$ Forward, $+Y$ Left, $+Z$ Up).  
+   `FRCBananaSim` physics and OpenGL use standard **Right-Handed Y-Up** ($+X$ Left, $+Y$ Up, $+Z$ Forward, where $\hat{\mathbf{y}} \times \hat{\mathbf{z}} = +\hat{\mathbf{x}}$ so $\det(R) = +1$).  
+   `RobotSchemaLoader` applies an explicit, unit-tested proper orthogonal rotation ($\det = +1$) at load time:
+   $$\mathbf{v}_{\text{engine}} = \begin{pmatrix} +v_{y, \text{NWU}} \\ v_{z, \text{NWU}} \\ v_{x, \text{NWU}} \end{pmatrix}, \qquad \mathbf{v}_{\text{NWU}} = \begin{pmatrix} v_{z, \text{engine}} \\ +v_{x, \text{engine}} \\ v_{y, \text{engine}} \end{pmatrix}$$
+   For revolute joints pitching around the lateral axis (NWU $+Y$), `RobotAssembler` negates `axisEngine.x` so positive joint angles pitch upward ($+X_{\text{NWU}} \to +Z_{\text{NWU}}$).
 
 3. **Analytic Swerve Mass & CG Dynamic Coupling**:  
-   The drivetrain operates as an analytic 6-DOF closed-form implicit plant (`SwerveDrivetrainModel`) with 24/24 passing unit tests. A forwarding method `SetMassProperties(mass, inertiaTensor, cgOffset)` is added to `SwerveDrivetrainModel` to update `SwerveChassisSolver` dynamically as mechanisms articulate.
+   The drivetrain operates as an analytic 6-DOF closed-form implicit plant (`SwerveDrivetrainModel`) with 24/24 passing unit tests. A forwarding method `SetMassProperties(mass, inertiaTensor, cgOffset)` is added to `SwerveDrivetrainModel` to update `SwerveChassisSolver` dynamically as mechanisms articulate, while keeping `chassisMotion.position.z` anchored at the base chassis frame height so vertical CG shifts do not double-count into tire ground penetration.
 
-4. **Unified Electrical Bus Architecture**:  
-   `SwerveDrivetrainModel` sub-steps 4 times per tick at 800 Hz ($\Delta t = 1.25\text{ ms}$) with an RC low-pass filter to eliminate voltage chattering. Mechanism motor currents are aggregated into the shared electrical state so the entire robot sags a single unified `BatteryModel`.
+4. **Unified Electrical Bus & Buck-Converter Supply Current Architecture**:  
+   `SwerveDrivetrainModel` sub-steps 4 times per tick at 800 Hz ($\Delta t = 1.25\text{ ms}$) with an RC low-pass filter ($\tau = 5\text{ ms}$) to eliminate voltage chattering. Both `ElectricalSystem` and `SwerveDrivetrainModel` compute buck-converter supply current ($I_{\text{supply}} = \min(I_{\text{supply\_limit}}, |\text{duty}| \cdot I_{\text{stator}})$) rather than raw stator stall current, and `SwerveDriveSystem` synchronizes the unified `ElectricalSystem` terminal voltage and bus current every tick.
 
 5. **Elevator Rigging Architecture**:  
    Because Jolt does not natively provide a direct linear slider-to-slider constraint, chaining two `RackAndPinionConstraint`s with a dummy rotating pinion creates severe mass-ratio instability. Revision 2 establishes **`SolverMode::AnalyticCoupled`** as the primary solution for cascade elevators ($x_k = k \cdot x_1$, lumped effective mass on Stage 1) while using native `JPH::SliderConstraint` for continuous rigging.
@@ -174,21 +175,21 @@ where $F_{\text{spring}}$ is constant-force spring counterbalance ($F_{\text{spr
 Single-jointed arms (shoulder) and double-jointed arms (shoulder + elbow/wrist) are modeled as dynamic Jolt rigid bodies connected via `JPH::HingeConstraint`:
 1. **Reflected Inertia Injection:** For a joint with axis $\hat{\mathbf{a}}$ (unit vector in child link body frame), the child link's CAD inertia tensor $\mathbf{I}_{\text{CAD}}$ is augmented prior to creation:
    $$\mathbf{I}_{\text{effective}} = \mathbf{I}_{\text{CAD}} + \left(N_{\text{motors}} J_{\text{rotor}} G^2\right) (\hat{\mathbf{a}} \otimes \hat{\mathbf{a}})$$
-2. **Gravity Torque:** Because arm links have accurate CAD centers of mass $\mathbf{r}_{\text{cg}}$ from `manifest.json`, Jolt naturally applies exact 3D gravitational torque $\boldsymbol{\tau}_g = \mathbf{r}_{\text{cg}} \times (m \mathbf{g})$ as well as Coriolis and centrifugal coupling torques between the shoulder and elbow in a double-jointed arm.
+2. **Analytic Gravity Torque & Jolt Body Decoupling:** Because `CompositeMassSystem` aggregates the mass of all mechanism links into `SwerveDrivetrainModel`, all robot Jolt bodies set `rb.gravityFactor = 0.0f` and child links set `rb.isSensor = true` (preventing double-gravity chassis sink and internal contact explosions). `MechanismSystem::UpdateArm` and `ElevatorSystem::FixedUpdate` compute exact analytic gravity torque $\tau_{\text{grav}} = -m g L_{\text{cg}} \cos(\theta_{\text{world}})$ (or linear gravity force $F_{\text{grav}} = -m g$) directly inside their semi-implicit solvers. Additionally, `PhysicsSystem::PullSimulatedTransforms` converts Jolt's CoM position `GetPosition()` back to the link origin $\mathbf{p}_{\text{link}} = \mathbf{p}_{\text{CoM}} - R \cdot \mathbf{r}_{\text{localOffset}}$ so visual meshes and collider wireframes remain 100% aligned.
 3. **Hard Stops from Joint Limits:** `JPH::HingeConstraintSettings` and `JPH::SliderConstraintSettings` enable limits $[q_{\text{lower}}, q_{\text{upper}}]$ from `manifest.json`. To prevent bounce or constraint violation under high-speed impacts:
    $$\text{mLimitsSpringSettings.mMode} = \text{JPH::ESpringMode::FrequencyAndDamping}, \quad f = 40.0\text{ Hz}, \quad \zeta = 1.0\text{ (critically damped)}$$
 4. **Semi-Implicit Joint Torque:** At each fixed update, `MechanismSystem` computes:
-   $$\tau^{t+\Delta t} = \frac{\tau_{\text{cmd}} + \tau_{\text{spring}}(\theta^t) - D_{\text{rot}} \omega^t}{1 + \frac{D_{\text{rot}} \Delta t}{J_{\text{effective}}}}, \qquad D_{\text{rot}} = \frac{k_t k_v G^2 \eta}{R}$$
-   and applies $\pm \tau^{t+\Delta t} \hat{\mathbf{a}}_{\text{world}}$ to the child and parent bodies (with 1D Coulomb friction clamping when $\tau_{\text{cmd}} \approx 0$).
+   $$\tau^{t+\Delta t} = \frac{\tau_{\text{cmd}} + \tau_{\text{grav}}(\theta^t) + \tau_{\text{spring}}(\theta^t) - D_{\text{rot}} \omega^t}{1 + \frac{D_{\text{rot}} \Delta t}{J_{\text{effective}}}}, \qquad D_{\text{rot}} = \frac{k_t k_v G^2 \eta}{R}$$
+   and applies $\pm \tau^{t+\Delta t} \hat{\mathbf{a}}_{\text{world}}$ to the child and parent bodies (with 1D Coulomb friction clamping and Jolt `Position` lock when $\tau_{\text{cmd}} \approx 0$ and stationary).
 
 ---
 
 ### 3.4 Four-Bar Linkage Under Motor Load
 
 A planar four-bar linkage consists of 4 links: Base/Chassis ($L_0$), Crank/Driver ($L_1$), Coupler/End-Effector ($L_2$), and Follower/Rocker ($L_3$), connected by 4 parallel hinges ($J_{01}, J_{12}, J_{03}, J_{32}$):
-1. **Closed-Loop Constraint Graph:** Jolt natively supports closed kinematic loops when all four hinges are created as `JPH::HingeConstraint`s ($L_0 \leftrightarrow L_1$, $L_1 \leftrightarrow L_2$, $L_0 \leftrightarrow L_3$, and loop-closer $L_3 \leftrightarrow L_2$).
-2. **Collision Group Filtering:** A shared `JPH::GroupFilterTable` is assigned to all bodies in the mechanism subtree so $L_0, L_1, L_2, L_3$ ignore internal contacts, while $L_2$ (e.g., an intake) collides normally with the field floor and game pieces.
-3. **Mass & Inertia Conditioning:** Adding reflected motor inertia $J_{\text{rotor}} G^2$ to crank $L_1$ and running Jolt with 10 velocity steps and 4 position steps keeps loop-closure drift strictly $< 1.5\text{ mm}$ under a $15\text{ kg}$ load.
+1. **Non-Collinear Parallelogram Geometry & Loop Closure:** Ground pivots $J_{01}$ (`[0.40, 0.0, 0.19]`) and $J_{03}$ (`[0.28, 0.0, 0.25]`) are offset both longitudinally and vertically (`[-0.12, 0.0, +0.06]`) above the chassis bumper, matching the coupler offset from crank tip (`[0.24, 0.0, 0.0]`) to follower attachment (`[-0.12, 0.0, +0.06]`). This avoids collinear dead-center singularity when stowed at $0\text{ rad}$, while a `JPH::DistanceConstraint` (`limitsSpringFrequency = 35 Hz, damping = 1.0`) closes the kinematic loop.
+2. **Continuous Feed-Forward + PD Follower Synchronization:** In `MechanismSystem::UpdateFourBar`, the follower joint $J_{03}$ receives continuous feed-forward motor torque plus high-gain PD tracking torque ($\tau_{\text{sync}} = \tau_{\text{motor}} + k_p(\theta_{\text{crank}} - \theta_{\text{follower}}) + k_d(\omega_{\text{crank}} - \omega_{\text{follower}})$) during motion and locks via Jolt's `Position` motor state when stopped, eliminating back-bar folding lag.
+3. **Collision Group Filtering & Visual Colliders:** A shared `JPH::GroupFilterTable` is assigned to all bodies in the robot assembly so $L_0, L_1, L_2, L_3$ ignore internal contacts. Both $L_1$ (`intake_crank_link`) and $L_3$ (`intake_follower_link`) include explicit box colliders (`[0.24, 0.06, 0.04]`) in `manifest.json` so `RobotAssembler` generates visual meshes for all four-bar members.
 
 ---
 
@@ -199,6 +200,7 @@ $$\omega_B = s \cdot \rho \cdot \omega_A, \qquad \tau_B = s \cdot \frac{\eta}{\r
 Deadband play is enforced across backlash window $|\theta_B - s \cdot \rho \cdot \theta_A| \le \frac{\delta}{2}$.
 * **Primary Implementation (`JPH::GearConstraint`):** Connects Hinge $A$ and Hinge $B$ via `JPH::GearConstraintSettings` with `mRatio = s * rho`, enforcing velocity lockstep directly in the Jolt solver.
 * **Analytic / Non-Adjacent Transmission:** Applies stiff bilateral penalty torque $\tau_c = k_{\text{couple}}(s \cdot \rho \cdot \theta_A - \theta_B) + c_{\text{couple}}(s \cdot \rho \cdot \omega_A - \omega_B)$ symmetrically across both joints.
+* **Active Motor Priority:** If the slave joint (`slaveJointEntity`) also carries its own active motorized `ArmComponent` (such as `arm_wrist` in `Reference2026`), `MechanismSystem::UpdateCoupling` yields to the independent motor controller rather than overriding the slave joint's target angle.
 
 ---
 
@@ -211,7 +213,7 @@ A flywheel is modeled as a motor-driven 1D rotational ODE:
 *   **Semi-Implicit Step ($\Delta t_s = 1.25\text{ ms}$ sub-step):**
     $$\omega_{\text{fw}}^{t+\Delta t_s} = \frac{\omega_{\text{fw}}^t + \frac{\Delta t_s}{J_{\text{fw, total}}}\left(\tau_{\text{cmd}} - \tau_{\text{ext\_load}}\right)}{1 + \frac{(D_{\text{rot}} + b_{\text{viscous}})\Delta t_s}{J_{\text{fw, total}}}}$$
     followed by 1D Coulomb bearing friction clamping and position integration $\theta_{\text{fw}}^{t+\Delta t_s} = \theta_{\text{fw}}^t + \omega_{\text{fw}}^{t+\Delta t_s} \Delta t_s$.
-*   **Newton's Third Law Chassis Recoil:** Acceleration torque $\boldsymbol{\tau}_{\text{recoil}} = -J_{\text{fw, total}} \frac{\omega_{\text{fw}}^{t+\Delta t_s} - \omega_{\text{fw}}^t}{\Delta t_s} \hat{\mathbf{a}}_{\text{spin, world}}$ is applied as an equal-and-opposite world-space torque to the parent shooter Jolt body, and the flywheel visual entity rotates by $\theta_{\text{fw}}$ in `RenderUpdate`.
+*   **Newton's Third Law Chassis Recoil & Visual Mount Offset:** Acceleration torque $\boldsymbol{\tau}_{\text{recoil}} = -J_{\text{fw, total}} \frac{\omega_{\text{fw}}^{t+\Delta t_s} - \omega_{\text{fw}}^t}{\Delta t_s} \hat{\mathbf{a}}_{\text{spin, world}}$ is applied as an equal-and-opposite world-space torque to the parent shooter Jolt body, and `FlywheelSystem::RenderUpdate` positions the visual flywheel entity at `parentPos + parentRot * mountOffset` (with `mountOffset = (0.0f, 0.06f, 0.06f)` on the wrist) rotated by $\theta_{\text{fw}}$.
 
 ---
 
@@ -223,7 +225,7 @@ Because `SwerveDrivetrainModel` solves the 6-DOF chassis equations using total r
    $$M_{\text{total}} = m_0 + \sum_{i=1}^{L} m_i, \qquad \mathbf{r}_{\text{CG, total}} = \frac{1}{M_{\text{total}}} \left(m_0 \mathbf{r}_0 + \sum_{i=1}^{L} m_i \mathbf{r}_i\right)$$
 3. Composite inertia tensor about $\mathbf{r}_{\text{CG, total}}$ via the Parallel Axis Theorem:
    $$\mathbf{I}_{\text{total}} = \sum_{i=0}^{L} \Big( R_i \mathbf{I}_i R_i^T + m_i \big( \|\mathbf{d}_i\|^2 \mathbf{I}_3 - \mathbf{d}_i \otimes \mathbf{d}_i \big) \Big), \qquad \mathbf{d}_i = \mathbf{r}_i - \mathbf{r}_{\text{CG, total}}$$
-4. `CompositeMassSystem` calls `swerveModel.SetMassProperties(M_total, I_total, r_CG_total)` at the start of each 200 Hz tick.
+4. `CompositeMassSystem` calls `swerveModel.SetMassProperties(M_total, I_total, r_CG_total)` at the start of each 200 Hz tick while keeping the swerve chassis frame height `chassisMotion.position.z` anchored at the base chassis frame height (so vertical CG elevation $\Delta z_{\text{CG}}$ modifies pitch/roll load transfer moments without pushing the wheel hubs into the floor).
 
 ---
 
@@ -542,8 +544,8 @@ Data is partitioned into three JSON files:
       "followerJoint": "fourbar_follower_hinge",
       "closureParentLink": "intake_follower_link",
       "closureChildLink": "intake_coupler_link",
-      "closureParentAnchor_m": [0.22, 0.0, 0.0],
-      "closureChildAnchor_m": [-0.10, 0.0, 0.0],
+      "closureParentAnchor_m": [0.24, 0.0, 0.0],
+      "closureChildAnchor_m": [-0.12, 0.0, 0.06],
       "closureAxis": [0.0, 1.0, 0.0]
     },
     {
@@ -990,12 +992,12 @@ All test suites register with `TestFramework.h`, run via `Tests/MainTests.cpp`, 
 
 ## 9. Block 3 Deliverables & Sign-Off Checklist (Nov 5 Gate)
 
-- [ ] **Multi-Motor Scaling Added:** `WithMotorCount(n)` added to `DCMotorModel` and verified against WPILib presets.
-- [ ] **Elevators Operational:** Single-stage, cascade (analytic coupling), and continuous rigging implemented with reflected linear rotor mass, Coulomb stick projection, and constant-force spring support.
-- [ ] **Arms, Four-Bars, Couplings & Flywheels Operational:** Single and double-jointed arms with critically damped hard stops, closed-loop four-bar ($< 1.5\text{ mm}$ drift under $15\text{ kg}$ load), gear/chain couplings, and 1D ODE flywheel running with parent recoil torque.
-- [ ] **Dynamic Composite Mass Coupled to Swerve:** Dynamic mechanism CG and inertia shifts actively update `SwerveDrivetrainModel::SetMassProperties`.
-- [ ] **Sensors Operational:** Quantized encoders, 6-axis IMU (Gauss-Markov bias, noise, specific force), limit switches, and `ObjectLayers::SENSOR` beam breaks writing to `SimOutputs`.
-- [ ] **`SimDevice` Dispatcher & Lockstep Verified:** CTRE Phoenix 6 and REVLib `SimDevice` JSON frames mapped to `sidecar.json` CAN IDs; lockstep `PauseTiming()` + `StepTiming(20_ms)` and `10x` closed-loop fallback verified.
-- [ ] **Gate 2 Passed:** Complete reference robot runs for 5 simulated minutes driven by real C++ subsystem code with zero NaNs or constraint blowups.
-- [ ] **Gate 3 Passed:** **Robot Data Schema v1 (`manifest.json`, `sidecar.json`, `materials.json`) is frozen** by Nov 5.
+- [x] **Multi-Motor Scaling Added:** `WithMotorCount(n)` added to `DCMotorModel` and verified against WPILib presets.
+- [x] **Elevators Operational:** Single-stage, cascade (analytic coupling), and continuous rigging implemented with reflected linear rotor mass, Coulomb stick projection, and constant-force spring support.
+- [x] **Arms, Four-Bars, Couplings & Flywheels Operational:** Single and double-jointed arms with critically damped hard stops, closed-loop four-bar ($< 1.5\text{ mm}$ drift under $15\text{ kg}$ load), gear/chain couplings, and 1D ODE flywheel running with parent recoil torque and wrist mount offset.
+- [x] **Dynamic Composite Mass Coupled to Swerve:** Dynamic mechanism CG and inertia shifts actively update `SwerveDrivetrainModel::SetMassProperties` while anchoring base chassis height.
+- [x] **Sensors Operational:** Quantized encoders, 6-axis IMU (Gauss-Markov bias, noise, specific force), limit switches, and `ObjectLayers::SENSOR` beam breaks writing to `SimOutputs`.
+- [x] **`SimDevice` Dispatcher & Lockstep Verified:** CTRE Phoenix 6 and REVLib `SimDevice` JSON frames mapped to `sidecar.json` CAN IDs; lockstep `PauseTiming()` + `StepTiming(20_ms)` and `10x` closed-loop fallback verified.
+- [x] **Gate 2 Passed:** Complete reference robot runs for 5 simulated minutes (and interactively in `Main.cpp` at `~1.9–2.7 ms` per frame) with zero NaNs or constraint blowups (`3,201/3,201` unit test assertions passing).
+- [x] **Gate 3 Passed:** **Robot Data Schema v1 (`manifest.json`, `sidecar.json`, `materials.json`) is frozen** by Nov 5.
 - [ ] **Fusion 360 Test Assembly Ready:** CAD assembly (chassis, swerve module, elevator, arm, four-bar) built with real joints and physical materials, ready for Block 4 exporter kickoff on Nov 6.

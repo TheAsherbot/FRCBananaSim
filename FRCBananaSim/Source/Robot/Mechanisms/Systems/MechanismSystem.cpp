@@ -224,7 +224,8 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         arm.appliedVoltage = appliedV;
 
         // 9. Electrical Telemetry Feedback
-        arm.statorCurrentA = motor.CalculateCurrent(appliedV, omega);
+        double rawCurrent = motor.CalculateCurrent(appliedV, omega);
+        arm.statorCurrentA = std::clamp(rawCurrent, -arm.statorCurrentLimitA, arm.statorCurrentLimitA);
     }
 
     void MechanismSystem::UpdateFourBar(FourBarComponent& fourBar)

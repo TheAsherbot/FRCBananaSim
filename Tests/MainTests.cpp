@@ -1,6 +1,6 @@
 /**
  * @file MainTests.cpp
- * @brief Entry point for headless CTest suites including analytic swerve model, Jolt adapter, elevator mechanisms, and arms/four-bars/flywheels.
+ * @brief Entry point for headless CTest suites including analytic swerve model, Jolt adapter, elevator mechanisms, arms/four-bars/flywheels, and full-robot endurance.
  */
 
 #include "TestFramework.h"
@@ -20,6 +20,7 @@
 #include "SensorSuiteTest.h"
 #include "SimDeviceLockstepTest.h"
 #include "RobotAssemblerTest.h"
+#include "FullRobotEnduranceTest.h"
 
 #include <iostream>
 #include <string>
@@ -41,6 +42,7 @@ using FRCBananaSim::Tests::RunArmFourBarFlywheelTest;
 using FRCBananaSim::Tests::RunSensorSuiteTest;
 using FRCBananaSim::Tests::RunSimDeviceLockstepTest;
 using FRCBananaSim::Tests::RunRobotAssemblerTest;
+using FRCBananaSim::Tests::RunFullRobotEnduranceTest;
 
 int main(int argc, char* argv[])
 {
@@ -134,6 +136,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunRobotAssemblerTest(ctx);
         }
+        else if (arg == "--full-robot-endurance")
+        {
+            runAll = false;
+            RunFullRobotEnduranceTest(ctx);
+        }
     }
 
     if (runAll)
@@ -154,6 +161,7 @@ int main(int argc, char* argv[])
         RunSensorSuiteTest(ctx);
         RunSimDeviceLockstepTest(ctx);
         RunRobotAssemblerTest(ctx);
+        RunFullRobotEnduranceTest(ctx);
     }
 
     std::cout << "======================================\n";

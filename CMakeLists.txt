@@ -182,11 +182,12 @@ set(TEST_SOURCES
     Tests/HALSimBridgeTest.cpp
     Tests/DrivetrainLoggerTest.cpp
     Tests/RobotSchemaTest.cpp
-    Tests/ElevatorMechanismTest.cpp
+        Tests/ElevatorMechanismTest.cpp
     Tests/ArmFourBarFlywheelTest.cpp
     Tests/SensorSuiteTest.cpp
     Tests/SimDeviceLockstepTest.cpp
     Tests/RobotAssemblerTest.cpp
+    Tests/FullRobotEnduranceTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -220,4 +221,5 @@ add_test(NAME ArmFourBarFlywheelTest COMMAND FRCBananaSim_Tests --arm-fourbar-fl
 add_test(NAME SensorSuiteTest COMMAND FRCBananaSim_Tests --sensors)
 add_test(NAME SimDeviceLockstepTest COMMAND FRCBananaSim_Tests --simdevice-lockstep)
 add_test(NAME RobotAssemblerTest COMMAND FRCBananaSim_Tests --robot-assembler)
+add_test(NAME FullRobotEnduranceTest COMMAND FRCBananaSim_Tests --full-robot-endurance)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

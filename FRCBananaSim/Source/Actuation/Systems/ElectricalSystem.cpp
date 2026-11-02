@@ -86,9 +86,15 @@ namespace FRCBananaSim::Actuation::Systems
             auto* elevator = scene.GetComponent<Robot::Mechanisms::Components::ElevatorComponent>(entity);
             if (elevator)
             {
-                double duty = std::clamp(std::abs(elevator->appliedVoltage) / std::max(1.0, currentTerminalVoltage), 0.0, 1.0);
-                double supply = std::min(elevator->statorCurrentLimitA, duty * std::abs(elevator->statorCurrentA));
-                totalAmps += supply * static_cast<double>(std::max(1u, elevator->motorCount));
+                Actuation::DCMotorModel motor = elevator->motorModel.WithMotorCount(elevator->motorCount);
+                double rDrum = std::max(elevator->drumRadiusM, 1e-4);
+                double omegaRotor = (elevator->stages.empty() ? 0.0 : (elevator->stages[0].currentVelocityMps / rDrum)) * elevator->gearRatio;
+                double statorI = std::abs(elevator->statorCurrentA);
+                double vWinding = std::min(std::abs(elevator->appliedVoltage),
+                    (statorI * motor.GetResistance()) + std::abs(motor.GetBackEmfConstantKe() * omegaRotor));
+                double duty = std::clamp(vWinding / std::max(1.0, currentTerminalVoltage), 0.0, 1.0);
+                double supply = std::min(elevator->statorCurrentLimitA, duty * statorI);
+                totalAmps += supply;
             }
         }
 
@@ -99,9 +105,14 @@ namespace FRCBananaSim::Actuation::Systems
             auto* arm = scene.GetComponent<Robot::Mechanisms::Components::ArmComponent>(entity);
             if (arm)
             {
-                double duty = std::clamp(std::abs(arm->appliedVoltage) / std::max(1.0, currentTerminalVoltage), 0.0, 1.0);
-                double supply = std::min(arm->statorCurrentLimitA, duty * std::abs(arm->statorCurrentA));
-                totalAmps += supply * static_cast<double>(std::max(1u, arm->motorCount));
+                Actuation::DCMotorModel motor = arm->motorModel.WithMotorCount(arm->motorCount);
+                double omegaRotor = arm->currentVelocityRadPerSec * arm->gearRatio;
+                double statorI = std::abs(arm->statorCurrentA);
+                double vWinding = std::min(std::abs(arm->appliedVoltage),
+                    (statorI * motor.GetResistance()) + std::abs(motor.GetBackEmfConstantKe() * omegaRotor));
+                double duty = std::clamp(vWinding / std::max(1.0, currentTerminalVoltage), 0.0, 1.0);
+                double supply = std::min(arm->statorCurrentLimitA, duty * statorI);
+                totalAmps += supply;
             }
         }
 
@@ -112,9 +123,14 @@ namespace FRCBananaSim::Actuation::Systems
             auto* flywheel = scene.GetComponent<Robot::Mechanisms::Components::FlywheelComponent>(entity);
             if (flywheel)
             {
-                double duty = std::clamp(std::abs(flywheel->appliedVoltage) / std::max(1.0, currentTerminalVoltage), 0.0, 1.0);
-                double supply = std::min(flywheel->statorCurrentLimitA, duty * std::abs(flywheel->statorCurrentA));
-                totalAmps += supply * static_cast<double>(std::max(1u, flywheel->motorCount));
+                Actuation::DCMotorModel motor = flywheel->motorModel.WithMotorCount(flywheel->motorCount);
+                double omegaRotor = flywheel->angularVelocityRadPerSec * flywheel->gearRatio;
+                double statorI = std::abs(flywheel->statorCurrentA);
+                double vWinding = std::min(std::abs(flywheel->appliedVoltage),
+                    (statorI * motor.GetResistance()) + std::abs(motor.GetBackEmfConstantKe() * omegaRotor));
+                double duty = std::clamp(vWinding / std::max(1.0, currentTerminalVoltage), 0.0, 1.0);
+                double supply = std::min(flywheel->statorCurrentLimitA, duty * statorI);
+                totalAmps += supply;
             }
         }
 

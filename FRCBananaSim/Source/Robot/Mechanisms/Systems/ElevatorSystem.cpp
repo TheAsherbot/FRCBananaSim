@@ -229,7 +229,8 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
 
         // 10. Electrical Telemetry Feedback
         double omegaDrum = v1 / rDrum;
-        elevator.statorCurrentA = motor.CalculateCurrent(appliedV, omegaDrum);
+        double rawCurrent = motor.CalculateCurrent(appliedV, omegaDrum);
+        elevator.statorCurrentA = std::clamp(rawCurrent, -elevator.statorCurrentLimitA, elevator.statorCurrentLimitA);
     }
 
     void ElevatorSystem::ProcessCascadeRigging(ElevatorComponent& elevator, double x1, double v1, double predV)
