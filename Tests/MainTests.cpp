@@ -19,6 +19,7 @@
 #include "ArmFourBarFlywheelTest.h"
 #include "SensorSuiteTest.h"
 #include "SimDeviceLockstepTest.h"
+#include "RobotAssemblerTest.h"
 
 #include <iostream>
 #include <string>
@@ -39,6 +40,7 @@ using FRCBananaSim::Tests::RunElevatorMechanismTest;
 using FRCBananaSim::Tests::RunArmFourBarFlywheelTest;
 using FRCBananaSim::Tests::RunSensorSuiteTest;
 using FRCBananaSim::Tests::RunSimDeviceLockstepTest;
+using FRCBananaSim::Tests::RunRobotAssemblerTest;
 
 int main(int argc, char* argv[])
 {
@@ -127,6 +129,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunSimDeviceLockstepTest(ctx);
         }
+        else if (arg == "--robot-assembler")
+        {
+            runAll = false;
+            RunRobotAssemblerTest(ctx);
+        }
     }
 
     if (runAll)
@@ -146,6 +153,7 @@ int main(int argc, char* argv[])
         RunArmFourBarFlywheelTest(ctx);
         RunSensorSuiteTest(ctx);
         RunSimDeviceLockstepTest(ctx);
+        RunRobotAssemblerTest(ctx);
     }
 
     std::cout << "======================================\n";

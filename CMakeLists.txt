@@ -38,6 +38,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Actuation/ServoModel.cpp
+    FRCBananaSim/Source/Actuation/Systems/ElectricalSystem.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveParams.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/TireContactModel.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveModuleModel.cpp
@@ -46,6 +47,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveTerrainProbe.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
+    FRCBananaSim/Source/Robot/RobotAssembler.cpp
     FRCBananaSim/Source/Robot/Schema/MaterialLibrary.cpp
     FRCBananaSim/Source/Robot/Schema/RobotManifest.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSidecar.cpp
@@ -125,6 +127,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Actuation/ServoModel.cpp
+    FRCBananaSim/Source/Actuation/Systems/ElectricalSystem.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveParams.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/TireContactModel.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveModuleModel.cpp
@@ -133,6 +136,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveTerrainProbe.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
+    FRCBananaSim/Source/Robot/RobotAssembler.cpp
     FRCBananaSim/Source/Robot/Schema/MaterialLibrary.cpp
     FRCBananaSim/Source/Robot/Schema/RobotManifest.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSidecar.cpp
@@ -182,6 +186,7 @@ set(TEST_SOURCES
     Tests/ArmFourBarFlywheelTest.cpp
     Tests/SensorSuiteTest.cpp
     Tests/SimDeviceLockstepTest.cpp
+    Tests/RobotAssemblerTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -214,4 +219,5 @@ add_test(NAME ElevatorMechanismTest COMMAND FRCBananaSim_Tests --elevator-mechan
 add_test(NAME ArmFourBarFlywheelTest COMMAND FRCBananaSim_Tests --arm-fourbar-flywheel)
 add_test(NAME SensorSuiteTest COMMAND FRCBananaSim_Tests --sensors)
 add_test(NAME SimDeviceLockstepTest COMMAND FRCBananaSim_Tests --simdevice-lockstep)
+add_test(NAME RobotAssemblerTest COMMAND FRCBananaSim_Tests --robot-assembler)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)
