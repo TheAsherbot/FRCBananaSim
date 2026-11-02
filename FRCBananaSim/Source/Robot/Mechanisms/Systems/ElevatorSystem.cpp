@@ -6,6 +6,7 @@
 #include "Robot/Mechanisms/Systems/ElevatorSystem.h"
 #include "Physics/Components/JointComponent.h"
 #include "Physics/Components/RigidBodyComponent.h"
+#include "Core/ECS/Core/Scene.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
 #include <algorithm>
@@ -55,15 +56,26 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         }
 
         // 1. Multi-Motor Scaling & Reflected Linear Mass Computation
-        Actuation::DCMotorModel motor = elevator.motorModel.WithMotorCount(elevator.motorCount);
+        Actuation::DCMotorModel baseMotor = elevator.motorModel;
+        Actuation::DCMotorModel motor(
+            baseMotor.GetNominalVoltage(),
+            baseMotor.GetStallTorque(),
+            baseMotor.GetStallCurrent(),
+            baseMotor.GetFreeSpeed(),
+            baseMotor.GetFreeCurrent(),
+            baseMotor.GetRotorInertia(),
+            elevator.gearRatio,
+            elevator.efficiency
+        );
+        motor = motor.WithMotorCount(elevator.motorCount);
+
         double rDrum = std::max(elevator.drumRadiusM, 1e-4);
         double gRatio = elevator.gearRatio;
 
         // m_reflected = N * J_rotor * (G / r_drum)^2
-        elevator.reflectedLinearMassKg = elevator.motorCount * motor.GetRotorInertia() * (gRatio / rDrum) * (gRatio / rDrum);
+        elevator.reflectedLinearMassKg = motor.GetRotorInertia() * (gRatio / rDrum) * (gRatio / rDrum);
 
         // 2. Lumped Effective Mass and Gravity Load Determination
-        double lumpedStageMass = 0.0;
         double effectiveGravityLoadN = 0.0;
 
         if (elevator.riggingMode == ElevatorRiggingMode::Cascade)
@@ -79,7 +91,6 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
             }
             elevator.lumpedEffectiveMassKg = elevator.reflectedLinearMassKg + effSum;
             effectiveGravityLoadN = -gravSum * 9.80665;
-            lumpedStageMass = gravSum;
         }
         else // SingleStage or Continuous
         {
@@ -90,7 +101,6 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
             }
             elevator.lumpedEffectiveMassKg = elevator.reflectedLinearMassKg + stageMass;
             effectiveGravityLoadN = -stageMass * 9.80665;
-            lumpedStageMass = stageMass;
         }
 
         elevator.lumpedEffectiveMassKg = std::max(elevator.lumpedEffectiveMassKg, 0.1);
@@ -119,9 +129,10 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         double dTotal = dLin + elevator.viscousDampingNspm;
 
         // 5. Semi-Implicit Linear Actuation Force Formulation:
-        // F^{t+dt} = (F_cmd + F_spring - D_total * v1) / (1 + (D_total * dt) / M_eff)
+        // F^{t+dt} = (F_cmd + F_spring + F_grav - D_total * v1) / (1 + (D_total * dt) / M_eff) - F_grav
         double denominator = 1.0 + ((dTotal * dt) / elevator.lumpedEffectiveMassKg);
-        double fSemiImplicit = (fCmd + elevator.springPreloadForceN - (dTotal * v1)) / denominator;
+        double fNetConstant = fCmd + elevator.springPreloadForceN + effectiveGravityLoadN;
+        double fSemiImplicit = (fNetConstant - (dTotal * v1)) / denominator - effectiveGravityLoadN;
 
         // 6. Stator Current Limit Clamp
         double maxStatorTorque = motor.CalculateStatorTorqueLimit(elevator.statorCurrentLimitA);
@@ -132,18 +143,34 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         double fCoulomb = elevator.coulombFrictionN;
         double fHoldingExt = fSemiImplicit + effectiveGravityLoadN;
         double fDelivered = 0.0;
+        bool isStickLocked = false;
 
         if (std::abs(appliedV) < 1e-3 && std::abs(v1) < 1e-3)
         {
-            // Static stick regime: if net load is within Coulomb friction threshold, hold zero velocity exactly
+            // Static stick regime: lock slider position with Coulomb holding force to prevent numerical creep
             if (std::abs(fHoldingExt) <= fCoulomb)
             {
-                fDelivered = -effectiveGravityLoadN; // Balance gravity load exactly
+                if (!elevator.isStickLocked)
+                {
+                    elevator.isStickLocked = true;
+                    elevator.lockedPositionM = x1;
+                }
+
+                fDelivered = -effectiveGravityLoadN;
                 v1 = 0.0;
                 stage1Joint->currentVelocity = 0.0f;
+                stage1Joint->targetPosition = static_cast<float>(elevator.lockedPositionM);
+                stage1Joint->targetVelocity = 0.0f;
+                stage1Joint->motorMode = JointMotorMode::Position;
+                stage1Joint->springFrequency = 100.0f; // Firm stiffness prevents drift
+                stage1Joint->springDamping = 1.0f;
+                stage1Joint->maxMotorForce = static_cast<float>(fCoulomb);
+                stage1Joint->appliedForce = static_cast<float>(-effectiveGravityLoadN); // Counterbalance feedforward
+                isStickLocked = true;
             }
             else
             {
+                elevator.isStickLocked = false;
                 // Breakaway: Coulomb friction opposes impending motion
                 double sign = (fHoldingExt > 0.0) ? 1.0 : -1.0;
                 fDelivered = fSemiImplicit - (fCoulomb * sign);
@@ -151,6 +178,7 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         }
         else
         {
+            elevator.isStickLocked = false;
             // Dynamic sliding: Coulomb friction opposes instantaneous velocity direction
             double sign = (v1 > 1e-5) ? 1.0 : ((v1 < -1e-5) ? -1.0 : ((fHoldingExt > 0.0) ? 1.0 : -1.0));
             fDelivered = fSemiImplicit - (fCoulomb * sign);
@@ -159,14 +187,20 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         elevator.appliedLinearForceN = fDelivered;
         elevator.appliedVoltage = appliedV;
 
-        // 8. Deliver Force to Stage 1 Slider Constraint
-        stage1Joint->appliedForce = static_cast<float>(fDelivered);
-        stage1Joint->motorMode = JointMotorMode::Torque;
+        // 8. Deliver Force to Stage 1 Slider Constraint (if not position-locked in static stick)
+        if (!isStickLocked)
+        {
+            stage1Joint->appliedForce = static_cast<float>(fDelivered);
+            stage1Joint->targetVelocity = 0.0f;
+            stage1Joint->motorMode = JointMotorMode::Torque;
+        }
 
         // 9. Rigging Dispatch
         if (elevator.riggingMode == ElevatorRiggingMode::Cascade)
         {
-            ProcessCascadeRigging(elevator, x1, v1);
+            double a1 = (fDelivered + effectiveGravityLoadN) / elevator.lumpedEffectiveMassKg;
+            double predV = v1 + a1 * dt;
+            ProcessCascadeRigging(elevator, x1, v1, predV);
         }
         else if (elevator.riggingMode == ElevatorRiggingMode::Continuous)
         {
@@ -179,24 +213,25 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         }
 
         // 10. Electrical Telemetry Feedback
-        double omegaMotor = (gRatio / rDrum) * v1;
-        elevator.statorCurrentA = motor.CalculateCurrent(appliedV, omegaMotor);
+        double omegaDrum = v1 / rDrum;
+        elevator.statorCurrentA = motor.CalculateCurrent(appliedV, omegaDrum);
     }
 
-    void ElevatorSystem::ProcessCascadeRigging(ElevatorComponent& elevator, double x1, double v1)
+    void ElevatorSystem::ProcessCascadeRigging(ElevatorComponent& elevator, double x1, double v1, double predV)
     {
-        // Cascade Rigging: each stage k relative to stage k-1 is locked to x1 (total carriage = N * x1)
+        // Cascade Rigging: each stage k relative to stage k-1 is locked to x1 with forward-predicted velocity
         for (size_t k = 1; k < elevator.stages.size(); ++k)
         {
             auto* stageJoint = scene.GetComponent<JointComponent>(elevator.stages[k].jointEntity);
             if (stageJoint)
             {
-                // Lock pose relative to stage k-1 to match Stage 1
+                // Lock pose to current stage 1 displacement and drive velocity to match Stage 1 forward step
                 stageJoint->targetPosition = static_cast<float>(x1);
+                stageJoint->targetVelocity = static_cast<float>(predV);
                 stageJoint->motorMode = JointMotorMode::Position;
-                stageJoint->springFrequency = 40.0f;
+                stageJoint->springFrequency = 100.0f;
                 stageJoint->springDamping = 1.0f;
-                stageJoint->maxMotorForce = 50000.0f; // Stiff kinematic lock
+                stageJoint->maxMotorForce = 50000.0f;
             }
 
             elevator.stages[k].currentPositionM = x1;
@@ -228,18 +263,35 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
             double stagePos = stageJoint->currentPosition;
             double stageLimit = elevator.stages[k].maxTravelM;
 
-            if (!tensionConsumed && (stageLimit <= 0.0 || stagePos < stageLimit - 0.002))
+            if (!tensionConsumed && (stageLimit <= 0.0 || stagePos < stageLimit - 0.005))
             {
                 // This stage is actively lifting under cable tension
                 stageJoint->appliedForce = static_cast<float>(upwardTension);
+                stageJoint->targetVelocity = 0.0f;
                 stageJoint->motorMode = JointMotorMode::Torque;
                 tensionConsumed = true;
             }
+            else if (!tensionConsumed)
+            {
+                // Stage is fully extended: continuous cable holds it firmly against top hard stop
+                stageJoint->targetPosition = static_cast<float>(stageLimit);
+                stageJoint->targetVelocity = 0.0f;
+                stageJoint->motorMode = JointMotorMode::Position;
+                stageJoint->springFrequency = 100.0f;
+                stageJoint->springDamping = 1.0f;
+                stageJoint->maxMotorForce = 50000.0f;
+                stageJoint->appliedForce = 0.0f;
+            }
             else
             {
-                // Stage is either fully extended or waiting its turn
+                // Stage is waiting its turn: continuous cable holds it down firmly at bottom stop
+                stageJoint->targetPosition = 0.0f;
+                stageJoint->targetVelocity = 0.0f;
+                stageJoint->motorMode = JointMotorMode::Position;
+                stageJoint->springFrequency = 100.0f;
+                stageJoint->springDamping = 1.0f;
+                stageJoint->maxMotorForce = 50000.0f;
                 stageJoint->appliedForce = 0.0f;
-                stageJoint->motorMode = JointMotorMode::Off;
             }
 
             elevator.stages[k].currentPositionM = stagePos;

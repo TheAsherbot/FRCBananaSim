@@ -50,6 +50,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/Schema/RobotManifest.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSidecar.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/ElevatorSystem.cpp
     FRCBananaSim/Source/Bridge/Sha1.cpp
     FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
     FRCBananaSim/Source/Telemetry/DrivetrainLogger.cpp
@@ -127,6 +128,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/Schema/RobotManifest.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSidecar.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/ElevatorSystem.cpp
     FRCBananaSim/Source/Bridge/Sha1.cpp
     FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
     FRCBananaSim/Source/Telemetry/DrivetrainLogger.cpp
@@ -158,6 +160,7 @@ set(TEST_SOURCES
     Tests/HALSimBridgeTest.cpp
     Tests/DrivetrainLoggerTest.cpp
     Tests/RobotSchemaTest.cpp
+    Tests/ElevatorMechanismTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -186,4 +189,5 @@ add_test(NAME SwerveAdapterTest COMMAND FRCBananaSim_Tests --swerve-adapter)
 add_test(NAME HALSimBridgeTest COMMAND FRCBananaSim_Tests --halsim-bridge)
 add_test(NAME DrivetrainLoggerTest COMMAND FRCBananaSim_Tests --drivetrain-logger)
 add_test(NAME RobotSchemaTest COMMAND FRCBananaSim_Tests --schema)
+add_test(NAME ElevatorMechanismTest COMMAND FRCBananaSim_Tests --elevator-mechanism)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

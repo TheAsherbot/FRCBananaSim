@@ -1,6 +1,6 @@
 /**
  * @file MainTests.cpp
- * @brief Entry point for headless CTest suites including analytic swerve model and Jolt adapter verification.
+ * @brief Entry point for headless CTest suites including analytic swerve model, Jolt adapter, and elevator mechanisms.
  */
 
 #include "TestFramework.h"
@@ -15,6 +15,7 @@
 #include "HALSimBridgeTest.h"
 #include "DrivetrainLoggerTest.h"
 #include "RobotSchemaTest.h"
+#include "ElevatorMechanismTest.h"
 
 #include <iostream>
 #include <string>
@@ -31,6 +32,7 @@ using FRCBananaSim::Tests::RunSwerveAdapterTest;
 using FRCBananaSim::Tests::RunHALSimBridgeTest;
 using FRCBananaSim::Tests::RunDrivetrainLoggerTest;
 using FRCBananaSim::Tests::RunRobotSchemaTest;
+using FRCBananaSim::Tests::RunElevatorMechanismTest;
 
 int main(int argc, char* argv[])
 {
@@ -99,6 +101,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunRobotSchemaTest(ctx);
         }
+        else if (arg == "--elevator-mechanism")
+        {
+            runAll = false;
+            RunElevatorMechanismTest(ctx);
+        }
     }
 
     if (runAll)
@@ -114,6 +121,7 @@ int main(int argc, char* argv[])
         RunHALSimBridgeTest(ctx);
         RunDrivetrainLoggerTest(ctx);
         RunRobotSchemaTest(ctx);
+        RunElevatorMechanismTest(ctx);
     }
 
     std::cout << "======================================\n";

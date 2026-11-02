@@ -100,32 +100,25 @@ namespace FRCBananaSim::Physics::Systems
 
     JointSystem::~JointSystem()
     {
-        if (!joltContext.IsInitialized())
+        if (joltContext.IsInitialized())
         {
-            return;
-        }
-
-        JPH::PhysicsSystem& physicsSystem = joltContext.GetPhysicsSystem();
-        for (auto& constraint : createdConstraints)
-        {
-            if (constraint)
+            JPH::PhysicsSystem& physicsSystem = joltContext.GetPhysicsSystem();
+            for (auto& constraint : createdConstraints)
             {
-                physicsSystem.RemoveConstraint(constraint);
+                if (constraint)
+                {
+                    physicsSystem.RemoveConstraint(constraint);
+                }
             }
         }
         createdConstraints.clear();
     }
 
-    void JointSystem::FixedUpdate(double dt)
+    void JointSystem::FixedUpdate(double /*dt*/)
     {
         SIM_PROFILE_SCOPE("JointSystem::FixedUpdate");
 
-        if (!joltContext.IsInitialized())
-        {
-            return;
-        }
-
-        // 1. Instantiate any pending joints whose bodies are allocated
+        // 1. Instantiate any pending joints whose rigid bodies are now ready in Jolt
         CreatePendingJoints();
 
         // 2. Synchronize motor targets and torque limits
@@ -165,7 +158,7 @@ namespace FRCBananaSim::Physics::Systems
                 continue;
             }
 
-            // Ensure child entity has a valid, created rigid body
+            // Check child entity: rigid body must exist and be instantiated in Jolt
             auto* childRigidBody = scene.GetComponent<RigidBodyComponent>(joint->childEntity);
             if (!childRigidBody || !childRigidBody->isCreated || childRigidBody->bodyID.IsInvalid())
             {
@@ -358,11 +351,43 @@ namespace FRCBananaSim::Physics::Systems
                     break;
 
                 case JointMotorMode::Position:
-                    slider->SetMotorState(JPH::EMotorState::Position);
+                    if (std::abs(joint->targetVelocity) > 1e-4f)
+                    {
+                        slider->SetMotorState(JPH::EMotorState::PositionAndVelocity);
+                        slider->SetTargetVelocity(joint->targetVelocity);
+                    }
+                    else
+                    {
+                        slider->SetMotorState(JPH::EMotorState::Position);
+                    }
                     slider->SetTargetPosition(joint->targetPosition);
                     slider->GetMotorSettings().SetForceLimit(joint->maxMotorForce);
                     slider->GetMotorSettings().mSpringSettings.mFrequency = joint->springFrequency;
                     slider->GetMotorSettings().mSpringSettings.mDamping = joint->springDamping;
+
+                    if (std::abs(joint->appliedForce) > 1e-5f)
+                    {
+                        auto* childRb = scene.GetComponent<RigidBodyComponent>(joint->childEntity);
+                        if (childRb && childRb->isCreated && !childRb->bodyID.IsInvalid())
+                        {
+                            JPH::RMat44 com2 = bodyInterface.GetCenterOfMassTransform(childRb->bodyID);
+                            JPH::Vec3 worldSliderAxis = com2.Multiply3x3(JPH::Vec3(joint->childAxis.x, joint->childAxis.y, joint->childAxis.z)).Normalized();
+                            JPH::Vec3 forceVec = worldSliderAxis * joint->appliedForce;
+
+                            bodyInterface.AddForce(childRb->bodyID, forceVec);
+                            bodyInterface.ActivateBody(childRb->bodyID);
+
+                            if (joint->parentEntity != invalidEntity)
+                            {
+                                auto* parentRb = scene.GetComponent<RigidBodyComponent>(joint->parentEntity);
+                                if (parentRb && parentRb->isCreated && !parentRb->bodyID.IsInvalid())
+                                {
+                                    bodyInterface.AddForce(parentRb->bodyID, -forceVec);
+                                    bodyInterface.ActivateBody(parentRb->bodyID);
+                                }
+                            }
+                        }
+                    }
                     break;
 
                 case JointMotorMode::Torque:

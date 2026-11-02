@@ -85,5 +85,9 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
 
         // Control Slot Mapping
         uint32_t motorSlot = 8;                  ///< SimInputs motor slot index [8..23].
+
+        // Static Stick Holding State
+        bool isStickLocked = false;              ///< True if Coulomb friction is currently locking the mechanism in static stick.
+        double lockedPositionM = 0.0;            ///< Latched displacement holding position during static stick (m).
     };
 }

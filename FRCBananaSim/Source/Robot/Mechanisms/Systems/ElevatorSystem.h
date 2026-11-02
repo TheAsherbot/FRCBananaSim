@@ -47,10 +47,11 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         /**
          * @brief Enforces analytic coupled cascade elevator stage constraints (x_k = k * x_1).
          * @param elevator Mutable reference to ElevatorComponent.
-         * @param x1 Displacement of Stage 1 in meters.
-         * @param v1 Velocity of Stage 1 in m/s.
+         * @param x1 Measured displacement of Stage 1 in meters.
+         * @param v1 Measured velocity of Stage 1 in m/s.
+         * @param predV Forward-predicted velocity of Stage 1 for the end of the step in m/s.
          */
-        void ProcessCascadeRigging(Components::ElevatorComponent& elevator, double x1, double v1);
+        void ProcessCascadeRigging(Components::ElevatorComponent& elevator, double x1, double v1, double predV);
 
         /**
          * @brief Enforces sequential lifting for continuous cable rigging.
