@@ -17,7 +17,7 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
      */
     enum class TransmissionType : uint8_t
     {
-        Gear = 0,             ///< Spur, helical, or planetary gear mesh.
+        Gear = 0,             ///< Spur, helical, bevel , or planetary gear mesh.
         TimingBelt = 1,       ///< HTD or GT2 synchronous timing belt.
         RollerChain = 2,      ///< #25 or #35 roller chain drive.
         Cable = 3,            ///< Rigging wire rope or Dyneema cable loop.
