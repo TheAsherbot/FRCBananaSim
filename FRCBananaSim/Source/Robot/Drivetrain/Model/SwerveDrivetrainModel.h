@@ -121,6 +121,12 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         double GetBatteryTerminalVoltage() const;
         bool IsBrownedOut() const;
 
+        /**
+         * @brief Retrieves instantaneous aggregate battery supply current drawn by drivetrain.
+         * @return Total drivetrain supply current in Amperes.
+         */
+        double GetTotalSupplyCurrent() const;
+
     private:
         SwerveDrivetrainConfig config;
         Actuation::BatteryModel batteryModel;
@@ -133,6 +139,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
         double terminalVoltage = 12.60;
         double totalBusCurrent = 1.5;
+        double totalDrivetrainSupplyCurrent = 0.0;
         bool isBrownedOutState = false;
 
         DrivetrainEnergyLedger energyLedger;

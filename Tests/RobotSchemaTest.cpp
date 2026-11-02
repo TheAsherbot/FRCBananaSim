@@ -197,10 +197,10 @@ namespace FRCBananaSim::Tests
             TEST_EXPECT_NEAR(ctx, fwdEng.y, 0.0, tolerance);
             TEST_EXPECT_NEAR(ctx, fwdEng.z, 1.0, tolerance);
 
-            // Left: NWU (+Y) -> Engine (-X) [since Engine +X is Right]
+            // Left: NWU (+Y) -> Engine (+X) [Engine +X is Left in right-handed (+X Left, +Y Up, +Z Fwd)]
             glm::dvec3 leftNWU(0.0, 1.0, 0.0);
             glm::dvec3 leftEng = RobotSchemaLoader::ConvertNWUVectorToEngine(leftNWU);
-            TEST_EXPECT_NEAR(ctx, leftEng.x, -1.0, tolerance);
+            TEST_EXPECT_NEAR(ctx, leftEng.x, 1.0, tolerance);
             TEST_EXPECT_NEAR(ctx, leftEng.y, 0.0, tolerance);
             TEST_EXPECT_NEAR(ctx, leftEng.z, 0.0, tolerance);
 
@@ -271,10 +271,10 @@ namespace FRCBananaSim::Tests
             TEST_EXPECT_NEAR(ctx, rotatedNWU.y, 1.0, tolerance);
             TEST_EXPECT_NEAR(ctx, rotatedNWU.z, 0.0, tolerance);
 
-            // Convert to Engine frame: should rotate Engine Forward (+Z) into Engine Left (-X)
+            // Convert to Engine frame: should rotate Engine Forward (+Z) into Engine Left (+X)
             glm::dquat qYawEng = RobotSchemaLoader::ConvertNWUQuatToEngine(qYawNWU);
             glm::dvec3 rotatedEng = glm::mat3_cast(qYawEng) * glm::dvec3(0.0, 0.0, 1.0);
-            TEST_EXPECT_NEAR(ctx, rotatedEng.x, -1.0, tolerance);
+            TEST_EXPECT_NEAR(ctx, rotatedEng.x, 1.0, tolerance);
             TEST_EXPECT_NEAR(ctx, rotatedEng.y, 0.0, tolerance);
             TEST_EXPECT_NEAR(ctx, rotatedEng.z, 0.0, tolerance);
 

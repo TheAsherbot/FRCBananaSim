@@ -181,7 +181,7 @@ static void RenderSceneDebugDraw(Scene& scene, bool showColliders, bool showWhee
                 {
                     const auto& modState = model->GetModule(i).GetState();
                     const auto& modPlacement = model->GetModule(i).GetPlacement();
-                    glm::vec3 modLocEng(-modPlacement.locationOnChassis.y, -0.075f - 0.060f - 0.010f - kRadius, modPlacement.locationOnChassis.x);
+                    glm::vec3 modLocEng(modPlacement.locationOnChassis.y, -0.075f - 0.060f - 0.010f - kRadius, modPlacement.locationOnChassis.x);
                     glm::vec3 worldWheelPos = chassisT->position + (chassisT->rotation * modLocEng);
 
                     double normalF = modState.contactState.normalForce;
@@ -385,7 +385,7 @@ int main(int argc, char* argv[])
     }
 
     FRCBananaSim::Robot::RobotAssembler assembler(scene, &joltContext);
-    const glm::vec3 robotSpawnPos(0.0f, 0.18f, 0.0f);
+    const glm::vec3 robotSpawnPos(0.0f, 0.1989f, 0.0f);
     FRCBananaSim::Robot::AssembledRobot robot = assembler.AssembleFromFiles(
         manifestPath, sidecarPath, materialsPath, robotSpawnPos);
 
@@ -414,134 +414,133 @@ int main(int argc, char* argv[])
     // 8. Visual Mesh & Scale Attachment for All Robot Links
     // -------------------------------------------------------------------------
 
-    // A. Chassis Bumpers
-    if (robot.chassisEntity != invalidEntity)
-    {
-        auto* t = scene.GetComponent<TransformComponent>(robot.chassisEntity);
-        if (t) t->scale = glm::vec3(0.85f, 0.16f, 0.85f);
-        auto* wt = scene.GetComponent<WorldTransformComponent>(robot.chassisEntity);
-        if (wt) wt->worldScale = glm::vec3(0.85f, 0.16f, 0.85f);
+    auto attachVisualMesh = [&](Entity linkEntity, PrimitiveShape shape, const glm::vec3& color,
+        const glm::vec3& fallbackScale = glm::vec3(0.04f),
+        const glm::vec3& fallbackOffset = glm::vec3(0.0f),
+        const glm::quat& fallbackRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
+        {
+            if (linkEntity == invalidEntity) return;
 
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.14f, 0.28f, 0.52f); // Royal Blue Chassis Bumper
-        scene.AddComponent(robot.chassisEntity, mesh);
-    }
+            auto* linkT = scene.GetComponent<TransformComponent>(linkEntity);
+            if (!linkT) return;
+
+            // Preserve neutral unit scale on link entity to prevent skewing child joints/colliders
+            linkT->scale = glm::vec3(1.0f);
+            auto* linkWt = scene.GetComponent<WorldTransformComponent>(linkEntity);
+            if (linkWt) linkWt->worldScale = glm::vec3(1.0f);
+
+            auto* col = scene.GetComponent<ColliderComponent>(linkEntity);
+            glm::vec3 visualOffset = col ? col->localOffset : fallbackOffset;
+            glm::quat visualRot = col ? col->localRotation : fallbackRot;
+            glm::vec3 visualScale = fallbackScale;
+
+            if (col)
+            {
+                if (col->shape == ColliderShape::Box)
+                {
+                    visualScale = col->boxHalfExtents * 2.0f;
+                }
+                else if (col->shape == ColliderShape::Cylinder || col->shape == ColliderShape::Capsule)
+                {
+                    visualScale = glm::vec3(col->radius * 2.0f, col->halfHeight * 2.0f, col->radius * 2.0f);
+                }
+                else if (col->shape == ColliderShape::Sphere)
+                {
+                    visualScale = glm::vec3(col->radius * 2.0f);
+                }
+            }
+
+            Entity visualEntity = scene.CreateEntity();
+            TransformComponent visualT;
+            visualT.position = visualOffset;
+            visualT.rotation = visualRot;
+            visualT.scale = visualScale;
+            scene.AddComponent(visualEntity, visualT);
+
+            WorldTransformComponent visualWt;
+            visualWt.worldPosition = linkT->position + (linkT->rotation * visualOffset);
+            visualWt.worldRotation = linkT->rotation * visualRot;
+            visualWt.worldScale = visualScale;
+            scene.AddComponent(visualEntity, visualWt);
+
+            HierarchyComponent visualH;
+            visualH.parent = linkEntity;
+            scene.AddComponent(visualEntity, visualH);
+
+            auto* linkH = scene.GetComponent<HierarchyComponent>(linkEntity);
+            if (linkH)
+            {
+                linkH->children.push_back(visualEntity);
+            }
+            else
+            {
+                HierarchyComponent newLinkH;
+                newLinkH.children.push_back(visualEntity);
+                scene.AddComponent(linkEntity, newLinkH);
+            }
+
+            MeshComponent mesh;
+            mesh.shape = shape;
+            mesh.color = color;
+            scene.AddComponent(visualEntity, mesh);
+        };
+
+    // A. Chassis Bumpers
+    attachVisualMesh(robot.chassisEntity, PrimitiveShape::Cube, glm::vec3(0.14f, 0.28f, 0.52f)); // Royal Blue Chassis Bumper
 
     // B. Elevator Stages
     auto s1It = robot.linkEntities.find("elevator_stage_1");
     if (s1It != robot.linkEntities.end())
     {
-        auto* t = scene.GetComponent<TransformComponent>(s1It->second);
-        if (t) t->scale = glm::vec3(0.42f, 0.70f, 0.06f);
-        auto* wt = scene.GetComponent<WorldTransformComponent>(s1It->second);
-        if (wt) wt->worldScale = glm::vec3(0.42f, 0.70f, 0.06f);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.78f, 0.82f, 0.86f); // Brushed Aluminum Silver
-        scene.AddComponent(s1It->second, mesh);
+        attachVisualMesh(s1It->second, PrimitiveShape::Cube, glm::vec3(0.78f, 0.82f, 0.86f)); // Brushed Aluminum Silver
     }
 
     auto carrIt = robot.linkEntities.find("elevator_carriage");
     if (carrIt != robot.linkEntities.end())
     {
-        auto* t = scene.GetComponent<TransformComponent>(carrIt->second);
-        if (t) t->scale = glm::vec3(0.36f, 0.25f, 0.08f);
-        auto* wt = scene.GetComponent<WorldTransformComponent>(carrIt->second);
-        if (wt) wt->worldScale = glm::vec3(0.36f, 0.25f, 0.08f);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.24f, 0.26f, 0.30f); // Dark Carbon Carriage
-        scene.AddComponent(carrIt->second, mesh);
+        attachVisualMesh(carrIt->second, PrimitiveShape::Cube, glm::vec3(0.24f, 0.26f, 0.30f)); // Dark Carbon Carriage
     }
 
     // C. Arm Links
     auto armIt = robot.linkEntities.find("arm_shoulder_link");
     if (armIt != robot.linkEntities.end())
     {
-        auto* t = scene.GetComponent<TransformComponent>(armIt->second);
-        if (t) t->scale = glm::vec3(0.08f, 0.08f, 0.50f);
-        auto* wt = scene.GetComponent<WorldTransformComponent>(armIt->second);
-        if (wt) wt->worldScale = glm::vec3(0.08f, 0.08f, 0.50f);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.88f, 0.44f, 0.12f); // Anodized Orange Arm Tube
-        scene.AddComponent(armIt->second, mesh);
+        attachVisualMesh(armIt->second, PrimitiveShape::Cube, glm::vec3(0.88f, 0.44f, 0.12f)); // Anodized Orange Arm Tube
     }
 
     auto wristIt = robot.linkEntities.find("arm_wrist_link");
     if (wristIt != robot.linkEntities.end())
     {
-        auto* t = scene.GetComponent<TransformComponent>(wristIt->second);
-        if (t) t->scale = glm::vec3(0.15f, 0.10f, 0.30f);
-        auto* wt = scene.GetComponent<WorldTransformComponent>(wristIt->second);
-        if (wt) wt->worldScale = glm::vec3(0.15f, 0.10f, 0.30f);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.18f, 0.68f, 0.88f); // Cyan Wrist Bracket
-        scene.AddComponent(wristIt->second, mesh);
+        attachVisualMesh(wristIt->second, PrimitiveShape::Cube, glm::vec3(0.18f, 0.68f, 0.88f)); // Cyan Wrist Bracket
     }
 
     // D. Intake Links
     auto icIt = robot.linkEntities.find("intake_coupler_link");
     if (icIt != robot.linkEntities.end())
     {
-        auto* t = scene.GetComponent<TransformComponent>(icIt->second);
-        if (t) t->scale = glm::vec3(0.48f, 0.12f, 0.24f);
-        auto* wt = scene.GetComponent<WorldTransformComponent>(icIt->second);
-        if (wt) wt->worldScale = glm::vec3(0.48f, 0.12f, 0.24f);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.28f, 0.85f, 0.32f); // Neon Green Intake Roller
-        scene.AddComponent(icIt->second, mesh);
+        attachVisualMesh(icIt->second, PrimitiveShape::Cube, glm::vec3(0.28f, 0.85f, 0.32f)); // Neon Green Intake Roller
     }
 
     auto fcrankIt = robot.linkEntities.find("intake_crank_link");
     if (fcrankIt != robot.linkEntities.end())
     {
-        auto* t = scene.GetComponent<TransformComponent>(fcrankIt->second);
-        if (t) t->scale = glm::vec3(0.04f, 0.04f, 0.24f);
-        auto* wt = scene.GetComponent<WorldTransformComponent>(fcrankIt->second);
-        if (wt) wt->worldScale = glm::vec3(0.04f, 0.04f, 0.24f);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.45f, 0.48f, 0.52f);
-        scene.AddComponent(fcrankIt->second, mesh);
+        attachVisualMesh(fcrankIt->second, PrimitiveShape::Cube, glm::vec3(0.62f, 0.68f, 0.76f),
+            glm::vec3(0.06f, 0.04f, 0.24f), glm::vec3(0.0f, 0.0f, 0.12f));
     }
 
     auto ffolIt = robot.linkEntities.find("intake_follower_link");
     if (ffolIt != robot.linkEntities.end())
     {
-        auto* t = scene.GetComponent<TransformComponent>(ffolIt->second);
-        if (t) t->scale = glm::vec3(0.04f, 0.04f, 0.24f);
-        auto* wt = scene.GetComponent<WorldTransformComponent>(ffolIt->second);
-        if (wt) wt->worldScale = glm::vec3(0.04f, 0.04f, 0.24f);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.45f, 0.48f, 0.52f);
-        scene.AddComponent(ffolIt->second, mesh);
+        attachVisualMesh(ffolIt->second, PrimitiveShape::Cube, glm::vec3(0.76f, 0.60f, 0.36f),
+            glm::vec3(0.06f, 0.04f, 0.24f), glm::vec3(0.0f, 0.0f, 0.12f));
     }
 
     // E. Shooter Flywheel Wheel
     auto fwIt = robot.linkEntities.find("shooter_flywheel_visual");
     if (fwIt != robot.linkEntities.end())
     {
-        auto* t = scene.GetComponent<TransformComponent>(fwIt->second);
-        if (t) t->scale = glm::vec3(0.12f, 0.05f, 0.12f);
-        auto* wt = scene.GetComponent<WorldTransformComponent>(fwIt->second);
-        if (wt) wt->worldScale = glm::vec3(0.12f, 0.05f, 0.12f);
-
-        MeshComponent mesh;
-        mesh.shape = PrimitiveShape::Cylinder;
-        mesh.color = glm::vec3(0.95f, 0.88f, 0.18f); // High-RPM Yellow Flywheel
-        scene.AddComponent(fwIt->second, mesh);
+        attachVisualMesh(fwIt->second, PrimitiveShape::CylinderX, glm::vec3(0.95f, 0.88f, 0.18f),
+            glm::vec3(0.10f, 0.12f, 0.12f)); // High-RPM Yellow Flywheel
     }
 
     // -------------------------------------------------------------------------
@@ -553,8 +552,9 @@ int main(int argc, char* argv[])
     camera.yawDegrees = 90.0f;
     camera.moveSpeed = 6.0f;
     camera.SetMode(FRCBananaSim::Renderer::Camera::Mode::Orbit);
-    camera.orbitTarget = robotSpawnPos;
+    camera.orbitTarget = robotSpawnPos + glm::vec3(0.0f, 0.35f, 0.0f);
     camera.orbitDistance = 3.6f;
+    glm::vec3 lastChassisPos = robotSpawnPos;
 
     SimInputs robotInputs;
     SimOutputs robotOutputs;
@@ -574,9 +574,14 @@ int main(int argc, char* argv[])
     bool pinChassisStand = false;
     int cameraModeIndex = 1; // 0 = FreeFly, 1 = Orbit Robot
 
-    // Drivetrain Manual Demands
+    // Drivetrain Manual Demands (UI Sliders + Keyboard Offsets)
     float manualDriveVolts = 0.0f;
+    float manualStrafeVolts = 0.0f;
+    float manualSpinVolts = 0.0f;
     float manualSteerAngleDeg = 0.0f;
+    float keyDriveVolts = 0.0f;
+    float keyStrafeVolts = 0.0f;
+    float keySpinVolts = 0.0f;
     bool runSwerveStressTest = false;
     double swerveStressElapsed = 0.0;
 
@@ -599,10 +604,19 @@ int main(int argc, char* argv[])
             auto* chassisRb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
             if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
             {
+                glm::vec3 joltTargetPos = worldPos;
+                glm::quat joltTargetRot = worldRot;
+                auto* chassisCol = scene.GetComponent<ColliderComponent>(robot.chassisEntity);
+                if (chassisCol)
+                {
+                    joltTargetPos += worldRot * chassisCol->localOffset;
+                    joltTargetRot = glm::normalize(worldRot * chassisCol->localRotation);
+                }
+
                 JPH::BodyInterface& bi = joltContext.GetBodyInterface();
                 bi.SetPositionAndRotation(chassisRb->bodyID,
-                    JPH::RVec3(worldPos.x, worldPos.y, worldPos.z),
-                    JPH::Quat(worldRot.x, worldRot.y, worldRot.z, worldRot.w),
+                    JPH::RVec3(joltTargetPos.x, joltTargetPos.y, joltTargetPos.z),
+                    JPH::Quat(joltTargetRot.x, joltTargetRot.y, joltTargetRot.z, joltTargetRot.w),
                     JPH::EActivation::Activate);
                 bi.SetLinearAndAngularVelocity(chassisRb->bodyID, JPH::Vec3::sZero(), JPH::Vec3::sZero());
             }
@@ -637,7 +651,14 @@ int main(int argc, char* argv[])
             }
 
             manualDriveVolts = 0.0f;
+            manualStrafeVolts = 0.0f;
+            manualSpinVolts = 0.0f;
             manualSteerAngleDeg = 0.0f;
+            lastChassisPos = worldPos;
+            if (camera.GetMode() == FRCBananaSim::Renderer::Camera::Mode::Orbit)
+            {
+                camera.orbitTarget = worldPos + glm::vec3(0.0f, 0.35f, 0.0f);
+            }
         };
 
     // -------------------------------------------------------------------------
@@ -649,14 +670,10 @@ int main(int argc, char* argv[])
 
             // 1. Chassis Pinning on Test Stand
             auto* chassisRb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
-            if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
+            if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized() && pinChassisStand)
             {
                 JPH::BodyInterface& bi = joltContext.GetBodyInterface();
-                JPH::EMotionType targetMotion = pinChassisStand ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic;
-                if (bi.GetMotionType(chassisRb->bodyID) != targetMotion)
-                {
-                    bi.SetMotionType(chassisRb->bodyID, targetMotion, JPH::EActivation::Activate);
-                }
+                bi.SetLinearAndAngularVelocity(chassisRb->bodyID, JPH::Vec3::sZero(), JPH::Vec3::sZero());
             }
 
             // 2. Command Arbitration (WPILib Client vs Standalone Manual)
@@ -691,25 +708,85 @@ int main(int argc, char* argv[])
                 else
                 {
                     // Drivetrain Swerve Commands: [0..3] Steer, [4..7] Drive
-                    float steerRad = glm::radians(manualSteerAngleDeg);
-                    constexpr double kP = 12.0;
+                    // Combine UI slider demands with keyboard driving demands
+                    double cmdVx = std::clamp(static_cast<double>(manualDriveVolts + keyDriveVolts), -12.0, 12.0);
+                    double cmdVy = std::clamp(static_cast<double>(manualStrafeVolts + keyStrafeVolts), -12.0, 12.0);
+                    double cmdOmega = std::clamp(static_cast<double>(manualSpinVolts + keySpinVolts), -12.0, 12.0);
+
+                    constexpr double kP = 18.0;
                     constexpr double kD = 0.6;
+                    constexpr double kInvSqrt2 = 0.7071067811865475;
+                    // Module unit offset directions (rx, ry) in NWU (+X Forward, +Y Left): FL, FR, BL, BR
+                    constexpr double modRx[4] = { +kInvSqrt2, +kInvSqrt2, -kInvSqrt2, -kInvSqrt2 };
+                    constexpr double modRy[4] = { +kInvSqrt2, -kInvSqrt2, +kInvSqrt2, -kInvSqrt2 };
+
+                    double modVx[4] = { 0.0, 0.0, 0.0, 0.0 };
+                    double modVy[4] = { 0.0, 0.0, 0.0, 0.0 };
+                    double modMag[4] = { 0.0, 0.0, 0.0, 0.0 };
+                    double maxModMag = 0.0;
+
+                    bool useDirectHeading = (std::abs(cmdVy) < 1e-3 && std::abs(cmdOmega) < 1e-3 && std::abs(manualSteerAngleDeg) > 1e-3f);
+                    if (!useDirectHeading)
+                    {
+                        for (uint32_t i = 0; i < 4; ++i)
+                        {
+                            modVx[i] = cmdVx - (cmdOmega * modRy[i]);
+                            modVy[i] = cmdVy + (cmdOmega * modRx[i]);
+                            modMag[i] = std::hypot(modVx[i], modVy[i]);
+                            maxModMag = std::max(maxModMag, modMag[i]);
+                        }
+                    }
+
+                    double desaturateScale = (maxModMag > 12.0) ? (12.0 / maxModMag) : 1.0;
 
                     for (uint32_t i = 0; i < 4; ++i)
                     {
+                        double targetAngle = static_cast<double>(glm::radians(manualSteerAngleDeg));
+                        double driveVolts = cmdVx;
+
+                        if (!useDirectHeading)
+                        {
+                            if (modMag[i] > 1e-3)
+                            {
+                                targetAngle = std::atan2(modVy[i], modVx[i]);
+                                driveVolts = modMag[i] * desaturateScale;
+                            }
+                            else
+                            {
+                                targetAngle = static_cast<double>(glm::radians(manualSteerAngleDeg));
+                                driveVolts = 0.0;
+                            }
+                        }
+
                         double curAngle = robotOutputs.encoderPositions[i];
                         double curVel = robotOutputs.encoderVelocities[i];
-                        double err = static_cast<double>(steerRad) - curAngle;
+                        double err = targetAngle - curAngle;
 
                         while (err > 3.141592653589793) err -= 6.283185307179586;
                         while (err < -3.141592653589793) err += 6.283185307179586;
+
+                        // Swerve module 180-degree azimuth optimization + cosine velocity scaling
+                        if (std::abs(driveVolts) > 1e-3)
+                        {
+                            if (err > 1.5707963267948966)
+                            {
+                                err -= 3.141592653589793;
+                                driveVolts = -driveVolts;
+                            }
+                            else if (err < -1.5707963267948966)
+                            {
+                                err += 3.141592653589793;
+                                driveVolts = -driveVolts;
+                            }
+                            driveVolts *= std::cos(err);
+                        }
 
                         double steerV = std::clamp((err * kP) - (curVel * kD), -12.0, 12.0);
 
                         robotInputs.motorCommands[i].mode = MotorControlMode::Voltage;
                         robotInputs.motorCommands[i].demand = steerV;
                         robotInputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
-                        robotInputs.motorCommands[4 + i].demand = manualDriveVolts;
+                        robotInputs.motorCommands[4 + i].demand = driveVolts;
                     }
 
                     // Mechanisms Motor Slots:
@@ -727,7 +804,29 @@ int main(int argc, char* argv[])
 
                     // [11] Intake 4-Bar Deploy
                     robotInputs.motorCommands[11].mode = MotorControlMode::Voltage;
-                    robotInputs.motorCommands[11].demand = intakeDeployed ? 6.0 : -6.0;
+                    double intakeAngle = 0.0;
+                    double intakeVel = 0.0;
+                    auto intakeCheckIt = robot.mechanismEntities.find("intake_fourbar_deploy");
+                    if (intakeCheckIt != robot.mechanismEntities.end())
+                    {
+                        auto* intakeArm = scene.GetComponent<ArmComponent>(intakeCheckIt->second);
+                        if (intakeArm)
+                        {
+                            intakeAngle = intakeArm->currentAngleRad;
+                            intakeVel = intakeArm->currentVelocityRadPerSec;
+                        }
+                    }
+                    double targetIntakeAngle = intakeDeployed ? 1.20 : 0.0;
+                    double intakeErr = targetIntakeAngle - intakeAngle;
+                    if (std::abs(intakeErr) > 0.008 || std::abs(intakeVel) > 0.05)
+                    {
+                        double pdVolts = (intakeErr * 18.0) - (intakeVel * 1.2);
+                        robotInputs.motorCommands[11].demand = std::clamp(pdVolts, -6.0, 6.0);
+                    }
+                    else
+                    {
+                        robotInputs.motorCommands[11].demand = 0.0;
+                    }
 
                     // [12] Shooter Flywheel
                     robotInputs.motorCommands[12].mode = MotorControlMode::Voltage;
@@ -762,6 +861,13 @@ int main(int argc, char* argv[])
                 if (wrist) wrist->commandedVoltage = robotInputs.motorCommands[10].demand;
             }
 
+            auto intakeMIt = robot.mechanismEntities.find("intake_fourbar_deploy");
+            if (intakeMIt != robot.mechanismEntities.end())
+            {
+                auto* intakeArm = scene.GetComponent<ArmComponent>(intakeMIt->second);
+                if (intakeArm) intakeArm->commandedVoltage = robotInputs.motorCommands[11].demand;
+            }
+
             auto fwMIt = robot.mechanismEntities.find("shooter_flywheel");
             if (fwMIt != robot.mechanismEntities.end())
             {
@@ -781,6 +887,23 @@ int main(int argc, char* argv[])
 
             // 5. Pull Telemetry & Broadcast Outgoing Frames
             robotOutputs = robot.sensorSystem->GetOutputs();
+            if (robot.swerveSystem)
+            {
+                const auto& swerveOut = robot.swerveSystem->GetOutputs();
+                for (uint32_t i = 0; i < 8; ++i)
+                {
+                    robotOutputs.encoderPositions[i] = swerveOut.encoderPositions[i];
+                    robotOutputs.encoderVelocities[i] = swerveOut.encoderVelocities[i];
+                    robotOutputs.rotorPositionsRot[i] = swerveOut.rotorPositionsRot[i];
+                    robotOutputs.rotorVelocitiesRps[i] = swerveOut.rotorVelocitiesRps[i];
+                    robotOutputs.motorCurrents[i] = swerveOut.motorCurrents[i];
+                    robotOutputs.motorSupplyCurrents[i] = swerveOut.motorSupplyCurrents[i];
+                }
+                robotOutputs.gyroYaw = swerveOut.gyroYaw;
+                robotOutputs.gyroPitch = swerveOut.gyroPitch;
+                robotOutputs.gyroRoll = swerveOut.gyroRoll;
+                robotOutputs.gyroYawRate = swerveOut.gyroYawRate;
+            }
             robotOutputs.batteryTerminalVoltage = robot.electricalSystem->GetTerminalVoltage();
             robotOutputs.totalBusCurrent = robot.electricalSystem->GetTotalCurrent();
             robotOutputs.isBrownedOut = robot.electricalSystem->IsBrownedOut();
@@ -827,6 +950,75 @@ int main(int argc, char* argv[])
                 drivetrainLogger.RecordSample(sample);
             }
 
+            if (totalSimSteps <= 400 && (totalSimSteps % 50 == 0))
+            {
+                auto* chassisT = scene.GetComponent<TransformComponent>(robot.chassisEntity);
+                auto* couplerT = scene.GetComponent<TransformComponent>(robot.linkEntities["intake_coupler_link"]);
+                auto* armT = scene.GetComponent<TransformComponent>(robot.linkEntities["arm_shoulder_link"]);
+                auto* wristT = scene.GetComponent<TransformComponent>(robot.linkEntities["arm_wrist_link"]);
+                auto* fwT = scene.GetComponent<TransformComponent>(robot.linkEntities["shooter_flywheel_visual"]);
+                auto* elevT = scene.GetComponent<TransformComponent>(robot.linkEntities["elevator_stage_1"]);
+
+                double wVel0 = 0.0, wVel1 = 0.0, wVel2 = 0.0, wVel3 = 0.0;
+                double wN0 = 0.0, wN1 = 0.0, wN2 = 0.0, wN3 = 0.0;
+                if (robot.swerveSystem && robot.swerveSystem->GetModel())
+                {
+                    auto* m = robot.swerveSystem->GetModel();
+                    wVel0 = m->GetModule(0).GetState().wheelVelocity;
+                    wVel1 = m->GetModule(1).GetState().wheelVelocity;
+                    wVel2 = m->GetModule(2).GetState().wheelVelocity;
+                    wVel3 = m->GetModule(3).GetState().wheelVelocity;
+                    wN0 = m->GetModule(0).GetState().contactState.normalForce;
+                    wN1 = m->GetModule(1).GetState().contactState.normalForce;
+                    wN2 = m->GetModule(2).GetState().contactState.normalForce;
+                    wN3 = m->GetModule(3).GetState().contactState.normalForce;
+                }
+
+                double crankAngleDeg = 0.0;
+                double folAngleDeg = 0.0;
+                auto cjIt = robot.jointEntities.find("fourbar_crank_hinge");
+                auto fjIt = robot.jointEntities.find("fourbar_follower_hinge");
+                if (cjIt != robot.jointEntities.end())
+                {
+                    if (auto* cjc = scene.GetComponent<JointComponent>(cjIt->second))
+                    {
+                        crankAngleDeg = glm::degrees(cjc->currentAngle);
+                    }
+                }
+                if (fjIt != robot.jointEntities.end())
+                {
+                    if (auto* fjc = scene.GetComponent<JointComponent>(fjIt->second))
+                    {
+                        folAngleDeg = glm::degrees(fjc->currentAngle);
+                    }
+                }
+
+                double lastTotalMs = 0.0, lastPhysMs = 0.0, lastUpdMs = 0.0, lastRenMs = 0.0;
+                const auto& hist = FRCBananaSim::Telemetry::TelemetryManager::Get().GetFrameHistory();
+                if (!hist.empty())
+                {
+                    lastTotalMs = hist.back().totalFrameMs;
+                    lastPhysMs = hist.back().physicsMs;
+                    lastUpdMs = hist.back().updateMs;
+                    lastRenMs = hist.back().renderMs;
+                }
+
+                std::cout << "[Step " << totalSimSteps << "] "
+                    << "ChassisPos=(" << (chassisT ? chassisT->position.x : 0.0f) << ", "
+                    << (chassisT ? chassisT->position.y : 0.0f) << ", "
+                    << (chassisT ? chassisT->position.z : 0.0f) << ") "
+                    << "PitchDeg=" << glm::degrees(robotOutputs.gyroPitch) << " "
+                    << "RollDeg=" << glm::degrees(robotOutputs.gyroRoll) << " "
+                    << "WheelVel=[" << wVel0 << ", " << wVel1 << ", " << wVel2 << ", " << wVel3 << "] "
+                    << "4BarDeg=[Crank=" << crankAngleDeg << ", Fol=" << folAngleDeg << "] "
+                    << "CouplerPos=(" << (couplerT ? couplerT->position.x : 0.0f) << ", "
+                    << (couplerT ? couplerT->position.y : 0.0f) << ", "
+                    << (couplerT ? couplerT->position.z : 0.0f) << ") "
+                    << "FrameMs=" << lastTotalMs << " (Phys=" << lastPhysMs
+                    << ", Upd=" << lastUpdMs << ", Ren=" << lastRenMs << ") "
+                    << "Vbat=" << robotOutputs.batteryTerminalVoltage << std::endl;
+            }
+
             ++totalSimSteps;
         };
 
@@ -837,9 +1029,6 @@ int main(int argc, char* argv[])
 
     engine.SetFixedUpdateCallback([&](double dt)
         {
-            SIM_PROFILE_SCOPE("FixedUpdate");
-            auto start = std::chrono::high_resolution_clock::now();
-
             if (simSpeed == 0.0)
             {
                 if (doSingleStep)
@@ -852,16 +1041,13 @@ int main(int argc, char* argv[])
             {
                 simAccumulator += dt * simSpeed;
                 int steps = 0;
-                while (simAccumulator >= dt && steps < 8)
+                while (simAccumulator >= dt && steps < 4)
                 {
                     simAccumulator -= dt;
                     executeSimulationStep(dt);
                     ++steps;
                 }
             }
-
-            auto end = std::chrono::high_resolution_clock::now();
-            accumulatedPhysicsMs += std::chrono::duration<double, std::milli>(end - start).count();
         });
 
     // -------------------------------------------------------------------------
@@ -869,50 +1055,50 @@ int main(int argc, char* argv[])
     // -------------------------------------------------------------------------
     engine.SetUpdateCallback([&](double dt)
         {
-            SIM_PROFILE_SCOPE("Update");
-            auto start = std::chrono::high_resolution_clock::now();
-
             if (renderer.ShouldClose())
             {
                 engine.RequestExit();
                 return;
             }
 
+            renderer.BeginFrame();
+            cameraModeIndex = (camera.GetMode() == FRCBananaSim::Renderer::Camera::Mode::FreeFly) ? 0 : 1;
+
             auto& input = renderer.GetInput();
 
-            // 1. Keyboard Driving Controls (Arrow Keys or WASD)
-            if (!runSwerveStressTest && robotMasterEnabled && !ImGui::GetIO().WantTextInput)
+            // 1. Keyboard Driving Controls (Arrow Keys or WASD + Q/E when RMB is not held)
+            keyDriveVolts = 0.0f;
+            keyStrafeVolts = 0.0f;
+            keySpinVolts = 0.0f;
+            bool rmbHeld = input.IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT);
+
+            if (!runSwerveStressTest && robotMasterEnabled && !ImGui::GetIO().WantTextInput && !rmbHeld)
             {
                 if (input.IsKeyDown(GLFW_KEY_UP) || input.IsKeyDown(GLFW_KEY_W))
                 {
-                    manualDriveVolts = 10.0f;
+                    keyDriveVolts = 10.0f;
                 }
                 else if (input.IsKeyDown(GLFW_KEY_DOWN) || input.IsKeyDown(GLFW_KEY_S))
                 {
-                    manualDriveVolts = -10.0f;
-                }
-                else
-                {
-                    manualDriveVolts = 0.0f;
+                    keyDriveVolts = -10.0f;
                 }
 
                 if (input.IsKeyDown(GLFW_KEY_LEFT) || input.IsKeyDown(GLFW_KEY_A))
                 {
-                    manualSteerAngleDeg += static_cast<float>(dt * 120.0);
+                    keyStrafeVolts = 10.0f;
                 }
                 else if (input.IsKeyDown(GLFW_KEY_RIGHT) || input.IsKeyDown(GLFW_KEY_D))
                 {
-                    manualSteerAngleDeg -= static_cast<float>(dt * 120.0);
+                    keyStrafeVolts = -10.0f;
                 }
-                else if (std::abs(manualSteerAngleDeg) > 1.0f)
+
+                if (input.IsKeyDown(GLFW_KEY_Q))
                 {
-                    float returnStep = static_cast<float>(dt * 180.0);
-                    if (manualSteerAngleDeg > 0.0f) manualSteerAngleDeg = std::max(0.0f, manualSteerAngleDeg - returnStep);
-                    else manualSteerAngleDeg = std::min(0.0f, manualSteerAngleDeg + returnStep);
+                    keySpinVolts = 10.0f;
                 }
-                else
+                else if (input.IsKeyDown(GLFW_KEY_E))
                 {
-                    manualSteerAngleDeg = 0.0f;
+                    keySpinVolts = -10.0f;
                 }
             }
 
@@ -932,14 +1118,6 @@ int main(int argc, char* argv[])
                 resetRobot(robotSpawnPos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
             }
 
-            if (input.WasKeyPressed(GLFW_KEY_TAB))
-            {
-                cameraModeIndex = (cameraModeIndex == 0) ? 1 : 0;
-                camera.SetMode((cameraModeIndex == 0)
-                    ? FRCBananaSim::Renderer::Camera::Mode::FreeFly
-                    : FRCBananaSim::Renderer::Camera::Mode::Orbit);
-            }
-
             if (input.WasKeyPressed(GLFW_KEY_F3))
             {
                 auto mode = FRCBananaSim::Telemetry::TelemetryManager::Get().GetMode();
@@ -955,15 +1133,25 @@ int main(int argc, char* argv[])
                 FRCBananaSim::Telemetry::TelemetryManager::Get().SetMode(next);
             }
 
-            // Update Camera Orbit Target to track robot chassis center
+            // Update Camera Orbit Target incrementally with chassis displacement so user panning is preserved
             auto* chassisT = scene.GetComponent<TransformComponent>(robot.chassisEntity);
-            if (chassisT && camera.GetMode() == FRCBananaSim::Renderer::Camera::Mode::Orbit)
+            if (chassisT)
             {
-                camera.orbitTarget = chassisT->position + glm::vec3(0.0f, 0.35f, 0.0f);
+                glm::vec3 chassisDelta = chassisT->position - lastChassisPos;
+                if (camera.GetMode() == FRCBananaSim::Renderer::Camera::Mode::Orbit)
+                {
+                    camera.orbitTarget += chassisDelta;
+                }
+                lastChassisPos = chassisT->position;
             }
+        });
 
-            // 3. Render Pass
-            renderer.BeginFrame();
+    engine.SetRenderCallback([&](double alpha)
+        {
+            if (renderer.ShouldClose())
+            {
+                return;
+            }
 
             // A. Immediate-mode Debug Wireframes
             RenderSceneDebugDraw(scene, showColliders, showWheelContacts, showContactZones,
@@ -1077,11 +1265,27 @@ int main(int argc, char* argv[])
                         ImGui::Separator();
 
                         // Manual Driving Controls
-                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "MANUAL DRIVE OVERRIDES (OR USE ARROW KEYS / WASD)");
-                        ImGui::SliderFloat("Drive Voltage (V)", &manualDriveVolts, -12.0f, 12.0f, "%.1f V");
+                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "MANUAL SWERVE OVERRIDES (WASD / ARROWS = DRIVE & STRAFE, Q/E = SPIN)");
+                        ImGui::SliderFloat("Forward/Back (Vx)", &manualDriveVolts, -12.0f, 12.0f, "%.1f V");
                         if (ImGui::Button("Forward (+10V)")) manualDriveVolts = 10.0f; ImGui::SameLine();
-                        if (ImGui::Button("Stop (0V)")) { manualDriveVolts = 0.0f; manualSteerAngleDeg = 0.0f; } ImGui::SameLine();
-                        if (ImGui::Button("Reverse (-10V)")) manualDriveVolts = -10.0f;
+                        if (ImGui::Button("Reverse (-10V)")) manualDriveVolts = -10.0f; ImGui::SameLine();
+                        if (ImGui::Button("Stop All (0V)"))
+                        {
+                            manualDriveVolts = 0.0f;
+                            manualStrafeVolts = 0.0f;
+                            manualSpinVolts = 0.0f;
+                            manualSteerAngleDeg = 0.0f;
+                        }
+
+                        ImGui::SliderFloat("Strafe Left/Right (Vy)", &manualStrafeVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Strafe Left (+10V)")) manualStrafeVolts = 10.0f; ImGui::SameLine();
+                        if (ImGui::Button("Center Strafe (0V)")) manualStrafeVolts = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Strafe Right (-10V)")) manualStrafeVolts = -10.0f;
+
+                        ImGui::SliderFloat("Spin / Yaw (Omega)", &manualSpinVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Spin CCW (+10V)")) manualSpinVolts = 10.0f; ImGui::SameLine();
+                        if (ImGui::Button("Stop Spin (0V)")) manualSpinVolts = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Spin CW (-10V)")) manualSpinVolts = -10.0f;
 
                         ImGui::SliderFloat("Steer Heading (deg)", &manualSteerAngleDeg, -90.0f, 90.0f, "%.1f deg");
                         if (ImGui::Button("Right (-45 deg)")) manualSteerAngleDeg = -45.0f; ImGui::SameLine();
@@ -1197,7 +1401,14 @@ int main(int argc, char* argv[])
                             ? scene.GetComponent<ArmComponent>(wristIt2->second) : nullptr;
 
                         ImGui::SliderFloat("Shoulder Volts (V)", &manualArmVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Raise Shoulder (+6V)")) manualArmVolts = 6.0f; ImGui::SameLine();
+                        if (ImGui::Button("Hold Shoulder (0V)")) manualArmVolts = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Lower Shoulder (-6V)")) manualArmVolts = -6.0f;
+
                         ImGui::SliderFloat("Wrist Volts (V)", &manualWristVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Pitch Wrist Up (+6V)")) manualWristVolts = 6.0f; ImGui::SameLine();
+                        if (ImGui::Button("Hold Wrist (0V)")) manualWristVolts = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Pitch Wrist Down (-6V)")) manualWristVolts = -6.0f;
 
                         if (armComp)
                         {
@@ -1208,8 +1419,9 @@ int main(int argc, char* argv[])
                         }
                         if (wristComp)
                         {
-                            ImGui::Text("Wrist Angle:    %.1f deg | 1:1 Level Coupling: ACTIVE",
-                                glm::degrees(wristComp->currentAngleRad));
+                            ImGui::Text("Wrist Angle:    %.1f deg (%.2f rad) | Stick: %s",
+                                glm::degrees(wristComp->currentAngleRad), wristComp->currentAngleRad,
+                                wristComp->isStickLocked ? "LATCHED" : "FREE");
                         }
 
                         ImGui::Spacing();
@@ -1228,6 +1440,15 @@ int main(int argc, char* argv[])
                             auto* fb = scene.GetComponent<FourBarComponent>(fbIt[0]);
                             if (fb)
                             {
+                                auto* cjc = (fb->crankJoint != invalidEntity)
+                                    ? scene.GetComponent<JointComponent>(fb->crankJoint) : nullptr;
+                                auto* fjc = (fb->followerJoint != invalidEntity)
+                                    ? scene.GetComponent<JointComponent>(fb->followerJoint) : nullptr;
+                                if (cjc && fjc)
+                                {
+                                    ImGui::Text("Crank Angle: %.1f deg | Follower Angle: %.1f deg",
+                                        glm::degrees(cjc->currentAngle), glm::degrees(fjc->currentAngle));
+                                }
                                 ImGui::Text("Loop Closure Drift: %.3f mm %s",
                                     fb->loopClosureErrorM * 1000.0,
                                     (fb->loopClosureErrorM < 0.0015) ? "(OK < 1.5mm)" : "(DRIFT WARNING)");
@@ -1388,24 +1609,15 @@ int main(int argc, char* argv[])
 
             // 5. Presentation
             renderer.EndFrame();
+        });
 
+    engine.SetPostRenderCallback([&]()
+        {
             if (FRCBananaSim::Telemetry::TelemetryManager::Get().GetMode() == FRCBananaSim::Telemetry::TelemetryMode::Full
                 && profilerWindow.IsOpen())
             {
                 profilerWindow.Render(renderer.GetWindow());
             }
-
-            auto end = std::chrono::high_resolution_clock::now();
-            double renderMs = std::chrono::duration<double, std::milli>(end - start).count();
-
-            FRCBananaSim::Telemetry::FrameSummary summary;
-            summary.physicsMs = accumulatedPhysicsMs;
-            summary.updateMs = currentUpdateMs;
-            summary.renderMs = renderMs;
-            summary.totalFrameMs = accumulatedPhysicsMs + currentUpdateMs + renderMs;
-            FRCBananaSim::Telemetry::TelemetryManager::Get().PushFrameSummary(summary);
-
-            accumulatedPhysicsMs = 0.0;
         });
 
     // 13. Run Main Engine Loop

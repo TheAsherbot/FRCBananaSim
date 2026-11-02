@@ -85,19 +85,25 @@ namespace FRCBananaSim::Renderer
 
         if (mode == Mode::FreeFly)
         {
-            if (input.IsKeyDown(GLFW_KEY_W))            position += front * velocity;
-            if (input.IsKeyDown(GLFW_KEY_S))            position -= front * velocity;
-            if (input.IsKeyDown(GLFW_KEY_A))            position -= right * velocity;
-            if (input.IsKeyDown(GLFW_KEY_D))            position += right * velocity;
+            if (isLookButtonDown)
+            {
+                if (input.IsKeyDown(GLFW_KEY_W)) position += front * velocity;
+                if (input.IsKeyDown(GLFW_KEY_S)) position -= front * velocity;
+                if (input.IsKeyDown(GLFW_KEY_A)) position -= right * velocity;
+                if (input.IsKeyDown(GLFW_KEY_D)) position += right * velocity;
+            }
             if (input.IsKeyDown(GLFW_KEY_SPACE))        position += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
             if (input.IsKeyDown(GLFW_KEY_LEFT_CONTROL)) position -= glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
         }
         else // Mode::Orbit
         {
-            if (input.IsKeyDown(GLFW_KEY_W))            orbitTarget += front * velocity;
-            if (input.IsKeyDown(GLFW_KEY_S))            orbitTarget -= front * velocity;
-            if (input.IsKeyDown(GLFW_KEY_A))            orbitTarget -= right * velocity;
-            if (input.IsKeyDown(GLFW_KEY_D))            orbitTarget += right * velocity;
+            if (isLookButtonDown)
+            {
+                if (input.IsKeyDown(GLFW_KEY_W)) orbitTarget += front * velocity;
+                if (input.IsKeyDown(GLFW_KEY_S)) orbitTarget -= front * velocity;
+                if (input.IsKeyDown(GLFW_KEY_A)) orbitTarget -= right * velocity;
+                if (input.IsKeyDown(GLFW_KEY_D)) orbitTarget += right * velocity;
+            }
             if (input.IsKeyDown(GLFW_KEY_SPACE))        orbitTarget += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
             if (input.IsKeyDown(GLFW_KEY_LEFT_CONTROL)) orbitTarget -= glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
 

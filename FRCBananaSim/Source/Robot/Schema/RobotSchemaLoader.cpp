@@ -715,7 +715,7 @@ namespace FRCBananaSim::Robot::Schema
     {
         return glm::dmat3(
             0.0, 0.0, 1.0,
-            -1.0, 0.0, 0.0,
+            1.0, 0.0, 0.0,
             0.0, 1.0, 0.0
         );
     }
@@ -723,7 +723,7 @@ namespace FRCBananaSim::Robot::Schema
     glm::dmat3 RobotSchemaLoader::GetEngineToNWUMatrix()
     {
         return glm::dmat3(
-            0.0, -1.0, 0.0,
+            0.0, 1.0, 0.0,
             0.0, 0.0, 1.0,
             1.0, 0.0, 0.0
         );
@@ -731,22 +731,22 @@ namespace FRCBananaSim::Robot::Schema
 
     glm::dvec3 RobotSchemaLoader::ConvertNWUVectorToEngine(const glm::dvec3& vNWU)
     {
-        return glm::dvec3(-vNWU.y, vNWU.z, vNWU.x);
+        return glm::dvec3(vNWU.y, vNWU.z, vNWU.x);
     }
 
     glm::dvec3 RobotSchemaLoader::ConvertEngineVectorToNWU(const glm::dvec3& vEngine)
     {
-        return glm::dvec3(vEngine.z, -vEngine.x, vEngine.y);
+        return glm::dvec3(vEngine.z, vEngine.x, vEngine.y);
     }
 
     glm::vec3 RobotSchemaLoader::ConvertNWUVectorToEngine(const glm::vec3& vNWU)
     {
-        return glm::vec3(-vNWU.y, vNWU.z, vNWU.x);
+        return glm::vec3(vNWU.y, vNWU.z, vNWU.x);
     }
 
     glm::vec3 RobotSchemaLoader::ConvertEngineVectorToNWU(const glm::vec3& vEngine)
     {
-        return glm::vec3(vEngine.z, -vEngine.x, vEngine.y);
+        return glm::vec3(vEngine.z, vEngine.x, vEngine.y);
     }
 
     glm::dmat3 RobotSchemaLoader::ConvertNWUInertiaToEngine(const glm::dmat3& iNWU)

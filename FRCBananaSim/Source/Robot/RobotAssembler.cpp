@@ -128,6 +128,23 @@ namespace FRCBananaSim::Robot
             }
         }
 
+        // Attach visual links of flywheels/intakes to their parent links
+        for (const auto& mech : sidecar.mechanisms)
+        {
+            if ((mech.role == "flywheel" || mech.role == "intake") && !mech.visualLink.empty() && !mech.parentLink.empty())
+            {
+                auto pIt = linkPoses.find(mech.parentLink);
+                if (pIt != linkPoses.end() && linkPoses.find(mech.visualLink) == linkPoses.end())
+                {
+                    glm::vec3 mountOffset(0.0f, 0.06f, 0.06f);
+                    linkPoses[mech.visualLink] = {
+                        pIt->second.worldPos + (pIt->second.worldRot * mountOffset),
+                        pIt->second.worldRot
+                    };
+                }
+            }
+        }
+
         // Fallback for unlinked meshes
         for (const auto& link : manifest.links)
         {
@@ -173,10 +190,11 @@ namespace FRCBananaSim::Robot
             rb.collisionGroupID = 1; // Robot group: mutual self-collisions disabled via GroupFilterTable
             rb.collisionSubGroupID = linkSubGroupIndex++;
 
-            if (link.isRoot)
+            rb.allowSleeping = false;
+            rb.gravityFactor = 0.0f; // Analytic drivetrain and mechanism solvers own gravity
+            if (!link.isRoot)
             {
-                rb.allowSleeping = false;
-                rb.gravityFactor = 0.0f; // Analytic swerve drivetrain solver owns gravity
+                rb.isSensor = true; // Prevent child mechanism links from colliding with ground/chassis
             }
 
             if (link.inertiaTensor.IsPositiveDefinite())
@@ -265,6 +283,12 @@ namespace FRCBananaSim::Robot
 
                 const auto& parentPose = linkPoses[joint.parentLink];
                 glm::vec3 axisEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(joint.axis));
+                if (joint.type == "revolute" || joint.type == "continuous")
+                {
+                    // In Schema v1 NWU, +Y [0,1,0] revolute joint angles are defined positive pitching upward (+X toward +Z),
+                    // which corresponds to right-handed rotation about -X (-1,0,0) in Engine coordinates (+Z toward +Y).
+                    axisEngine.x = -axisEngine.x;
+                }
                 glm::vec3 originEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(joint.originM));
                 glm::vec3 worldAnchor = parentPose.worldPos + (parentPose.worldRot * originEngine);
                 glm::vec3 worldAxis = glm::normalize(parentPose.worldRot * axisEngine);
@@ -278,6 +302,9 @@ namespace FRCBananaSim::Robot
                     {
                         jc.minLimit = static_cast<float>(joint.limits.lower);
                         jc.maxLimit = static_cast<float>(joint.limits.upper);
+                        jc.hasLimitSpring = true;
+                        jc.limitSpringFrequency = static_cast<float>(joint.limits.springFrequencyHz > 0.0 ? joint.limits.springFrequencyHz : 40.0);
+                        jc.limitSpringDamping = static_cast<float>(joint.limits.springDampingRatio > 0.0 ? joint.limits.springDampingRatio : 1.0);
                     }
                 }
                 else if (joint.type == "prismatic")
@@ -287,6 +314,11 @@ namespace FRCBananaSim::Robot
                     float maxL = static_cast<float>(joint.limits.upper);
                     jc.SetWorldSpaceSlider(worldAnchor, worldAxis, minL, maxL);
                     jc.hasLimits = joint.limits.hasLimits;
+                    jc.motorMode = Physics::Components::JointMotorMode::Position;
+                    jc.targetPosition = 0.0f;
+                    jc.springFrequency = 100.0f;
+                    jc.springDamping = 1.0f;
+                    jc.maxMotorForce = 50000.0f;
                 }
                 else if (joint.type == "fixed")
                 {
@@ -347,6 +379,18 @@ namespace FRCBananaSim::Robot
                         if (lDef)
                         {
                             stage.stageMassKg = lDef->massKg;
+                            // Accumulate directly coupled child slider stage mass (e.g., carriage on stage 1)
+                            for (const auto& childJ : manifest.joints)
+                            {
+                                if (childJ.parentLink == jDef->childLink && childJ.type == "prismatic")
+                                {
+                                    const auto* childLDef = manifest.FindLink(childJ.childLink);
+                                    if (childLDef)
+                                    {
+                                        stage.stageMassKg += childLDef->massKg;
+                                    }
+                                }
+                            }
                         }
                         if (jDef->limits.hasLimits)
                         {
@@ -390,6 +434,22 @@ namespace FRCBananaSim::Robot
                     {
                         arm.linkMassKg = lDef->massKg;
                         arm.centerOfMassDistanceM = glm::length(lDef->centerOfMassM);
+                        arm.springType = Mechanisms::Components::ArmSpringType::GasStrut;
+                        arm.springPreloadTorqueNm = arm.linkMassKg * 9.80665 * arm.centerOfMassDistanceM;
+                        arm.springRestAngleRad = 0.0;
+
+                        if (arm.linkEntity != Core::ECS::Core::invalidEntity)
+                        {
+                            auto* linkRb = scene.GetComponent<Physics::Components::RigidBodyComponent>(arm.linkEntity);
+                            if (linkRb)
+                            {
+                                float reflI = static_cast<float>(arm.motorModel.GetRotorInertia() * arm.gearRatio * arm.gearRatio);
+                                linkRb->hasCustomInertia = true;
+                                linkRb->inertiaTensor[0][0] += reflI;
+                                linkRb->inertiaTensor[1][1] += reflI;
+                                linkRb->inertiaTensor[2][2] += reflI;
+                            }
+                        }
                     }
                     if (jDef->limits.hasLimits)
                     {
@@ -429,6 +489,13 @@ namespace FRCBananaSim::Robot
                 {
                     fw.visualEntity = vIt->second;
                 }
+
+                glm::vec3 spinAxisEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(mech.spinAxis));
+                if (glm::length(spinAxisEng) > 1e-4f)
+                {
+                    fw.spinAxis = glm::normalize(spinAxisEng);
+                }
+                fw.visualLocalOffset = glm::vec3(0.0f, 0.06f, 0.06f);
 
                 scene.AddComponent(mechEntity, fw);
             }
@@ -509,7 +576,64 @@ namespace FRCBananaSim::Robot
 
                 fb.closureParentAnchor = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(coup.fourBar.closureParentAnchorM));
                 fb.closureChildAnchor = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(coup.fourBar.closureChildAnchorM));
-                fb.hingeAxis = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(coup.fourBar.closureAxis));
+                glm::vec3 closureAxisEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(coup.fourBar.closureAxis));
+                closureAxisEngine.x = -closureAxisEngine.x;
+                fb.hingeAxis = closureAxisEngine;
+
+                if (fb.followerEntity != Core::ECS::Core::invalidEntity && fb.couplerEntity != Core::ECS::Core::invalidEntity)
+                {
+                    Core::ECS::Core::Entity closureJointEntity = scene.CreateEntity();
+                    Physics::Components::JointComponent closureJc;
+                    closureJc.type = Physics::Components::JointType::Hinge;
+                    closureJc.parentEntity = fb.followerEntity;
+                    closureJc.childEntity = fb.couplerEntity;
+
+                    const auto& followerPose = linkPoses[coup.fourBar.closureParentLink];
+                    const auto& couplerPose = linkPoses[coup.fourBar.closureChildLink];
+
+                    // Place closure pivot to form an exact parallelogram with crank -> coupler
+                    glm::vec3 followerTipLocal = glm::vec3(0.0f, 0.0f, 0.24f);
+                    const auto* couplerJointDef = manifest.FindJoint(coup.fourBar.couplerJoint);
+                    if (couplerJointDef)
+                    {
+                        followerTipLocal = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(couplerJointDef->originM));
+                    }
+
+                    glm::vec3 worldClosurePivot = followerPose.worldPos + (followerPose.worldRot * followerTipLocal);
+                    glm::vec3 worldClosureAxis = glm::normalize(followerPose.worldRot * closureAxisEngine);
+
+                    closureJc.SetWorldSpace(worldClosurePivot, worldClosureAxis);
+                    closureJc.hasLimits = false;
+                    scene.AddComponent(closureJointEntity, closureJc);
+
+                    fb.closureJoint = closureJointEntity;
+
+                    auto* folRb = scene.GetComponent<Physics::Components::RigidBodyComponent>(fb.followerEntity);
+                    if (folRb)
+                    {
+                        folRb->hasCustomInertia = true;
+                        folRb->inertiaTensor[0][0] = std::max(folRb->inertiaTensor[0][0], 0.05f);
+                        folRb->inertiaTensor[1][1] = std::max(folRb->inertiaTensor[1][1], 0.05f);
+                        folRb->inertiaTensor[2][2] = std::max(folRb->inertiaTensor[2][2], 0.05f);
+                    }
+
+                    // Compute exact local anchors relative to each body's Jolt COM
+                    glm::vec3 com1Pos = followerPose.worldPos;
+                    auto* col1 = scene.GetComponent<Physics::Components::ColliderComponent>(fb.followerEntity);
+                    if (col1)
+                    {
+                        com1Pos += followerPose.worldRot * col1->localOffset;
+                    }
+                    fb.closureParentAnchor = glm::inverse(followerPose.worldRot) * (worldClosurePivot - com1Pos);
+
+                    glm::vec3 com2Pos = couplerPose.worldPos;
+                    auto* col2 = scene.GetComponent<Physics::Components::ColliderComponent>(fb.couplerEntity);
+                    if (col2)
+                    {
+                        com2Pos += couplerPose.worldRot * col2->localOffset;
+                    }
+                    fb.closureChildAnchor = glm::inverse(couplerPose.worldRot) * (worldClosurePivot - com2Pos);
+                }
 
                 scene.AddComponent(coupEntity, fb);
             }

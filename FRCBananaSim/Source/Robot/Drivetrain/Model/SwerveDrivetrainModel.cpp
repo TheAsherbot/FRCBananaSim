@@ -41,6 +41,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         previousAngularVel = chassisMotion.angularVelocity;
 
         double subDt = tickDeltaTime / static_cast<double>(subSteps);
+        std::array<WheelContactProbe, 4> cachedProbes;
+        std::array<glm::vec3, 4> cachedHubPositions;
 
         for (uint32_t step = 0; step < subSteps; ++step)
         {
@@ -76,6 +78,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                 }
             }
 
+            totalDrivetrainSupplyCurrent = totalSupplyCurrent;
+
             // Sagged battery terminal voltage with double-layer RC filtering (tau ~ 5ms at 800 Hz)
             double targetTerminalVoltage = batteryModel.CalculateTerminalVoltage(totalSupplyCurrent);
             constexpr double batteryFilterAlpha = 0.20;
@@ -99,7 +103,23 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                 glm::vec3 localHubPos(modLoc.x, modLoc.y, -config.chassis.centerOfMassHeight + config.tire.wheelRadius);
                 glm::vec3 worldHubPos = chassisMotion.position + (rotMatrix * localHubPos);
 
-                WheelContactProbe probe = terrain.QueryWheelContact(worldHubPos, config.tire.wheelRadius, config.tire.wheelWidth);
+                WheelContactProbe probe;
+                if (step == 0)
+                {
+                    probe = terrain.QueryWheelContact(worldHubPos, config.tire.wheelRadius, config.tire.wheelWidth);
+                    cachedProbes[i] = probe;
+                    cachedHubPositions[i] = worldHubPos;
+                }
+                else
+                {
+                    probe = cachedProbes[i];
+                    glm::vec3 deltaHub = worldHubPos - cachedHubPositions[i];
+                    double normalDisp = static_cast<double>(glm::dot(deltaHub, probe.surfaceNormal));
+                    probe.penetrationDepth -= normalDisp;
+                    probe.hasContact = (probe.penetrationDepth > 0.0);
+                    probe.contactPoint = worldHubPos - probe.surfaceNormal *
+                        static_cast<float>(config.tire.wheelRadius - std::max(0.0, probe.penetrationDepth));
+                }
 
                 double cosA = std::cos(modules[i].GetState().steerAngle);
                 double sinA = std::sin(modules[i].GetState().steerAngle);
@@ -153,7 +173,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                 sumCurrents += modules[i].GetState().steerStatorCurrent + modules[i].GetState().driveStatorCurrent;
             }
 
-            totalBusCurrent = sumCurrents + batteryModel.GetQuiescentCurrent();
+            totalBusCurrent = totalSupplyCurrent + batteryModel.GetQuiescentCurrent();
 
             // 6. Integrate orientation and world position
             glm::vec3 angVel = chassisMotion.angularVelocity;
@@ -215,7 +235,6 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         config.chassis.mass = std::max(totalMass, 1.0);
         config.chassis.inertiaTensor = inertiaTensor;
         config.chassis.centerOfMassOffset = cgOffset;
-        config.chassis.centerOfMassHeight = cgOffset.z; // In NWU, +Z is vertical height
         chassisSolver.SetChassisParams(config.chassis);
     }
 
@@ -263,4 +282,5 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
     const DrivetrainEnergyLedger& SwerveDrivetrainModel::GetEnergyLedger() const { return energyLedger; }
     double SwerveDrivetrainModel::GetBatteryTerminalVoltage() const { return terminalVoltage; }
     bool SwerveDrivetrainModel::IsBrownedOut() const { return isBrownedOutState; }
+    double SwerveDrivetrainModel::GetTotalSupplyCurrent() const { return totalDrivetrainSupplyCurrent; }
 }

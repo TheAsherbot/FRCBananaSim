@@ -69,51 +69,52 @@ namespace FRCBananaSim::Actuation::Systems
 
         double totalAmps = idleCurrentA;
 
-        // 1. Swerve Drivetrain Current Aggregation
+        // 1. Swerve Drivetrain Supply Current Aggregation
         if (swerveSystem)
         {
             auto* model = swerveSystem->GetModel();
             if (model)
             {
-                for (uint32_t i = 0; i < 4; ++i)
-                {
-                    const auto& state = model->GetModule(i).GetState();
-                    totalAmps += std::abs(state.steerStatorCurrent);
-                    totalAmps += std::abs(state.driveStatorCurrent);
-                }
+                totalAmps += model->GetTotalSupplyCurrent();
             }
         }
 
-        // 2. Elevators Current Aggregation
+        // 2. Elevators Supply Current Aggregation
         auto elevatorEntities = scene.Query<Robot::Mechanisms::Components::ElevatorComponent>();
         for (auto entity : elevatorEntities)
         {
             auto* elevator = scene.GetComponent<Robot::Mechanisms::Components::ElevatorComponent>(entity);
             if (elevator)
             {
-                totalAmps += std::abs(elevator->statorCurrentA);
+                double duty = std::clamp(std::abs(elevator->appliedVoltage) / std::max(1.0, currentTerminalVoltage), 0.0, 1.0);
+                double supply = std::min(elevator->statorCurrentLimitA, duty * std::abs(elevator->statorCurrentA));
+                totalAmps += supply * static_cast<double>(std::max(1u, elevator->motorCount));
             }
         }
 
-        // 3. Arms Current Aggregation
+        // 3. Arms Supply Current Aggregation
         auto armEntities = scene.Query<Robot::Mechanisms::Components::ArmComponent>();
         for (auto entity : armEntities)
         {
             auto* arm = scene.GetComponent<Robot::Mechanisms::Components::ArmComponent>(entity);
             if (arm)
             {
-                totalAmps += std::abs(arm->statorCurrentA);
+                double duty = std::clamp(std::abs(arm->appliedVoltage) / std::max(1.0, currentTerminalVoltage), 0.0, 1.0);
+                double supply = std::min(arm->statorCurrentLimitA, duty * std::abs(arm->statorCurrentA));
+                totalAmps += supply * static_cast<double>(std::max(1u, arm->motorCount));
             }
         }
 
-        // 4. Flywheels Current Aggregation
+        // 4. Flywheels Supply Current Aggregation
         auto flywheelEntities = scene.Query<Robot::Mechanisms::Components::FlywheelComponent>();
         for (auto entity : flywheelEntities)
         {
             auto* flywheel = scene.GetComponent<Robot::Mechanisms::Components::FlywheelComponent>(entity);
             if (flywheel)
             {
-                totalAmps += std::abs(flywheel->statorCurrentA);
+                double duty = std::clamp(std::abs(flywheel->appliedVoltage) / std::max(1.0, currentTerminalVoltage), 0.0, 1.0);
+                double supply = std::min(flywheel->statorCurrentLimitA, duty * std::abs(flywheel->statorCurrentA));
+                totalAmps += supply * static_cast<double>(std::max(1u, flywheel->motorCount));
             }
         }
 

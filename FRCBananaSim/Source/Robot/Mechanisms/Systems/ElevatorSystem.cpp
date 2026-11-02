@@ -130,9 +130,20 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
 
         // 5. Semi-Implicit Linear Actuation Force Formulation:
         // F^{t+dt} = (F_cmd + F_spring + F_grav - D_total * v1) / (1 + (D_total * dt) / M_eff) - F_grav
+        bool joltGravActive = true;
+        if (elevator.stages[0].stageEntity != invalidEntity)
+        {
+            auto* stageRb = scene.GetComponent<Physics::Components::RigidBodyComponent>(elevator.stages[0].stageEntity);
+            if (stageRb && stageRb->gravityFactor == 0.0f)
+            {
+                joltGravActive = false;
+            }
+        }
+        double joltGravTerm = joltGravActive ? effectiveGravityLoadN : 0.0;
+
         double denominator = 1.0 + ((dTotal * dt) / elevator.lumpedEffectiveMassKg);
         double fNetConstant = fCmd + elevator.springPreloadForceN + effectiveGravityLoadN;
-        double fSemiImplicit = (fNetConstant - (dTotal * v1)) / denominator - effectiveGravityLoadN;
+        double fSemiImplicit = (fNetConstant - (dTotal * v1)) / denominator - joltGravTerm;
 
         // 6. Stator Current Limit Clamp
         double maxStatorTorque = motor.CalculateStatorTorqueLimit(elevator.statorCurrentLimitA);
@@ -141,14 +152,16 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
 
         // 7. 1D Coulomb Friction & Static Stick Projection (Zero-Creep Holding)
         double fCoulomb = elevator.coulombFrictionN;
-        double fHoldingExt = fSemiImplicit + effectiveGravityLoadN;
+        double fHoldingExt = fSemiImplicit + joltGravTerm;
         double fDelivered = 0.0;
         bool isStickLocked = false;
+        double dvCoulomb = (elevator.lumpedEffectiveMassKg > 1e-6) ? ((fCoulomb / elevator.lumpedEffectiveMassKg) * dt) : 0.0;
+        double vCapture = std::max(1e-3, dvCoulomb);
 
-        if (std::abs(appliedV) < 1e-3 && std::abs(v1) < 1e-3)
+        if (std::abs(appliedV) < 1e-3 && (elevator.isStickLocked || std::abs(v1) <= vCapture))
         {
             // Static stick regime: lock slider position with Coulomb holding force to prevent numerical creep
-            if (std::abs(fHoldingExt) <= fCoulomb)
+            if (std::abs(fNetConstant) <= fCoulomb)
             {
                 if (!elevator.isStickLocked)
                 {
@@ -156,7 +169,7 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
                     elevator.lockedPositionM = x1;
                 }
 
-                fDelivered = -effectiveGravityLoadN;
+                fDelivered = -joltGravTerm;
                 v1 = 0.0;
                 stage1Joint->currentVelocity = 0.0f;
                 stage1Joint->targetPosition = static_cast<float>(elevator.lockedPositionM);
@@ -164,8 +177,8 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
                 stage1Joint->motorMode = JointMotorMode::Position;
                 stage1Joint->springFrequency = 100.0f; // Firm stiffness prevents drift
                 stage1Joint->springDamping = 1.0f;
-                stage1Joint->maxMotorForce = static_cast<float>(fCoulomb);
-                stage1Joint->appliedForce = static_cast<float>(-effectiveGravityLoadN); // Counterbalance feedforward
+                stage1Joint->maxMotorForce = joltGravActive ? static_cast<float>(fCoulomb) : 50000.0f;
+                stage1Joint->appliedForce = static_cast<float>(-joltGravTerm); // Counterbalance feedforward
                 isStickLocked = true;
             }
             else
@@ -179,9 +192,11 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         else
         {
             elevator.isStickLocked = false;
-            // Dynamic sliding: Coulomb friction opposes instantaneous velocity direction
+            // Dynamic sliding: Coulomb friction opposes instantaneous velocity direction without reversing sign in one step
             double sign = (v1 > 1e-5) ? 1.0 : ((v1 < -1e-5) ? -1.0 : ((fHoldingExt > 0.0) ? 1.0 : -1.0));
-            fDelivered = fSemiImplicit - (fCoulomb * sign);
+            double maxArrestForce = (std::abs(v1) > 1e-5 && dt > 1e-9) ? ((std::abs(v1) * elevator.lumpedEffectiveMassKg) / dt) : fCoulomb;
+            double fFriction = std::min(fCoulomb, maxArrestForce);
+            fDelivered = fSemiImplicit - (fFriction * sign);
         }
 
         elevator.appliedLinearForceN = fDelivered;

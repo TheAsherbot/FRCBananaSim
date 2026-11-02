@@ -5,6 +5,7 @@
 
 #include "Robot/Mechanisms/Systems/CompositeMassSystem.h"
 #include "Physics/Components/RigidBodyComponent.h"
+#include "Physics/Components/ColliderComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
 #include "Core/ECS/Core/Scene.h"
 #include "Robot/Schema/RobotSchemaLoader.h"
@@ -82,6 +83,13 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
             JPH::Quat q = bi.GetRotation(chassisRb->bodyID);
             chassisPos = glm::vec3(static_cast<float>(p.GetX()), static_cast<float>(p.GetY()), static_cast<float>(p.GetZ()));
             chassisRot = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
+
+            auto* chassisCol = scene.GetComponent<Physics::Components::ColliderComponent>(comp.chassisEntity);
+            if (chassisCol)
+            {
+                chassisRot = chassisRot * glm::inverse(chassisCol->localRotation);
+                chassisPos -= chassisRot * chassisCol->localOffset;
+            }
         }
         else
         {

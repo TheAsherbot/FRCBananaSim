@@ -85,6 +85,8 @@ namespace FRCBananaSim::Telemetry
 
         outputStream.open(filepath);
         WriteHeader();
+        liveResults.reserve(32768);
+        frameHistory.reserve(128);
         isInitialized = true;
     }
 
@@ -95,8 +97,36 @@ namespace FRCBananaSim::Telemetry
             return;
         }
 
-        WriteFooter();
-        outputStream.close();
+        std::lock_guard<std::mutex> lock(mutex);
+
+        if (outputStream.is_open())
+        {
+            for (const auto& result : liveResults)
+            {
+                if (profileCount++ > 0)
+                {
+                    outputStream << ",";
+                }
+
+                const char* safeName = result.name ? result.name : "Unknown";
+                outputStream << "{\"cat\":\"function\",\"dur\":" << (result.endTimestamp - result.startTimestamp)
+                    << ",\"name\":\"" << safeName << "\",\"ph\":\"X\",\"pid\":0,\"tid\":" << result.threadId
+                    << ",\"ts\":" << result.startTimestamp;
+
+                if (result.memoryCurrentBytes > 0 || result.memoryPeakBytes > 0)
+                {
+                    outputStream << ",\"memory_current\":" << result.memoryCurrentBytes
+                        << ",\"memory_peak\":" << result.memoryPeakBytes
+                        << ",\"memory_allocs\":" << result.memoryAllocations;
+                }
+
+                outputStream << "}";
+            }
+
+            WriteFooter();
+            outputStream.close();
+        }
+
         isInitialized = false;
         profileCount = 0;
     }
@@ -110,41 +140,16 @@ namespace FRCBananaSim::Telemetry
 
         std::lock_guard<std::mutex> lock(mutex);
 
-        if (profileCount++ > 0)
+        if (liveResults.size() >= 32768)
         {
-            outputStream << ",";
+            liveResults.erase(liveResults.begin(), liveResults.begin() + 8192);
         }
-
-        std::string sanitizedName = result.name ? result.name : "Unknown";
-        std::replace(sanitizedName.begin(), sanitizedName.end(), '"', '\'');
-
-        outputStream << "{";
-        outputStream << "\"cat\":\"function\",";
-        outputStream << "\"dur\":" << (result.endTimestamp - result.startTimestamp) << ",";
-        outputStream << "\"name\":\"" << sanitizedName << "\",";
-        outputStream << "\"ph\":\"X\",";
-        outputStream << "\"pid\":0,";
-        outputStream << "\"tid\":" << result.threadId << ",";
-        outputStream << "\"ts\":" << result.startTimestamp;
-
-        // Embed memory data if it exists
-        if (result.memoryCurrentBytes > 0 || result.memoryPeakBytes > 0)
-        {
-            outputStream << ",\"memory_current\":" << result.memoryCurrentBytes;
-            outputStream << ",\"memory_peak\":" << result.memoryPeakBytes;
-            outputStream << ",\"memory_allocs\":" << result.memoryAllocations;
-        }
-
-        outputStream << "}";
-
-        // Store live result without capping (unlimited history)
         liveResults.push_back(result);
     }
 
     void TelemetryManager::WriteHeader()
     {
         outputStream << "{\"traceEvents\":[";
-        outputStream.flush();
     }
 
     void TelemetryManager::WriteFooter()
@@ -157,18 +162,11 @@ namespace FRCBananaSim::Telemetry
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        if (outputStream.is_open())
-        {
-            outputStream.flush();
-        }
-
         frameHistory.push_back(summary);
         if (frameHistory.size() > 120)
         {
             frameHistory.erase(frameHistory.begin());
         }
-
-        // liveResults is NOT limited: keeps all recorded physics frames
     }
 
     const std::vector<FrameSummary>& TelemetryManager::GetFrameHistory() const

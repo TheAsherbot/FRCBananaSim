@@ -13,6 +13,7 @@
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Physics/Components/ColliderComponent.h"
 #include "Physics/Components/JointComponent.h"
+#include "Physics/Systems/JointSystem.h"
 #include "Robot/Mechanisms/Components/ElevatorComponent.h"
 #include "Robot/Mechanisms/Components/ArmComponent.h"
 #include "Robot/Mechanisms/Components/FlywheelComponent.h"
@@ -279,6 +280,349 @@ namespace FRCBananaSim::Tests
             auto robot2 = assembler2.AssembleFromFiles("nonexistent/invalid_manifest.json");
             TEST_EXPECT_FALSE(ctx, robot2.isSuccess);
             TEST_EXPECT_FALSE(ctx, robot2.errorMessage.empty());
+        }
+
+        // =============================================================
+        // 5. Dynamic Simulation Stability Verification (RA5)
+        // =============================================================
+        {
+            std::cout << "  -> RA5: Dynamic Simulation Stability (200 Steps / 1.0 s)\n";
+
+            Physics::JoltContext jolt;
+            TEST_EXPECT_TRUE(ctx, jolt.Initialize());
+
+            Scene scene;
+            scene.SetFixedDeltaTime(0.005);
+
+            // Ground carpet
+            Entity groundEntity = scene.CreateEntity();
+            {
+                TransformComponent transform;
+                transform.position = glm::vec3(0.0f, -0.05f, 0.0f);
+                transform.scale = glm::vec3(28.0f, 0.10f, 18.0f);
+                scene.AddComponent(groundEntity, transform);
+
+                RigidBodyComponent rb;
+                rb.motionType = BodyMotionType::Static;
+                rb.friction = 0.85f;
+                rb.restitution = 0.05f;
+                scene.AddComponent(groundEntity, rb);
+
+                ColliderComponent col;
+                col.shape = ColliderShape::Box;
+                col.boxHalfExtents = glm::vec3(14.0f, 0.05f, 9.0f);
+                scene.AddComponent(groundEntity, col);
+            }
+
+            RobotAssembler assembler(scene, &jolt);
+            const glm::vec3 robotSpawnPos(0.0f, 0.18f, 0.0f);
+            auto robot = assembler.AssembleFromFiles(manifestPath, sidecarPath, materialsPath, robotSpawnPos);
+            TEST_EXPECT_TRUE(ctx, robot.isSuccess);
+
+            Physics::Systems::JointSystem jointSystem(scene, jolt);
+
+            if (robot.physicsSystem)
+            {
+                robot.physicsSystem->FixedUpdate(0.0);
+            }
+            jointSystem.FixedUpdate(0.0);
+            jointSystem.ReadbackTelemetry();
+
+            Control::SimInputs robotInputs;
+            Control::SimOutputs robotOutputs;
+            if (robot.electricalSystem) robot.electricalSystem->SetOutputs(&robotOutputs);
+            if (robot.sensorSystem) robot.sensorSystem->SetOutputs(&robotOutputs);
+            if (robot.swerveSystem) robot.swerveSystem->SetInputs(robotInputs);
+
+            for (int step = 0; step < 200; ++step)
+            {
+                jointSystem.FixedUpdate(0.005);
+                RobotAssembler::StepPipeline(robot, 0.005);
+                jointSystem.ReadbackTelemetry();
+            }
+
+            // Verify chassis (base_link) remains stable and settled without exploding
+            auto* baseRb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
+            TEST_EXPECT_TRUE(ctx, baseRb != nullptr);
+            if (baseRb && !baseRb->bodyID.IsInvalid())
+            {
+                JPH::RVec3 pos = jolt.GetBodyInterface().GetPosition(baseRb->bodyID);
+                JPH::Vec3 vel = jolt.GetBodyInterface().GetLinearVelocity(baseRb->bodyID);
+
+                // Elevation must remain near resting ground level (0.10m - 0.60m)
+                TEST_EXPECT_TRUE(ctx, pos.GetY() >= 0.10 && pos.GetY() <= 0.60);
+                // Linear velocity must be stable and small (< 1.5 m/s)
+                TEST_EXPECT_TRUE(ctx, vel.Length() < 1.5f);
+            }
+
+            // Verify all mechanism links have finite, small velocities
+            for (const auto& [name, entity] : robot.linkEntities)
+            {
+                auto* rb = scene.GetComponent<RigidBodyComponent>(entity);
+                if (rb && !rb->bodyID.IsInvalid())
+                {
+                    JPH::Vec3 vel = jolt.GetBodyInterface().GetLinearVelocity(rb->bodyID);
+                    TEST_EXPECT_TRUE(ctx, std::isfinite(vel.GetX()));
+                    TEST_EXPECT_TRUE(ctx, std::isfinite(vel.GetY()));
+                    TEST_EXPECT_TRUE(ctx, std::isfinite(vel.GetZ()));
+                    TEST_EXPECT_TRUE(ctx, vel.Length() < 3.0f);
+                }
+            }
+        }
+
+        // =============================================================
+        // 6. Complete System Stability: Voltage, Wheels, & Mesh Alignment (RA6)
+        // =============================================================
+        {
+            std::cout << "  -> RA6: Multi-Stage Stability (Voltage Hold, Wheel Brake Stick, Mesh Alignment)\n";
+
+            Physics::JoltContext jolt;
+            jolt.Initialize();
+
+            Scene scene;
+
+            // Carpet Ground
+            Entity groundEntity = scene.CreateEntity();
+            {
+                TransformComponent transform;
+                transform.position = glm::vec3(0.0f, -0.05f, 0.0f);
+                transform.scale = glm::vec3(28.0f, 0.10f, 18.0f);
+                scene.AddComponent(groundEntity, transform);
+
+                RigidBodyComponent rb;
+                rb.motionType = BodyMotionType::Static;
+                rb.friction = 0.85f;
+                rb.restitution = 0.05f;
+                scene.AddComponent(groundEntity, rb);
+
+                ColliderComponent col;
+                col.shape = ColliderShape::Box;
+                col.boxHalfExtents = glm::vec3(14.0f, 0.05f, 9.0f);
+                scene.AddComponent(groundEntity, col);
+            }
+
+            RobotAssembler assembler(scene, &jolt);
+            const glm::vec3 robotSpawnPos(0.0f, 0.18f, 0.0f);
+            auto robot = assembler.AssembleFromFiles(manifestPath, sidecarPath, materialsPath, robotSpawnPos);
+            TEST_EXPECT_TRUE(ctx, robot.isSuccess);
+
+            Physics::Systems::JointSystem jointSystem(scene, jolt);
+
+            if (robot.physicsSystem)
+            {
+                robot.physicsSystem->FixedUpdate(0.0);
+            }
+            jointSystem.FixedUpdate(0.0);
+            jointSystem.ReadbackTelemetry();
+
+            Control::SimInputs robotInputs;
+            Control::SimOutputs robotOutputs;
+            if (robot.electricalSystem) robot.electricalSystem->SetOutputs(&robotOutputs);
+            if (robot.sensorSystem) robot.sensorSystem->SetOutputs(&robotOutputs);
+            if (robot.swerveSystem) robot.swerveSystem->SetInputs(robotInputs);
+
+            // Command holding torque to intake 4-bar (stalled at -6V, typical idle state)
+            robotInputs.motorCommands[11].mode = Control::MotorControlMode::Voltage;
+            robotInputs.motorCommands[11].demand = -6.0;
+
+            // Ensure drivetrain is in Brake mode with 0V demand
+            for (int i = 0; i < 8; ++i)
+            {
+                robotInputs.motorCommands[i].mode = Control::MotorControlMode::Voltage;
+                robotInputs.motorCommands[i].demand = 0.0;
+                robotInputs.motorCommands[i].neutralMode = Control::NeutralMode::Brake;
+            }
+
+            bool brownoutDetected = false;
+            double minVoltage = 12.60;
+            double maxCurrent = 0.0;
+
+            // Simulate 400 steps (2.0 seconds at 200 Hz)
+            for (int step = 0; step < 400; ++step)
+            {
+                if (robot.swerveSystem) robot.swerveSystem->SetInputs(robotInputs);
+
+                auto armMIt = robot.mechanismEntities.find("intake_fourbar_deploy");
+                if (armMIt != robot.mechanismEntities.end())
+                {
+                    auto* arm = scene.GetComponent<Robot::Mechanisms::Components::ArmComponent>(armMIt->second);
+                    if (arm) arm->commandedVoltage = robotInputs.motorCommands[11].demand;
+                }
+
+                jointSystem.FixedUpdate(0.005);
+                RobotAssembler::StepPipeline(robot, 0.005);
+                jointSystem.ReadbackTelemetry();
+
+                robotOutputs = robot.sensorSystem->GetOutputs();
+                if (robot.swerveSystem)
+                {
+                    const auto& swerveOut = robot.swerveSystem->GetOutputs();
+                    for (uint32_t i = 0; i < 8; ++i)
+                    {
+                        robotOutputs.encoderPositions[i] = swerveOut.encoderPositions[i];
+                        robotOutputs.encoderVelocities[i] = swerveOut.encoderVelocities[i];
+                    }
+                }
+                robotOutputs.batteryTerminalVoltage = robot.electricalSystem->GetTerminalVoltage();
+                robotOutputs.totalBusCurrent = robot.electricalSystem->GetTotalCurrent();
+                robotOutputs.isBrownedOut = robot.electricalSystem->IsBrownedOut();
+
+                if (robotOutputs.isBrownedOut)
+                {
+                    brownoutDetected = true;
+                }
+                minVoltage = std::min(minVoltage, robotOutputs.batteryTerminalVoltage);
+                maxCurrent = std::max(maxCurrent, robotOutputs.totalBusCurrent);
+            }
+
+            // 1. Verify Battery Voltage Stability: Must remain steady above critical cutoff (6.3V)
+            TEST_EXPECT_FALSE(ctx, brownoutDetected);
+            TEST_EXPECT_TRUE(ctx, minVoltage >= 11.0); // Normal sag around ~11.8V - 12.5V, never 4.6V or 7V
+            TEST_EXPECT_TRUE(ctx, maxCurrent < 100.0); // Never 500A-800A
+
+            // 2. Verify Swerve Wheel Brake Lock & Level Posture: All 4 wheels on ground with zero spinning velocity
+            if (robot.swerveSystem && robot.swerveSystem->GetModel())
+            {
+                auto* model = robot.swerveSystem->GetModel();
+                for (uint32_t i = 0; i < 4; ++i)
+                {
+                    const auto& modState = model->GetModule(i).GetState();
+                    TEST_EXPECT_NEAR(ctx, modState.wheelVelocity, 0.0, 0.05);
+                    TEST_EXPECT_NEAR(ctx, modState.linearVelocity, 0.0, 0.01);
+                    TEST_EXPECT_TRUE(ctx, modState.contactState.normalForce > 100.0);
+                }
+            }
+
+            // Verify chassis pitch and roll are level (< 0.5 deg)
+            TEST_EXPECT_NEAR(ctx, glm::degrees(robotOutputs.gyroPitch), 0.0, 0.5);
+            TEST_EXPECT_NEAR(ctx, glm::degrees(robotOutputs.gyroRoll), 0.0, 0.5);
+
+            // 3. Verify Chassis Rest Stability (No jumping or flying away)
+            auto* baseRb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
+            if (baseRb && !baseRb->bodyID.IsInvalid())
+            {
+                JPH::RVec3 pos = jolt.GetBodyInterface().GetPosition(baseRb->bodyID);
+                JPH::Vec3 vel = jolt.GetBodyInterface().GetLinearVelocity(baseRb->bodyID);
+                TEST_EXPECT_TRUE(ctx, pos.GetY() >= 0.25 && pos.GetY() <= 0.32);
+                TEST_EXPECT_TRUE(ctx, vel.Length() < 0.05f);
+            }
+
+            // 4. Verify Intake Coupler & Arm Links Have Zero Swinging Velocity
+            for (const auto& [name, entity] : robot.linkEntities)
+            {
+                auto* rb = scene.GetComponent<RigidBodyComponent>(entity);
+                if (rb && !rb->bodyID.IsInvalid())
+                {
+                    JPH::Vec3 linVel = jolt.GetBodyInterface().GetLinearVelocity(rb->bodyID);
+                    JPH::Vec3 angVel = jolt.GetBodyInterface().GetAngularVelocity(rb->bodyID);
+                    if (linVel.Length() >= 0.05f || angVel.Length() >= 0.05f)
+                    {
+                        std::cout << "  [DIAG] Link '" << name << "' linVel=" << linVel.Length()
+                            << " (" << linVel.GetX() << "," << linVel.GetY() << "," << linVel.GetZ() << ")"
+                            << " angVel=" << angVel.Length()
+                            << " (" << angVel.GetX() << "," << angVel.GetY() << "," << angVel.GetZ() << ")\n";
+                    }
+                    TEST_EXPECT_TRUE(ctx, linVel.Length() < 0.05f);
+                    TEST_EXPECT_TRUE(ctx, angVel.Length() < 0.05f);
+                }
+            }
+
+            // 5. Verify Flywheel Visual Attachment to Wrist & Independent Wrist Motion at High Shoulder Angle
+            auto* shoulderArm = scene.GetComponent<Robot::Mechanisms::Components::ArmComponent>(robot.mechanismEntities["arm_shoulder"]);
+            auto* wristArm = scene.GetComponent<Robot::Mechanisms::Components::ArmComponent>(robot.mechanismEntities["arm_wrist"]);
+            TEST_EXPECT_TRUE(ctx, shoulderArm != nullptr);
+            TEST_EXPECT_TRUE(ctx, wristArm != nullptr);
+
+            if (shoulderArm && wristArm)
+            {
+                // Raise shoulder to upper limit (+12V for 150 steps)
+                shoulderArm->commandedVoltage = 12.0;
+                wristArm->commandedVoltage = 6.0;
+                for (int step = 0; step < 150; ++step)
+                {
+                    jointSystem.FixedUpdate(0.005);
+                    RobotAssembler::StepPipeline(robot, 0.005);
+                    jointSystem.ReadbackTelemetry();
+                }
+
+                TEST_EXPECT_TRUE(ctx, shoulderArm->currentAngleRad > 1.5);
+                TEST_EXPECT_TRUE(ctx, wristArm->currentAngleRad > 0.8);
+
+                // Reverse wrist to negative limit (-6V for 150 steps) while shoulder remains at upper limit
+                shoulderArm->commandedVoltage = 0.0;
+                wristArm->commandedVoltage = -6.0;
+                for (int step = 0; step < 150; ++step)
+                {
+                    jointSystem.FixedUpdate(0.005);
+                    RobotAssembler::StepPipeline(robot, 0.005);
+                    jointSystem.ReadbackTelemetry();
+                }
+
+                TEST_EXPECT_TRUE(ctx, shoulderArm->currentAngleRad > 1.5);
+                TEST_EXPECT_TRUE(ctx, wristArm->currentAngleRad < -0.8);
+
+                auto* wristT = scene.GetComponent<TransformComponent>(robot.linkEntities["arm_wrist_link"]);
+                auto* fwT = scene.GetComponent<TransformComponent>(robot.linkEntities["shooter_flywheel_visual"]);
+                TEST_EXPECT_TRUE(ctx, wristT != nullptr);
+                TEST_EXPECT_TRUE(ctx, fwT != nullptr);
+                if (wristT && fwT)
+                {
+                    glm::vec3 expectedFwPos = wristT->position + (wristT->rotation * glm::vec3(0.0f, 0.06f, 0.06f));
+                    TEST_EXPECT_TRUE(ctx, glm::length(fwT->position - expectedFwPos) < 0.01f);
+                }
+            }
+
+            // 6. Verify Four-Bar Colliders, Deploy, and Fold-Back Lockstep (Zero Back-Bar Lag/Jump)
+            auto* crankCol = scene.GetComponent<ColliderComponent>(robot.linkEntities["intake_crank_link"]);
+            auto* folCol = scene.GetComponent<ColliderComponent>(robot.linkEntities["intake_follower_link"]);
+            TEST_EXPECT_TRUE(ctx, crankCol != nullptr);
+            TEST_EXPECT_TRUE(ctx, folCol != nullptr);
+
+            auto* intakeArm = scene.GetComponent<Robot::Mechanisms::Components::ArmComponent>(robot.mechanismEntities["intake_fourbar_deploy"]);
+            auto* crankJc = scene.GetComponent<JointComponent>(robot.jointEntities["fourbar_crank_hinge"]);
+            auto* folJc = scene.GetComponent<JointComponent>(robot.jointEntities["fourbar_follower_hinge"]);
+            TEST_EXPECT_TRUE(ctx, intakeArm != nullptr);
+            TEST_EXPECT_TRUE(ctx, crankJc != nullptr);
+            TEST_EXPECT_TRUE(ctx, folJc != nullptr);
+
+            if (intakeArm && crankJc && folJc)
+            {
+                double maxDeployMismatch = 0.0;
+                double maxFoldMismatch = 0.0;
+
+                // Deploy 4-bar (+6V for 100 steps)
+                intakeArm->commandedVoltage = 6.0;
+                for (int step = 0; step < 100; ++step)
+                {
+                    jointSystem.FixedUpdate(0.005);
+                    RobotAssembler::StepPipeline(robot, 0.005);
+                    jointSystem.ReadbackTelemetry();
+
+                    double diff = std::abs(static_cast<double>(crankJc->currentAngle) - static_cast<double>(folJc->currentAngle));
+                    maxDeployMismatch = std::max(maxDeployMismatch, diff);
+                }
+                TEST_EXPECT_TRUE(ctx, crankJc->currentAngle > 1.2f);
+                TEST_EXPECT_TRUE(ctx, folJc->currentAngle > 1.2f);
+                TEST_EXPECT_TRUE(ctx, maxDeployMismatch < 0.03);
+
+                // Fold 4-bar back up to 0.0 rad using PD controller for 150 steps
+                for (int step = 0; step < 150; ++step)
+                {
+                    double err = 0.0 - intakeArm->currentAngleRad;
+                    double pdVolts = std::clamp((err * 18.0) - (intakeArm->currentVelocityRadPerSec * 1.2), -6.0, 6.0);
+                    intakeArm->commandedVoltage = (std::abs(err) > 0.008 || std::abs(intakeArm->currentVelocityRadPerSec) > 0.05) ? pdVolts : 0.0;
+
+                    jointSystem.FixedUpdate(0.005);
+                    RobotAssembler::StepPipeline(robot, 0.005);
+                    jointSystem.ReadbackTelemetry();
+
+                    double diff = std::abs(static_cast<double>(crankJc->currentAngle) - static_cast<double>(folJc->currentAngle));
+                    maxFoldMismatch = std::max(maxFoldMismatch, diff);
+                }
+                TEST_EXPECT_NEAR(ctx, crankJc->currentAngle, 0.0f, 0.02f);
+                TEST_EXPECT_NEAR(ctx, folJc->currentAngle, 0.0f, 0.02f);
+                TEST_EXPECT_TRUE(ctx, maxFoldMismatch < 0.03);
+            }
         }
     }
 }

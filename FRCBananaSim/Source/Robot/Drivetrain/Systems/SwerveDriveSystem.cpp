@@ -6,9 +6,11 @@
 #include "Robot/Drivetrain/Systems/SwerveDriveSystem.h"
 #include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
 #include "Robot/Drivetrain/Components/SwerveModuleComponent.h"
+#include "Robot/Mechanisms/Components/CompositeMassComponent.h"
 #include "Robot/Schema/RobotSchemaLoader.h"
 #include "Actuation/Components/BatteryComponent.h"
 #include "Physics/Components/RigidBodyComponent.h"
+#include "Physics/Components/ColliderComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
 #include "Core/ECS/Core/Scene.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
@@ -67,6 +69,11 @@ namespace FRCBananaSim::Robot::Drivetrain::System
 
     Model::SwerveDrivetrainModel* SwerveDriveSystem::GetModel()
     {
+        if (!isInitialized)
+        {
+            InitializeModel();
+        }
+
         auto chasses = scene.Query<SwerveChassisComponent>();
         if (chasses.empty())
         {
@@ -150,10 +157,24 @@ namespace FRCBananaSim::Robot::Drivetrain::System
             return;
         }
 
+        auto* compMass = scene.GetComponent<Mechanisms::Components::CompositeMassComponent>(chassisEntity);
+        auto* collider = scene.GetComponent<ColliderComponent>(chassisEntity);
+
         // 1. Ingest post-Jolt state and restore velocity offset: V = v_Jolt + Delta
         if (joltContext && joltContext->IsInitialized() && chassisRb && !chassisRb->bodyID.IsInvalid())
         {
             JPH::BodyInterface& bodyInterface = joltContext->GetBodyInterface();
+
+            if (defaultProbe)
+            {
+                defaultProbe->SetIgnoredBody(chassisRb->bodyID);
+            }
+
+            if (compMass && bodyInterface.GetMotionType(chassisRb->bodyID) != JPH::EMotionType::Kinematic)
+            {
+                bodyInterface.SetMotionType(chassisRb->bodyID, JPH::EMotionType::Kinematic, JPH::EActivation::Activate);
+            }
+
             JPH::RVec3 joltPos = bodyInterface.GetPosition(chassisRb->bodyID);
             JPH::Quat joltRot = bodyInterface.GetRotation(chassisRb->bodyID);
             JPH::Vec3 joltLinVel = bodyInterface.GetLinearVelocity(chassisRb->bodyID);
@@ -164,6 +185,14 @@ namespace FRCBananaSim::Robot::Drivetrain::System
             glm::dquat rotEngine(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
             glm::vec3 linVelEngine(joltLinVel.GetX(), joltLinVel.GetY(), joltLinVel.GetZ());
             glm::vec3 angVelEngine(joltAngVel.GetX(), joltAngVel.GetY(), joltAngVel.GetZ());
+
+            if (collider)
+            {
+                rotEngine = rotEngine * glm::inverse(glm::dquat(collider->localRotation));
+                glm::vec3 worldOffset = glm::quat(rotEngine) * collider->localOffset;
+                posEngine -= worldOffset;
+                linVelEngine -= glm::cross(angVelEngine, worldOffset);
+            }
 
             glm::vec3 posNWU = Schema::RobotSchemaLoader::ConvertEngineVectorToNWU(posEngine);
             glm::quat rotNWU = glm::quat(Schema::RobotSchemaLoader::ConvertEngineQuatToNWU(rotEngine));
@@ -197,6 +226,15 @@ namespace FRCBananaSim::Robot::Drivetrain::System
             // Convert NWU -> Jolt Engine
             glm::vec3 midLinVelEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(midLinVelNWU);
             glm::vec3 midAngVelEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(midAngVelNWU);
+
+            if (collider)   
+            {
+                JPH::Quat joltRot = bodyInterface.GetRotation(chassisRb->bodyID);
+                glm::dquat rotEngine(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
+                rotEngine = rotEngine * glm::inverse(glm::dquat(collider->localRotation));
+                glm::vec3 worldOffset = glm::quat(rotEngine) * collider->localOffset;
+                midLinVelEng += glm::cross(midAngVelEng, worldOffset);
+            }
 
             if (std::isfinite(midLinVelEng.x) && std::isfinite(midLinVelEng.y) && std::isfinite(midLinVelEng.z) &&
                 std::isfinite(midAngVelEng.x) && std::isfinite(midAngVelEng.y) && std::isfinite(midAngVelEng.z))

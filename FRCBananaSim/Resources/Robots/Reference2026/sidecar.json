@@ -210,8 +210,8 @@
       "followerJoint": "fourbar_follower_hinge",
       "closureParentLink": "intake_follower_link",
       "closureChildLink": "intake_coupler_link",
-      "closureParentAnchor_m": [ 0.22, 0.0, 0.0 ],
-      "closureChildAnchor_m": [ -0.10, 0.0, 0.0 ],
+      "closureParentAnchor_m": [ 0.24, 0.0, 0.0 ],
+      "closureChildAnchor_m": [ -0.12, 0.0, 0.06 ],
       "closureAxis": [ 0.0, 1.0, 0.0 ]
     },
     {

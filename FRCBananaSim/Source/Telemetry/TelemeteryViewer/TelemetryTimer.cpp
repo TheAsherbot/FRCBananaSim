@@ -29,18 +29,25 @@ namespace FRCBananaSim::Telemetry
 
     void TelemetryTimer::Stop()
     {
+        if (!TelemetryManager::Get().IsRecordingEnabled())
+        {
+            isStopped = true;
+            return;
+        }
+
         auto endTimepoint = std::chrono::high_resolution_clock::now();
 
         long long start = std::chrono::time_point_cast<std::chrono::microseconds>(startTimepoint).time_since_epoch().count();
         long long end = std::chrono::time_point_cast<std::chrono::microseconds>(endTimepoint).time_since_epoch().count();
 
-        uint32_t threadId = static_cast<uint32_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        static thread_local uint32_t cachedThreadId =
+            static_cast<uint32_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
 
         ProfileResult result;
         result.name = name;
         result.startTimestamp = start;
         result.endTimestamp = end;
-        result.threadId = threadId;
+        result.threadId = cachedThreadId;
 
         // Take a memory snapshot precisely at the end of the frame using fast strcmp
         if (name && std::strcmp(name, "Frame") == 0)

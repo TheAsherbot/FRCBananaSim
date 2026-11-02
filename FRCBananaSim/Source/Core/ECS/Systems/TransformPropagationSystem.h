@@ -31,6 +31,11 @@ namespace FRCBananaSim::Core::ECS::Systems
          */
         void Update() override;
 
+        /**
+         * @brief Propagates world-space transforms down entity hierarchies during render pass.
+         */
+        void RenderUpdate() override;
+
     private:
         /**
          * @brief Recursively propagates world-space transforms down entity hierarchy trees.

@@ -180,7 +180,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
         // Locked axle stick check: when motor demand is zero and neutral mode is Brake at near-zero velocity
         if (std::abs(driveCommand.demand) < 1e-4 && driveCommand.neutralMode == Control::NeutralMode::Brake &&
-            std::abs(state.wheelVelocity) < 1e-3)
+            std::abs(state.wheelVelocity) < 0.05)
         {
             return tireModel.CalculateLockedTangentialStiffness(normalForce, state.contactState.bristleDeflection, deltaTime);
         }
@@ -221,7 +221,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         // 3. Locked axle stick check
         bool isAxleStick = false;
         if (std::abs(driveCommand.demand) < 1e-4 && driveCommand.neutralMode == Control::NeutralMode::Brake &&
-            std::abs(state.wheelVelocity) < 1e-3)
+            (std::abs(state.wheelVelocity) < 0.05 || (std::abs(patchUx) < 0.02 && std::abs(state.wheelVelocity) < 0.15)))
         {
             isAxleStick = true;
         }

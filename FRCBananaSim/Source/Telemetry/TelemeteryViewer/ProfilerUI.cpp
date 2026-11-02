@@ -48,14 +48,19 @@ namespace FRCBananaSim::Telemetry
                     maxVal = 1.0f;
                 }
                 char overlay[64];
-                snprintf(overlay, sizeof(overlay), "%.1f ms", frameTimes.back());
+                snprintf(overlay, sizeof(overlay), "%.2f ms", frameTimes.back());
                 ImGui::PlotLines("##FrameGraph", frameTimes.data(), count, 0, overlay, 0.0f, maxVal * 1.2f, ImVec2(0, 80));
             }
         }
 
         // --- Incremental Frame Indexing O(1) ---
-        // If results array was cleared or changed (e.g. new session loaded), reset index
-        if (results.size() < lastIndexedResultCount)
+        int previousFrameCount = static_cast<int>(frameIndices.size());
+        bool wasAtLatest = (previousFrameCount == 0) || (selectedFrameIndex >= previousFrameCount - 1);
+
+        if (results.size() < lastIndexedResultCount ||
+            (!frameIndices.empty() && (frameIndices.back() >= results.size() ||
+                !results[frameIndices.back()].name ||
+                std::strcmp(results[frameIndices.back()].name, "Frame") != 0)))
         {
             frameIndices.clear();
             lastIndexedResultCount = 0;
@@ -73,9 +78,9 @@ namespace FRCBananaSim::Telemetry
 
         if (!frameIndices.empty())
         {
-            if (selectedFrameIndex < 0 || selectedFrameIndex >= static_cast<int>(frameIndices.size()))
+            if (wasAtLatest || selectedFrameIndex < 0 || selectedFrameIndex >= static_cast<int>(frameIndices.size()))
             {
-                selectedFrameIndex = static_cast<int>(frameIndices.size()) - 1; // Default to newest
+                selectedFrameIndex = static_cast<int>(frameIndices.size()) - 1;
             }
         }
 
@@ -113,7 +118,6 @@ namespace FRCBananaSim::Telemetry
                 return;
             }
 
-
             long long frameStart = results.front().startTimestamp;
             long long frameEnd = results.back().endTimestamp;
             std::size_t frameSliceStart = 0;
@@ -121,7 +125,6 @@ namespace FRCBananaSim::Telemetry
 
             if (!frameIndices.empty())
             {
-                // Add the slider to select a specific frame across the entire session
                 ImGui::SliderInt("Scrub Frame", &selectedFrameIndex, 0, static_cast<int>(frameIndices.size()) - 1);
                 ImGui::SameLine();
                 if (ImGui::Button("Go to Latest"))
@@ -152,16 +155,15 @@ namespace FRCBananaSim::Telemetry
                 frameRange = 1;
             }
 
-            // Assign depth by simple nesting detection strictly within the selected frame slice O(1)
+            // Sort frame scopes by startTimestamp ASC, duration DESC so outer parent scopes are at top depth 0
             struct ScopeEntry
             {
                 const ProfileResult* result;
                 int depth;
             };
 
-            std::vector<ScopeEntry> visibleScopes;
-            std::vector<long long> depthEndStack;
-
+            std::vector<const ProfileResult*> sortedSlice;
+            sortedSlice.reserve(frameSliceEnd - frameSliceStart + 1);
             for (std::size_t i = frameSliceStart; i <= frameSliceEnd; ++i)
             {
                 const ProfileResult& r = results[i];
@@ -169,6 +171,26 @@ namespace FRCBananaSim::Telemetry
                 {
                     continue;
                 }
+                sortedSlice.push_back(&r);
+            }
+
+            std::sort(sortedSlice.begin(), sortedSlice.end(),
+                [](const ProfileResult* a, const ProfileResult* b)
+                {
+                    if (a->startTimestamp != b->startTimestamp)
+                    {
+                        return a->startTimestamp < b->startTimestamp;
+                    }
+                    return (a->endTimestamp - a->startTimestamp) > (b->endTimestamp - b->startTimestamp);
+                });
+
+            std::vector<ScopeEntry> visibleScopes;
+            visibleScopes.reserve(sortedSlice.size());
+            std::vector<long long> depthEndStack;
+
+            for (const ProfileResult* rPtr : sortedSlice)
+            {
+                const ProfileResult& r = *rPtr;
 
                 // Pop scopes that have ended
                 while (!depthEndStack.empty() && r.startTimestamp >= depthEndStack.back())
@@ -204,6 +226,8 @@ namespace FRCBananaSim::Telemetry
             float canvasWidth = ImGui::GetContentRegionAvail().x * zoomLevel;
 
             ImDrawList* drawList = ImGui::GetWindowDrawList();
+            bool isWindowHovered = ImGui::IsWindowHovered();
+            const ProfileResult* hoveredResult = nullptr;
 
             // Color palette based on scope name hash
             auto hashColor = [](const char* name) -> ImU32
@@ -269,24 +293,24 @@ namespace FRCBananaSim::Telemetry
                     }
                     else
                     {
-                        // Just the name without duration
                         drawList->AddText(ImVec2(x0 + 2.0f, y0 + 2.0f), IM_COL32(255, 255, 255, 255), r.name ? r.name : "?");
                     }
                 }
 
-                // Tooltip on hover
-                ImGui::SetCursorScreenPos(ImVec2(x0, y0));
-                ImGui::InvisibleButton(("##scope" + std::to_string(reinterpret_cast<uintptr_t>(&r))).c_str(),
-                    ImVec2(barWidth, barHeight));
-                if (ImGui::IsItemHovered())
+                if (isWindowHovered && ImGui::IsMouseHoveringRect(ImVec2(x0, y0), ImVec2(x1, y1)))
                 {
-                    ImGui::BeginTooltip();
-                    ImGui::Text("Scope: %s", r.name ? r.name : "Unknown");
-                    float durationUs = static_cast<float>(r.endTimestamp - r.startTimestamp);
-                    ImGui::Text("Duration: %.3f ms (%.0f us)", durationUs / 1000.0f, durationUs);
-                    ImGui::Text("Thread: %u", r.threadId);
-                    ImGui::EndTooltip();
+                    hoveredResult = &r;
                 }
+            }
+
+            if (hoveredResult)
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("Scope: %s", hoveredResult->name ? hoveredResult->name : "Unknown");
+                float durationUs = static_cast<float>(hoveredResult->endTimestamp - hoveredResult->startTimestamp);
+                ImGui::Text("Duration: %.3f ms (%.0f us)", durationUs / 1000.0f, durationUs);
+                ImGui::Text("Thread: %u", hoveredResult->threadId);
+                ImGui::EndTooltip();
             }
 
             // Reserve space so scrollbar works properly

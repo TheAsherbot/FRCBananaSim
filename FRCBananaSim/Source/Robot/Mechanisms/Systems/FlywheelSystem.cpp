@@ -5,7 +5,9 @@
 
 #include "Robot/Mechanisms/Systems/FlywheelSystem.h"
 #include "Physics/Components/RigidBodyComponent.h"
+#include "Physics/Components/ColliderComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
+#include "Core/ECS/Components/HierarchyComponent.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include "Core/ECS/Core/Scene.h"
 
@@ -17,8 +19,10 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
 {
     using namespace Components;
     using Physics::Components::RigidBodyComponent;
+    using Physics::Components::ColliderComponent;
     using Core::ECS::Components::TransformComponent;
     using Core::ECS::Components::WorldTransformComponent;
+    using Core::ECS::Components::HierarchyComponent;
     using Core::ECS::Core::invalidEntity;
 
     FlywheelSystem::FlywheelSystem(Core::ECS::Core::Scene& scene, Physics::JoltContext* jolt)
@@ -66,16 +70,58 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
             glm::vec3 axis = glm::normalize(flywheel->spinAxis);
             glm::quat spinQuat = glm::angleAxis(static_cast<float>(flywheel->angularPositionRad), axis);
 
-            auto* t = scene.GetComponent<TransformComponent>(flywheel->visualEntity);
-            if (t)
+            if (flywheel->parentEntity != invalidEntity)
             {
-                t->rotation = spinQuat;
-            }
+                auto* parentT = scene.GetComponent<TransformComponent>(flywheel->parentEntity);
+                if (parentT)
+                {
+                    glm::vec3 worldPos = parentT->position + (parentT->rotation * flywheel->visualLocalOffset);
+                    glm::quat worldRot = glm::normalize(parentT->rotation * spinQuat);
 
-            auto* wt = scene.GetComponent<WorldTransformComponent>(flywheel->visualEntity);
-            if (wt)
+                    auto* t = scene.GetComponent<TransformComponent>(flywheel->visualEntity);
+                    if (t)
+                    {
+                        t->position = worldPos;
+                        t->rotation = worldRot;
+                    }
+
+                    auto* wt = scene.GetComponent<WorldTransformComponent>(flywheel->visualEntity);
+                    if (wt)
+                    {
+                        wt->worldPosition = worldPos;
+                        wt->worldRotation = worldRot;
+                    }
+
+                    auto* h = scene.GetComponent<HierarchyComponent>(flywheel->visualEntity);
+                    if (h)
+                    {
+                        for (auto child : h->children)
+                        {
+                            auto* ct = scene.GetComponent<TransformComponent>(child);
+                            auto* cwt = scene.GetComponent<WorldTransformComponent>(child);
+                            if (ct && cwt)
+                            {
+                                cwt->worldPosition = worldPos + (worldRot * ct->position);
+                                cwt->worldRotation = glm::normalize(worldRot * ct->rotation);
+                                cwt->worldScale = ct->scale;
+                            }
+                        }
+                    }
+                }
+            }
+            else
             {
-                wt->worldRotation = wt->worldRotation * spinQuat;
+                auto* t = scene.GetComponent<TransformComponent>(flywheel->visualEntity);
+                if (t)
+                {
+                    t->rotation = spinQuat;
+                }
+
+                auto* wt = scene.GetComponent<WorldTransformComponent>(flywheel->visualEntity);
+                if (wt)
+                {
+                    wt->worldRotation = spinQuat;
+                }
             }
         }
     }
@@ -182,6 +228,84 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
 
                 bi.AddTorque(parentRb->bodyID, recoilTorqueVec);
                 bi.ActivateBody(parentRb->bodyID);
+            }
+        }
+
+        // 7. Synchronize Visual Link Pose with Parent Body
+        if (flywheel.visualEntity != invalidEntity && flywheel.parentEntity != invalidEntity)
+        {
+            glm::vec3 parentPos{ 0.0f };
+            glm::quat parentRot{ 1.0f, 0.0f, 0.0f, 0.0f };
+            bool hasParentPose = false;
+
+            if (joltContext && joltContext->IsInitialized())
+            {
+                auto* parentRb = scene.GetComponent<RigidBodyComponent>(flywheel.parentEntity);
+                if (parentRb && !parentRb->bodyID.IsInvalid())
+                {
+                    JPH::BodyInterface& bi = joltContext->GetBodyInterface();
+                    JPH::RVec3 jPos = bi.GetPosition(parentRb->bodyID);
+                    JPH::Quat jRot = bi.GetRotation(parentRb->bodyID);
+                    parentPos = glm::vec3(static_cast<float>(jPos.GetX()), static_cast<float>(jPos.GetY()), static_cast<float>(jPos.GetZ()));
+                    parentRot = glm::quat(jRot.GetW(), jRot.GetX(), jRot.GetY(), jRot.GetZ());
+
+                    auto* parentCol = scene.GetComponent<ColliderComponent>(flywheel.parentEntity);
+                    if (parentCol)
+                    {
+                        parentRot = glm::normalize(parentRot * glm::inverse(parentCol->localRotation));
+                        parentPos -= parentRot * parentCol->localOffset;
+                    }
+                    hasParentPose = true;
+                }
+            }
+
+            if (!hasParentPose)
+            {
+                auto* parentT = scene.GetComponent<TransformComponent>(flywheel.parentEntity);
+                if (parentT)
+                {
+                    parentPos = parentT->position;
+                    parentRot = parentT->rotation;
+                    hasParentPose = true;
+                }
+            }
+
+            if (hasParentPose)
+            {
+                glm::vec3 axis = glm::normalize(flywheel.spinAxis);
+                glm::quat spinQuat = glm::angleAxis(static_cast<float>(flywheel.angularPositionRad), axis);
+                glm::vec3 worldPos = parentPos + (parentRot * flywheel.visualLocalOffset);
+                glm::quat worldRot = glm::normalize(parentRot * spinQuat);
+
+                auto* t = scene.GetComponent<TransformComponent>(flywheel.visualEntity);
+                if (t)
+                {
+                    t->position = worldPos;
+                    t->rotation = worldRot;
+                }
+
+                auto* wt = scene.GetComponent<WorldTransformComponent>(flywheel.visualEntity);
+                if (wt)
+                {
+                    wt->worldPosition = worldPos;
+                    wt->worldRotation = worldRot;
+                }
+
+                if (joltContext && joltContext->IsInitialized())
+                {
+                    auto* visRb = scene.GetComponent<RigidBodyComponent>(flywheel.visualEntity);
+                    if (visRb && !visRb->bodyID.IsInvalid())
+                    {
+                        JPH::BodyInterface& bi = joltContext->GetBodyInterface();
+                        bi.SetPositionAndRotation(
+                            visRb->bodyID,
+                            JPH::RVec3(worldPos.x, worldPos.y, worldPos.z),
+                            JPH::Quat(worldRot.x, worldRot.y, worldRot.z, worldRot.w),
+                            JPH::EActivation::DontActivate
+                        );
+                        bi.SetLinearAndAngularVelocity(visRb->bodyID, JPH::Vec3::sZero(), JPH::Vec3::sZero());
+                    }
+                }
             }
         }
     }

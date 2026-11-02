@@ -10,6 +10,7 @@
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include "Core/ECS/Core/Scene.h"
 
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
 #include <algorithm>
 #include <cmath>
 
@@ -148,9 +149,20 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
 
         // 6. Semi-Implicit Rotational Torque Formulation:
         // tau^{t+dt} = (tau_cmd + tau_spring + tau_grav - D_total * omega) / (1 + (D_total * dt) / J_eff) - tau_grav
+        bool joltGravActive = true;
+        if (arm.linkEntity != invalidEntity)
+        {
+            auto* armRb = scene.GetComponent<RigidBodyComponent>(arm.linkEntity);
+            if (armRb && armRb->gravityFactor == 0.0f)
+            {
+                joltGravActive = false;
+            }
+        }
+        double joltGravTerm = joltGravActive ? tauGrav : 0.0;
+
         double denominator = 1.0 + ((dTotal * dt) / arm.lumpedEffectiveInertiaKgm2);
         double tauNetConstant = tauCmd + tauSpring + tauGrav;
-        double tauSemi = (tauNetConstant - (dTotal * omega)) / denominator - tauGrav;
+        double tauSemi = (tauNetConstant - (dTotal * omega)) / denominator - joltGravTerm;
 
         // 7. Stator Current Limit Clamp
         double maxStatorTorque = motor.CalculateStatorTorqueLimit(arm.statorCurrentLimitA);
@@ -158,21 +170,23 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
 
         // 8. 1D Coulomb Friction & Static Stick Latch
         double tauCoulomb = arm.coulombFrictionNm;
-        double tauHolding = tauSemi + tauGrav;
+        double tauHolding = tauSemi + joltGravTerm;
         double tauDelivered = 0.0;
+        double dOmegaCoulomb = (arm.lumpedEffectiveInertiaKgm2 > 1e-6) ? ((tauCoulomb / arm.lumpedEffectiveInertiaKgm2) * dt) : 0.0;
+        double omegaCapture = std::max(1e-3, dOmegaCoulomb);
 
-        if (std::abs(appliedV) < 1e-3 && std::abs(omega) < 1e-3)
+        if (std::abs(appliedV) < 1e-3 && (arm.isStickLocked || std::abs(omega) <= omegaCapture))
         {
-            if (std::abs(tauHolding) <= tauCoulomb)
+            if (std::abs(tauNetConstant) <= tauCoulomb)
             {
                 // Static Stick Regime: Latch position once to eliminate floating walk
                 if (!arm.isStickLocked)
                 {
                     arm.isStickLocked = true;
-                    arm.lockedAngleRad = theta;
+                    arm.lockedAngleRad = std::clamp(theta, arm.minAngleRad, arm.maxAngleRad);
                 }
 
-                tauDelivered = -tauGrav; // Balance static gravity exactly
+                tauDelivered = -joltGravTerm; // Balance static gravity exactly
                 omega = 0.0;
 
                 jointComp->targetAngle = static_cast<float>(arm.lockedAngleRad);
@@ -198,7 +212,9 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         {
             arm.isStickLocked = false;
             double sign = (omega > 1e-4) ? 1.0 : ((omega < -1e-4) ? -1.0 : ((tauHolding > 0.0) ? 1.0 : -1.0));
-            tauDelivered = tauSemi - (tauCoulomb * sign);
+            double maxArrestTorque = (std::abs(omega) > 1e-4 && dt > 1e-9) ? ((std::abs(omega) * arm.lumpedEffectiveInertiaKgm2) / dt) : tauCoulomb;
+            double tauFriction = std::min(tauCoulomb, maxArrestTorque);
+            tauDelivered = tauSemi - (tauFriction * sign);
 
             jointComp->appliedTorque = static_cast<float>(tauDelivered);
             jointComp->motorMode = JointMotorMode::Torque;
@@ -213,6 +229,72 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
 
     void MechanismSystem::UpdateFourBar(FourBarComponent& fourBar)
     {
+        if (fourBar.crankJoint != invalidEntity && fourBar.followerJoint != invalidEntity)
+        {
+            auto* crankJc = scene.GetComponent<JointComponent>(fourBar.crankJoint);
+            auto* followerJc = scene.GetComponent<JointComponent>(fourBar.followerJoint);
+            if (crankJc && followerJc)
+            {
+                if (crankJc->hasLimits && crankJc->motorMode == JointMotorMode::Torque && std::abs(crankJc->currentVelocity) < 0.25f)
+                {
+                    if (crankJc->currentAngle <= crankJc->minLimit + 0.01f && crankJc->appliedTorque < 0.0f)
+                    {
+                        crankJc->targetAngle = crankJc->minLimit;
+                        crankJc->targetPosition = crankJc->minLimit;
+                        crankJc->motorMode = JointMotorMode::Position;
+                        crankJc->springFrequency = 100.0f;
+                        crankJc->springDamping = 1.0f;
+                        crankJc->maxMotorTorque = 50000.0f;
+                        crankJc->appliedTorque = 0.0f;
+                    }
+                    else if (crankJc->currentAngle >= crankJc->maxLimit - 0.01f && crankJc->appliedTorque > 0.0f)
+                    {
+                        crankJc->targetAngle = crankJc->maxLimit;
+                        crankJc->targetPosition = crankJc->maxLimit;
+                        crankJc->motorMode = JointMotorMode::Position;
+                        crankJc->springFrequency = 100.0f;
+                        crankJc->springDamping = 1.0f;
+                        crankJc->maxMotorTorque = 50000.0f;
+                        crankJc->appliedTorque = 0.0f;
+                    }
+                }
+
+                if (crankJc->motorMode == JointMotorMode::Position)
+                {
+                    followerJc->targetAngle = crankJc->targetAngle;
+                    followerJc->targetPosition = crankJc->targetAngle;
+                    followerJc->motorMode = JointMotorMode::Position;
+                    followerJc->springFrequency = 100.0f;
+                    followerJc->springDamping = 1.0f;
+                    followerJc->maxMotorTorque = 50000.0f;
+                    followerJc->appliedTorque = 0.0f;
+
+                    if (followerJc->isCreated && followerJc->constraint)
+                    {
+                        auto* followerHinge = static_cast<JPH::HingeConstraint*>(followerJc->constraint.GetPtr());
+                        followerHinge->SetMotorState(JPH::EMotorState::Position);
+                        followerHinge->SetTargetAngle(followerJc->targetAngle);
+                        followerHinge->GetMotorSettings().SetTorqueLimit(followerJc->maxMotorTorque);
+                        followerHinge->GetMotorSettings().mSpringSettings.mFrequency = followerJc->springFrequency;
+                        followerHinge->GetMotorSettings().mSpringSettings.mDamping = followerJc->springDamping;
+                    }
+                }
+                else
+                {
+                    float angleErr = crankJc->currentAngle - followerJc->currentAngle;
+                    float velErr = crankJc->currentVelocity - followerJc->currentVelocity;
+                    followerJc->motorMode = JointMotorMode::Torque;
+                    followerJc->appliedTorque = (crankJc->appliedTorque * 0.8f) + (angleErr * 150.0f) + (velErr * 8.0f);
+
+                    if (followerJc->isCreated && followerJc->constraint)
+                    {
+                        auto* followerHinge = static_cast<JPH::HingeConstraint*>(followerJc->constraint.GetPtr());
+                        followerHinge->SetMotorState(JPH::EMotorState::Off);
+                    }
+                }
+            }
+        }
+
         if (fourBar.closureJoint == invalidEntity)
         {
             return;
@@ -282,6 +364,26 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
             return;
         }
 
+        // If the slave joint has its own dedicated motorized ArmComponent (e.g., an independently
+        // actuated wrist motor), do not fight the motor with a rigid coupling spring.
+        auto armEntities = scene.Query<ArmComponent>();
+        for (auto armEntity : armEntities)
+        {
+            auto* armComp = scene.GetComponent<ArmComponent>(armEntity);
+            if (armComp && armComp->jointEntity == coupling.slaveJoint)
+            {
+                coupling.transmittedTorque = 0.0;
+                return;
+            }
+        }
+
+        if (masterJointComp->motorMode == JointMotorMode::Position &&
+            slaveJointComp->motorMode == JointMotorMode::Position)
+        {
+            coupling.transmittedTorque = 0.0;
+            return;
+        }
+
         double thetaMaster = masterJointComp->currentAngle;
         double omegaMaster = masterJointComp->currentVelocity;
 
@@ -303,8 +405,27 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
             effectiveError = (error > 0.0) ? (error - halfBacklash) : (error + halfBacklash);
         }
 
-        // Bilateral penalty torque
-        double tauCouple = (coupling.couplingStiffness * effectiveError) + (coupling.couplingDamping * (targetOmegaSlave - omegaSlave));
+        // Estimate slave link inertia for numerical stability
+        double slaveInertia = 0.05;
+        auto* slaveRb = scene.GetComponent<RigidBodyComponent>(slaveJointComp->childEntity);
+        if (slaveRb && slaveRb->mass > 0.0f)
+        {
+            slaveInertia = std::max(0.01, static_cast<double>(slaveRb->mass) * 0.05);
+        }
+
+        // Critically damped coupling with stability limit for fixed dt
+        double maxOmegaN = 0.5 / dt; // Stability limit for explicit/semi-implicit stepping
+        double targetOmegaN = std::min(40.0, maxOmegaN);
+        double kStiff = std::min(coupling.couplingStiffness, slaveInertia * targetOmegaN * targetOmegaN);
+        double cDamp = std::min(coupling.couplingDamping, 2.0 * slaveInertia * targetOmegaN);
+
+        // Semi-implicit penalty torque formulation to prevent forward Euler divergence
+        double denominator = 1.0 + ((cDamp * dt) / slaveInertia);
+        double tauCouple = ((kStiff * effectiveError) + cDamp * (targetOmegaSlave - omegaSlave)) / denominator;
+
+        // Clamp transmission torque to prevent physical explosion
+        double maxTorqueClamp = 150.0; // N*m
+        tauCouple = std::clamp(tauCouple, -maxTorqueClamp, maxTorqueClamp);
 
         // Deliver torque to slave joint
         if (slaveJointComp->motorMode == JointMotorMode::Off)

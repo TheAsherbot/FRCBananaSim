@@ -116,7 +116,7 @@
       "name": "arm_wrist_link",
       "isRoot": false,
       "mass_kg": 2.20,
-      "centerOfMass_m": [ 0.15, 0.0, 0.0 ],
+      "centerOfMass_m": [ 0.04, 0.0, 0.0 ],
       "inertiaTensor_kgm2": {
         "ixx": 0.03,
         "iyy": 0.12,
@@ -131,9 +131,9 @@
         {
           "name": "wrist_proxy",
           "type": "box",
-          "origin_m": [ 0.15, 0.0, 0.0 ],
+          "origin_m": [ 0.04, 0.0, 0.0 ],
           "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
-          "dimensions_m": [ 0.30, 0.15, 0.10 ],
+          "dimensions_m": [ 0.16, 0.22, 0.10 ],
           "material": "aluminum_6061"
         }
       ]
@@ -153,7 +153,16 @@
       },
       "material": "aluminum_6061",
       "visualMesh": "Meshes/fourbar_crank.glb",
-      "colliders": []
+      "colliders": [
+        {
+          "name": "intake_crank_bar",
+          "type": "box",
+          "origin_m": [ 0.12, 0.0, 0.0 ],
+          "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+          "dimensions_m": [ 0.24, 0.06, 0.04 ],
+          "material": "aluminum_6061"
+        }
+      ]
     },
     {
       "name": "intake_follower_link",
@@ -170,13 +179,22 @@
       },
       "material": "aluminum_6061",
       "visualMesh": "Meshes/fourbar_follower.glb",
-      "colliders": []
+      "colliders": [
+        {
+          "name": "intake_follower_bar",
+          "type": "box",
+          "origin_m": [ 0.12, 0.0, 0.0 ],
+          "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+          "dimensions_m": [ 0.24, 0.06, 0.04 ],
+          "material": "aluminum_6061"
+        }
+      ]
     },
     {
       "name": "intake_coupler_link",
       "isRoot": false,
       "mass_kg": 1.80,
-      "centerOfMass_m": [ 0.10, 0.0, 0.0 ],
+      "centerOfMass_m": [ -0.03, 0.0, 0.03 ],
       "inertiaTensor_kgm2": {
         "ixx": 0.02,
         "iyy": 0.08,
@@ -191,9 +209,9 @@
         {
           "name": "intake_roller_proxy",
           "type": "box",
-          "origin_m": [ 0.10, 0.0, 0.0 ],
+          "origin_m": [ -0.03, 0.0, 0.03 ],
           "rotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
-          "dimensions_m": [ 0.24, 0.48, 0.12 ],
+          "dimensions_m": [ 0.22, 0.46, 0.12 ],
           "material": "polycarbonate"
         }
       ]
@@ -286,7 +304,7 @@
       "type": "revolute",
       "parentLink": "base_link",
       "childLink": "intake_crank_link",
-      "origin_m": [ 0.35, 0.0, 0.12 ],
+      "origin_m": [ 0.40, 0.0, 0.19 ],
       "axis": [ 0.0, 1.0, 0.0 ],
       "limits": {
         "hasLimits": true,
@@ -318,7 +336,7 @@
       "type": "revolute",
       "parentLink": "base_link",
       "childLink": "intake_follower_link",
-      "origin_m": [ 0.20, 0.0, 0.12 ],
+      "origin_m": [ 0.28, 0.0, 0.25 ],
       "axis": [ 0.0, 1.0, 0.0 ],
       "limits": {
         "hasLimits": true,

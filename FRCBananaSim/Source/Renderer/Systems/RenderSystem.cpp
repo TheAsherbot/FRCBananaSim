@@ -38,7 +38,5 @@ namespace FRCBananaSim::Renderer::Systems
 
             renderer.DrawMesh(*mesh, *worldTransform);
         }
-
-        renderer.FlushDebugDraw();
     }
 }

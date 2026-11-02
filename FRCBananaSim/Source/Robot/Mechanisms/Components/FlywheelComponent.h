@@ -39,7 +39,8 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
         double totalRotationalInertiaKgm2 = 0.0;///< Total lumped inertia J_total = J_disc + J_rollers*rho^2 + J_refl.
 
         // Geometry & Spin Axis
-        glm::vec3 spinAxis = { 0.0f, 0.0f, 1.0f }; ///< Direction of flywheel rotation in parent link body frame.
+        glm::vec3 spinAxis = { 0.0f, 0.0f, 1.0f };          ///< Direction of flywheel rotation in parent link body frame.
+        glm::vec3 visualLocalOffset = { 0.0f, 0.06f, 0.06f }; ///< Local mounting offset of visualEntity relative to parentEntity.
 
         // Friction & External Load
         double coulombFrictionNm = 0.02;        ///< Bearing Coulomb friction torque (N*m).

@@ -9,6 +9,7 @@
 #include "Utils/FixedTimestep.h"
 #include "Utils/Log.h"
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 
@@ -94,19 +95,29 @@ namespace FRCBananaSim::Core
 
         while (isRunning)
         {
-            auto frameStart = std::chrono::high_resolution_clock::now();
-
             std::uint32_t steps = fixedTimestep->Step();
+            if (steps == 0)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+
+            // Cap catch-up steps per frame to avoid spiral of death after window drag stalls
+            steps = std::min<std::uint32_t>(steps, 2u);
+
+            auto frameStart = std::chrono::high_resolution_clock::now();
             double fixedDeltaTime = fixedTimestep->FixedDeltaSeconds();
             double deltaTime = fixedTimestep->DeltaSeconds();
 
-            if (steps > 0)
+            Telemetry::TelemetryManager::Get().SetRecordingEnabled(true);
+
+            double physicsMs = 0.0;
+            double updateMs = 0.0;
+            double renderMs = 0.0;
+
             {
-                // Physics step executed: profile this frame
-                Telemetry::TelemetryManager::Get().SetRecordingEnabled(true);
                 SIM_PROFILE_SCOPE("Frame");
 
-                double physicsMs = 0.0;
                 {
                     SIM_PROFILE_SCOPE("FixedUpdate");
                     auto physicsStart = std::chrono::high_resolution_clock::now();
@@ -123,7 +134,6 @@ namespace FRCBananaSim::Core
                     physicsMs = std::chrono::duration<double, std::milli>(physicsEnd - physicsStart).count();
                 }
 
-                double updateMs = 0.0;
                 {
                     SIM_PROFILE_SCOPE("Update");
                     auto updateStart = std::chrono::high_resolution_clock::now();
@@ -138,7 +148,6 @@ namespace FRCBananaSim::Core
                 }
 
                 double alpha = fixedTimestep->Alpha();
-                double renderMs = 0.0;
                 {
                     SIM_PROFILE_SCOPE("Render");
                     auto renderStart = std::chrono::high_resolution_clock::now();
@@ -178,66 +187,16 @@ namespace FRCBananaSim::Core
                         {
                             std::this_thread::yield();
                         }
-                        else
-                        {
-                        }
-
-                        now = std::chrono::high_resolution_clock::now();
-                    }
-                }
-
-                auto frameEnd = std::chrono::high_resolution_clock::now();
-                double totalFrameMs = std::chrono::duration<double, std::milli>(frameEnd - frameStart).count();
-
-                Telemetry::TelemetryManager::Get().PushFrameSummary({ totalFrameMs, physicsMs, updateMs, renderMs });
-            }
-            else
-            {
-                // No physics step this tick: disable telemetry recording so empty render frames don't bloat the history
-                Telemetry::TelemetryManager::Get().SetRecordingEnabled(false);
-
-                if (updateCallback)
-                {
-                    updateCallback(deltaTime);
-                }
-
-                double alpha = fixedTimestep->Alpha();
-                if (renderCallback)
-                {
-                    renderCallback(alpha);
-                }
-
-                if (postRenderCallback)
-                {
-                    postRenderCallback();
-                }
-
-                if (maxFrameRate > 0.0)
-                {
-                    const std::chrono::duration<double> targetFrameDuration(1.0 / maxFrameRate);
-                    const auto targetEndTime = frameStart + std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(targetFrameDuration);
-
-                    auto now = std::chrono::high_resolution_clock::now();
-                    while (now < targetEndTime)
-                    {
-                        auto remaining = targetEndTime - now;
-
-                        if (remaining > std::chrono::milliseconds(2))
-                        {
-                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                        }
-                        else if (remaining > std::chrono::microseconds(200))
-                        {
-                            std::this_thread::yield();
-                        }
-                        else
-                        {
-                        }
 
                         now = std::chrono::high_resolution_clock::now();
                     }
                 }
             }
+
+            auto frameEnd = std::chrono::high_resolution_clock::now();
+            double totalFrameMs = std::chrono::duration<double, std::milli>(frameEnd - frameStart).count();
+
+            Telemetry::TelemetryManager::Get().PushFrameSummary({ totalFrameMs, physicsMs, updateMs, renderMs });
         }
 
 #if defined(_WIN32)
