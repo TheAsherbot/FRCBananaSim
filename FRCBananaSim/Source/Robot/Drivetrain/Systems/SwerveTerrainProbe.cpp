@@ -4,6 +4,7 @@
  */
 
 #include "Robot/Drivetrain/Systems/SwerveTerrainProbe.h"
+#include "Robot/Schema/RobotSchemaLoader.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
@@ -84,13 +85,15 @@ namespace FRCBananaSim::Robot::Drivetrain::Systems
             return probe;
         }
 
-        // Coordinate conversion NWU -> Jolt Engine (+X Left, +Y Up, +Z Forward):
+        // Canonical coordinate conversion NWU -> Jolt Engine (+X Right, +Y Up, +Z Forward):
+        glm::vec3 engHubPos = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(hubPosition);
         JPH::RVec3 joltHubPos(
-            static_cast<double>(hubPosition.y),
-            static_cast<double>(hubPosition.z),
-            static_cast<double>(hubPosition.x)
+            static_cast<double>(engHubPos.x),
+            static_cast<double>(engHubPos.y),
+            static_cast<double>(engHubPos.z)
         );
-        // In Jolt, Cylinder axis is along Y (+Y Up).
+
+        // In Jolt, CylinderShape axis is along Y (+Y Up).
         // A rolling wheel axle lies horizontally along engine X (+X Right).
         // Rotate 90 degrees around Z to orient cylinder axis along +X Right:
         constexpr float halfSqrt2 = 0.70710678f;
@@ -136,12 +139,13 @@ namespace FRCBananaSim::Robot::Drivetrain::Systems
                 groundNormalEng = -groundNormalEng;
             }
 
-            // Convert normal from Jolt Engine back to NWU:
-            glm::vec3 normalNWU(
-                groundNormalEng.GetZ(),
+            // Canonical conversion from Jolt Engine back to NWU:
+            glm::vec3 engNormal(
                 groundNormalEng.GetX(),
-                groundNormalEng.GetY()
+                groundNormalEng.GetY(),
+                groundNormalEng.GetZ()
             );
+            glm::vec3 normalNWU = Schema::RobotSchemaLoader::ConvertEngineVectorToNWU(engNormal);
 
             float len = glm::length(normalNWU);
             if (len > 1e-5f)

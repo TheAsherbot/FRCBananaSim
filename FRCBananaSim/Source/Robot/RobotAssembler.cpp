@@ -8,6 +8,7 @@
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Physics/Components/ColliderComponent.h"
 #include "Physics/Components/JointComponent.h"
+#include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
 #include "Robot/Mechanisms/Components/ElevatorComponent.h"
 #include "Robot/Mechanisms/Components/ArmComponent.h"
 #include "Robot/Mechanisms/Components/FourBarComponent.h"
@@ -90,7 +91,54 @@ namespace FRCBananaSim::Robot
         batteryComp.totalCurrent = sidecar.electrical.quiescentCurrentA;
         scene.AddComponent(result.batteryEntity, batteryComp);
 
-        // 2. Spawn Links (RigidBodies, Transforms, Colliders)
+        // 2. Compute Initial World Poses for All Links from Kinematic Joint Tree
+        struct LinkPose
+        {
+            glm::vec3 worldPos{ 0.0f };
+            glm::quat worldRot{ 1.0f, 0.0f, 0.0f, 0.0f };
+        };
+        std::unordered_map<std::string, LinkPose> linkPoses;
+
+        std::string rootLinkName = "base_link";
+        for (const auto& link : manifest.links)
+        {
+            if (link.isRoot)
+            {
+                rootLinkName = link.name;
+                break;
+            }
+        }
+        linkPoses[rootLinkName] = { worldSpawnPosition, worldSpawnOrientation };
+
+        bool expanded = true;
+        while (expanded)
+        {
+            expanded = false;
+            for (const auto& joint : manifest.joints)
+            {
+                auto pIt = linkPoses.find(joint.parentLink);
+                if (pIt != linkPoses.end() && linkPoses.find(joint.childLink) == linkPoses.end())
+                {
+                    glm::vec3 originEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(joint.originM));
+                    glm::vec3 childWorldPos = pIt->second.worldPos + (pIt->second.worldRot * originEngine);
+                    glm::quat childWorldRot = pIt->second.worldRot;
+                    linkPoses[joint.childLink] = { childWorldPos, childWorldRot };
+                    expanded = true;
+                }
+            }
+        }
+
+        // Fallback for unlinked meshes
+        for (const auto& link : manifest.links)
+        {
+            if (linkPoses.find(link.name) == linkPoses.end())
+            {
+                linkPoses[link.name] = { worldSpawnPosition, worldSpawnOrientation };
+            }
+        }
+
+        // 3. Spawn Links (RigidBodies, Transforms, Colliders)
+        uint32_t linkSubGroupIndex = 1;
         for (const auto& link : manifest.links)
         {
             Core::ECS::Core::Entity linkEntity = scene.CreateEntity();
@@ -102,10 +150,9 @@ namespace FRCBananaSim::Robot
                 result.chassisEntity = linkEntity;
             }
 
-            // Convert origin from NWU to Engine coordinate space (+Y Up, +Z Forward)
-            glm::vec3 localEnginePos = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(link.centerOfMassM));
-            glm::vec3 worldPos = worldSpawnPosition + (worldSpawnOrientation * localEnginePos);
-            glm::quat worldRot = worldSpawnOrientation;
+            const auto& pose = linkPoses[link.name];
+            glm::vec3 worldPos = pose.worldPos;
+            glm::quat worldRot = pose.worldRot;
 
             Core::ECS::Components::TransformComponent tc;
             tc.position = worldPos;
@@ -123,9 +170,13 @@ namespace FRCBananaSim::Robot
             Physics::Components::RigidBodyComponent rb;
             rb.motionType = Physics::Components::BodyMotionType::Dynamic;
             rb.mass = static_cast<float>(link.massKg);
+            rb.collisionGroupID = 1; // Robot group: mutual self-collisions disabled via GroupFilterTable
+            rb.collisionSubGroupID = linkSubGroupIndex++;
+
             if (link.isRoot)
             {
                 rb.allowSleeping = false;
+                rb.gravityFactor = 0.0f; // Analytic swerve drivetrain solver owns gravity
             }
 
             if (link.inertiaTensor.IsPositiveDefinite())
@@ -182,7 +233,7 @@ namespace FRCBananaSim::Robot
             }
         }
 
-        // 3. Attach CompositeMassComponent to Chassis for Dynamic Parallel Axis Tracking
+        // 4. Attach CompositeMassComponent to Chassis for Dynamic Parallel Axis Tracking
         if (result.chassisEntity != Core::ECS::Core::invalidEntity)
         {
             Mechanisms::Components::CompositeMassComponent compMass;
@@ -197,7 +248,7 @@ namespace FRCBananaSim::Robot
             scene.AddComponent(result.chassisEntity, compMass);
         }
 
-        // 4. Spawn Joints (Hinges, Sliders, Fixed)
+        // 5. Spawn Joints (Hinges, Sliders, Fixed)
         for (const auto& joint : manifest.joints)
         {
             Core::ECS::Core::Entity jointEntity = scene.CreateEntity();
@@ -212,10 +263,11 @@ namespace FRCBananaSim::Robot
                 jc.parentEntity = pIt->second;
                 jc.childEntity = cIt->second;
 
+                const auto& parentPose = linkPoses[joint.parentLink];
                 glm::vec3 axisEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(joint.axis));
                 glm::vec3 originEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(joint.originM));
-                glm::vec3 worldAnchor = worldSpawnPosition + (worldSpawnOrientation * originEngine);
-                glm::vec3 worldAxis = glm::normalize(worldSpawnOrientation * axisEngine);
+                glm::vec3 worldAnchor = parentPose.worldPos + (parentPose.worldRot * originEngine);
+                glm::vec3 worldAxis = glm::normalize(parentPose.worldRot * axisEngine);
 
                 if (joint.type == "revolute" || joint.type == "continuous")
                 {
@@ -249,7 +301,7 @@ namespace FRCBananaSim::Robot
             }
         }
 
-        // 5. Spawn Mechanisms (Elevators, Arms, Wrists, Flywheels, Intakes)
+        // 6. Spawn Mechanisms (Elevators, Arms, Wrists, Flywheels, Intakes)
         uint32_t nextMechanismSlot = 8;
         for (const auto& mech : sidecar.mechanisms)
         {
@@ -382,7 +434,7 @@ namespace FRCBananaSim::Robot
             }
         }
 
-        // 6. Spawn Couplings (PowerCoupling, FourBarLoop)
+        // 7. Spawn Couplings (PowerCoupling, FourBarLoop)
         for (const auto& coup : sidecar.couplings)
         {
             Core::ECS::Core::Entity coupEntity = scene.CreateEntity();
@@ -463,7 +515,7 @@ namespace FRCBananaSim::Robot
             }
         }
 
-        // 7. Spawn Sensors (CANcoders, IMUs, Limit Switches, Beam Breaks, Analog Inputs)
+        // 8. Spawn Sensors (CANcoders, IMUs, Limit Switches, Beam Breaks, Analog Inputs)
         for (const auto& s : sidecar.sensors)
         {
             Core::ECS::Core::Entity se = scene.CreateEntity();
@@ -544,7 +596,7 @@ namespace FRCBananaSim::Robot
             }
         }
 
-        // 8. Spawn Contact Zones
+        // 9. Spawn Contact Zones
         for (const auto& cz : manifest.contactZones)
         {
             Core::ECS::Core::Entity cze = scene.CreateEntity();
@@ -562,17 +614,22 @@ namespace FRCBananaSim::Robot
             scene.AddComponent(cze, comp);
         }
 
-        // 9. Configure Swerve Drivetrain Subsystem
-        if (sidecar.swerve.modules.size() == 4)
+        // 10. Configure Swerve Drivetrain Subsystem & Attach SwerveChassisComponent
+        if (sidecar.swerve.modules.size() == 4 && result.chassisEntity != Core::ECS::Core::invalidEntity)
         {
             result.swerveSystem = std::make_shared<Drivetrain::System::SwerveDriveSystem>(scene, joltContext);
+
+            Drivetrain::Components::SwerveChassisComponent chassisComp;
+            chassisComp.batteryEntity = result.batteryEntity;
+            chassisComp.chassisMass = manifest.massSummary.totalMassKg > 0.0 ? manifest.massSummary.totalMassKg : 54.0;
+            scene.AddComponent(result.chassisEntity, chassisComp);
         }
 
-        // 10. Configure SimDeviceDispatcher
+        // 11. Configure SimDeviceDispatcher
         result.dispatcher = std::make_shared<Bridge::SimDeviceDispatcher>();
         result.dispatcher->ConfigureFromSidecar(sidecar);
 
-        // 11. Instantiate Official 8-Stage Execution Pipeline Systems
+        // 12. Instantiate Official 8-Stage Execution Pipeline Systems
         result.electricalSystem = std::make_shared<Actuation::Systems::ElectricalSystem>(scene, result.swerveSystem.get());
         result.elevatorSystem = std::make_shared<Mechanisms::Systems::ElevatorSystem>(scene, joltContext);
         result.mechanismSystem = std::make_shared<Mechanisms::Systems::MechanismSystem>(scene, joltContext);

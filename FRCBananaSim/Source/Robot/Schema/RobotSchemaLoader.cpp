@@ -12,6 +12,43 @@
 
 namespace FRCBananaSim::Robot::Schema
 {
+    static glm::dvec3 ParseOptionalVec3(const nlohmann::json& parent, const std::string& key,
+        const glm::dvec3& defaultValue = { 0.0, 0.0, 0.0 })
+    {
+        if (parent.is_object() && parent.contains(key))
+        {
+            const auto& node = parent[key];
+            if (node.is_array() && node.size() >= 3)
+            {
+                return glm::dvec3(
+                    node[0].get<double>(),
+                    node[1].get<double>(),
+                    node[2].get<double>()
+                );
+            }
+        }
+        return defaultValue;
+    }
+
+    static glm::dquat ParseOptionalQuat(const nlohmann::json& parent, const std::string& key,
+        const glm::dquat& defaultValue = { 1.0, 0.0, 0.0, 0.0 })
+    {
+        if (parent.is_object() && parent.contains(key))
+        {
+            const auto& node = parent[key];
+            if (node.is_array() && node.size() >= 4)
+            {
+                return glm::dquat(
+                    node[0].get<double>(),
+                    node[1].get<double>(),
+                    node[2].get<double>(),
+                    node[3].get<double>()
+                );
+            }
+        }
+        return defaultValue;
+    }
+
     static glm::dvec3 ParseVec3(const nlohmann::json& node, const glm::dvec3& defaultValue = { 0.0, 0.0, 0.0 })
     {
         if (node.is_array() && node.size() >= 3)
@@ -29,7 +66,6 @@ namespace FRCBananaSim::Robot::Schema
     {
         if (node.is_array() && node.size() >= 4)
         {
-            // Standard Schema v1 format: [w, x, y, z]
             return glm::dquat(
                 node[0].get<double>(),
                 node[1].get<double>(),
@@ -138,7 +174,7 @@ namespace FRCBananaSim::Robot::Schema
         {
             const auto& ms = json["massSummary"];
             manifest.massSummary.totalMassKg = ms.value("totalMass_kg", 0.0);
-            manifest.massSummary.centerOfMassM = ParseVec3(ms["centerOfMass_m"]);
+            manifest.massSummary.centerOfMassM = ParseOptionalVec3(ms, "centerOfMass_m");
         }
 
         // Links
@@ -150,7 +186,7 @@ namespace FRCBananaSim::Robot::Schema
                 link.name = lNode.value("name", "");
                 link.isRoot = lNode.value("isRoot", false);
                 link.massKg = lNode.value("mass_kg", 0.0);
-                link.centerOfMassM = ParseVec3(lNode["centerOfMass_m"]);
+                link.centerOfMassM = ParseOptionalVec3(lNode, "centerOfMass_m");
                 link.material = lNode.value("material", "");
                 link.visualMesh = lNode.value("visualMesh", "");
 
@@ -172,9 +208,9 @@ namespace FRCBananaSim::Robot::Schema
                         ColliderDefinition col;
                         col.name = cNode.value("name", "");
                         col.type = cNode.value("type", "box");
-                        col.originM = ParseVec3(cNode["origin_m"]);
-                        col.rotationQuat = ParseQuat(cNode["rotation_quat"]);
-                        col.dimensionsM = ParseVec3(cNode["dimensions_m"]);
+                        col.originM = ParseOptionalVec3(cNode, "origin_m");
+                        col.rotationQuat = ParseOptionalQuat(cNode, "rotation_quat");
+                        col.dimensionsM = ParseOptionalVec3(cNode, "dimensions_m");
                         col.material = cNode.value("material", link.material);
                         link.colliders.push_back(col);
                     }
@@ -194,8 +230,8 @@ namespace FRCBananaSim::Robot::Schema
                 joint.type = jNode.value("type", "revolute");
                 joint.parentLink = jNode.value("parentLink", "");
                 joint.childLink = jNode.value("childLink", "");
-                joint.originM = ParseVec3(jNode["origin_m"]);
-                joint.axis = ParseVec3(jNode["axis"], glm::dvec3(0.0, 0.0, 1.0));
+                joint.originM = ParseOptionalVec3(jNode, "origin_m");
+                joint.axis = ParseOptionalVec3(jNode, "axis", glm::dvec3(0.0, 0.0, 1.0));
 
                 if (jNode.contains("limits"))
                 {
@@ -222,11 +258,11 @@ namespace FRCBananaSim::Robot::Schema
                 zone.role = zNode.value("role", "intake");
                 zone.parentLink = zNode.value("parentLink", "");
                 zone.shape = zNode.value("shape", "box");
-                zone.originM = ParseVec3(zNode["origin_m"]);
-                zone.rotationQuat = ParseQuat(zNode["rotation_quat"]);
-                zone.dimensionsM = ParseVec3(zNode["dimensions_m"]);
-                zone.tangentAxis = ParseVec3(zNode["tangentAxis"], glm::dvec3(1.0, 0.0, 0.0));
-                zone.compressionAxis = ParseVec3(zNode["compressionAxis"], glm::dvec3(0.0, 0.0, 1.0));
+                zone.originM = ParseOptionalVec3(zNode, "origin_m");
+                zone.rotationQuat = ParseOptionalQuat(zNode, "rotation_quat");
+                zone.dimensionsM = ParseOptionalVec3(zNode, "dimensions_m");
+                zone.tangentAxis = ParseOptionalVec3(zNode, "tangentAxis", glm::dvec3(1.0, 0.0, 0.0));
+                zone.compressionAxis = ParseOptionalVec3(zNode, "compressionAxis", glm::dvec3(0.0, 0.0, 1.0));
                 zone.nominalGapM = zNode.value("nominalGap_m", 0.0);
                 manifest.contactZones.push_back(zone);
             }
@@ -299,7 +335,7 @@ namespace FRCBananaSim::Robot::Schema
                 {
                     SwerveModuleConfig mod;
                     mod.name = mNode.value("name", "");
-                    mod.posM = ParseVec3(mNode["pos_m"]);
+                    mod.posM = ParseOptionalVec3(mNode, "pos_m");
                     mod.driveCanId = mNode.value("driveCanId", 0);
                     mod.steerCanId = mNode.value("steerCanId", 0);
                     mod.cancoderId = mNode.value("cancoderId", 0);
@@ -324,7 +360,7 @@ namespace FRCBananaSim::Robot::Schema
                 mech.efficiency = mNode.value("efficiency", 1.0);
                 mech.drumRadiusM = mNode.value("drumRadius_m", 0.0);
                 mech.flywheelInertiaKgm2 = mNode.value("flywheelInertia_kgm2", 0.0);
-                mech.spinAxis = ParseVec3(mNode["spinAxis"], glm::dvec3(0.0, 1.0, 0.0));
+                mech.spinAxis = ParseOptionalVec3(mNode, "spinAxis", glm::dvec3(0.0, 1.0, 0.0));
                 mech.visualLink = mNode.value("visualLink", "");
                 mech.statorCurrentLimitA = mNode.value("statorCurrentLimit_A", 60.0);
                 mech.supplyCurrentLimitA = mNode.value("supplyCurrentLimit_A", 40.0);
@@ -397,9 +433,9 @@ namespace FRCBananaSim::Robot::Schema
                     coup.fourBar.followerJoint = cNode.value("followerJoint", "");
                     coup.fourBar.closureParentLink = cNode.value("closureParentLink", "");
                     coup.fourBar.closureChildLink = cNode.value("closureChildLink", "");
-                    coup.fourBar.closureParentAnchorM = ParseVec3(cNode["closureParentAnchor_m"]);
-                    coup.fourBar.closureChildAnchorM = ParseVec3(cNode["closureChildAnchor_m"]);
-                    coup.fourBar.closureAxis = ParseVec3(cNode["closureAxis"], glm::dvec3(0.0, 1.0, 0.0));
+                    coup.fourBar.closureParentAnchorM = ParseOptionalVec3(cNode, "closureParentAnchor_m");
+                    coup.fourBar.closureChildAnchorM = ParseOptionalVec3(cNode, "closureChildAnchor_m");
+                    coup.fourBar.closureAxis = ParseOptionalVec3(cNode, "closureAxis", glm::dvec3(0.0, 1.0, 0.0));
                 }
 
                 sidecar.couplings.push_back(coup);
@@ -429,8 +465,8 @@ namespace FRCBananaSim::Robot::Schema
                 sensor.normallyClosed = sNode.value("normallyClosed", false);
                 sensor.debounceTimeS = sNode.value("debounceTime_s", 0.010);
                 sensor.inverted = sNode.value("inverted", false);
-                sensor.mountOffsetM = ParseVec3(sNode["mountOffset_m"]);
-                sensor.mountRotationQuat = ParseQuat(sNode["mountRotation_quat"]);
+                sensor.mountOffsetM = ParseOptionalVec3(sNode, "mountOffset_m");
+                sensor.mountRotationQuat = ParseOptionalQuat(sNode, "mountRotation_quat");
                 sensor.gyroNoiseStdDevRadS = sNode.value("gyroNoiseStdDev_rad_s", 0.0);
                 sensor.gyroBiasRandomWalkRadS2 = sNode.value("gyroBiasRandomWalk_rad_s2", 0.0);
                 sensor.accelNoiseStdDevMS2 = sNode.value("accelNoiseStdDev_m_s2", 0.0);
@@ -677,8 +713,6 @@ namespace FRCBananaSim::Robot::Schema
 
     glm::dmat3 RobotSchemaLoader::GetNWUToEngineMatrix()
     {
-        // Engine = M * NWU: X_eng = -Y_nwu, Y_eng = Z_nwu, Z_eng = X_nwu
-        // In GLM column-major: column 0 = (0, 0, 1), column 1 = (-1, 0, 0), column 2 = (0, 1, 0)
         return glm::dmat3(
             0.0, 0.0, 1.0,
             -1.0, 0.0, 0.0,
@@ -688,8 +722,6 @@ namespace FRCBananaSim::Robot::Schema
 
     glm::dmat3 RobotSchemaLoader::GetEngineToNWUMatrix()
     {
-        // NWU = M^T * Engine: X_nwu = Z_eng, Y_nwu = -X_eng, Z_nwu = Y_eng
-        // In GLM column-major: column 0 = (0, -1, 0), column 1 = (0, 0, 1), column 2 = (1, 0, 0)
         return glm::dmat3(
             0.0, -1.0, 0.0,
             0.0, 0.0, 1.0,
