@@ -182,8 +182,12 @@
     <ClCompile Include="Source\Actuation\BatteryModel.cpp" />
     <ClCompile Include="Source\Actuation\DCMotorModel.cpp" />
     <ClCompile Include="Source\Actuation\ServoModel.cpp" />
+    <ClCompile Include="Source\Actuation\Systems\ElectricalSystem.cpp" />
     <ClCompile Include="Source\Bridge\HALSimWebSocketServer.cpp" />
+    <ClCompile Include="Source\Bridge\LockstepCoordinator.cpp" />
     <ClCompile Include="Source\Bridge\Sha1.cpp" />
+    <ClCompile Include="Source\Bridge\SimDeviceDispatcher.cpp" />
+    <ClCompile Include="Source\Control\OnControllerPIDModel.cpp" />
     <ClCompile Include="Source\Core\ECS\Core\IComponentStorage.cpp" />
     <ClCompile Include="Source\Core\ECS\Core\Scene.cpp" />
     <ClCompile Include="Source\Core\ECS\Core\System.cpp" />
@@ -211,6 +215,7 @@
     <ClCompile Include="Source\Robot\Mechanisms\Systems\ElevatorSystem.cpp" />
     <ClCompile Include="Source\Robot\Mechanisms\Systems\FlywheelSystem.cpp" />
     <ClCompile Include="Source\Robot\Mechanisms\Systems\MechanismSystem.cpp" />
+    <ClCompile Include="Source\Robot\RobotAssembler.cpp" />
     <ClCompile Include="Source\Robot\RobotSpawner.cpp" />
     <ClCompile Include="Source\Robot\Schema\MaterialLibrary.cpp" />
     <ClCompile Include="Source\Robot\Schema\RobotManifest.cpp" />
@@ -239,8 +244,12 @@
     <ClInclude Include="Source\Actuation\Components\ServoComponent.h" />
     <ClInclude Include="Source\Actuation\DCMotorModel.h" />
     <ClInclude Include="Source\Actuation\ServoModel.h" />
+    <ClInclude Include="Source\Actuation\Systems\ElectricalSystem.h" />
     <ClInclude Include="Source\Bridge\HALSimWebSocketServer.h" />
+    <ClInclude Include="Source\Bridge\LockstepCoordinator.h" />
     <ClInclude Include="Source\Bridge\Sha1.h" />
+    <ClInclude Include="Source\Bridge\SimDeviceDispatcher.h" />
+    <ClInclude Include="Source\Control\OnControllerPIDModel.h" />
     <ClInclude Include="Source\Control\SimControlBoundary.h" />
     <ClInclude Include="Source\Core\ECS\Components\HierarchyComponent.h" />
     <ClInclude Include="Source\Core\ECS\Components\TransformComponent.h" />
@@ -287,6 +296,7 @@
     <ClInclude Include="Source\Robot\Drivetrain\Systems\SwerveTerrainProbe.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Systems\FlywheelSystem.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Systems\MechanismSystem.h" />
+    <ClInclude Include="Source\Robot\RobotAssembler.h" />
     <ClInclude Include="Source\Robot\RobotSpawner.h" />
     <ClInclude Include="Source\Robot\Schema\MaterialLibrary.h" />
     <ClInclude Include="Source\Robot\Schema\RobotManifest.h" />
