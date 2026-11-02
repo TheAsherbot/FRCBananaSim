@@ -57,6 +57,9 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
+    FRCBananaSim/Source/Control/OnControllerPIDModel.cpp
+    FRCBananaSim/Source/Bridge/SimDeviceDispatcher.cpp
+    FRCBananaSim/Source/Bridge/LockstepCoordinator.cpp
     FRCBananaSim/Source/Bridge/Sha1.cpp
     FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
     FRCBananaSim/Source/Telemetry/DrivetrainLogger.cpp
@@ -141,6 +144,9 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
+    FRCBananaSim/Source/Control/OnControllerPIDModel.cpp
+    FRCBananaSim/Source/Bridge/SimDeviceDispatcher.cpp
+    FRCBananaSim/Source/Bridge/LockstepCoordinator.cpp
     FRCBananaSim/Source/Bridge/Sha1.cpp
     FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
     FRCBananaSim/Source/Telemetry/DrivetrainLogger.cpp
@@ -175,6 +181,7 @@ set(TEST_SOURCES
     Tests/ElevatorMechanismTest.cpp
     Tests/ArmFourBarFlywheelTest.cpp
     Tests/SensorSuiteTest.cpp
+    Tests/SimDeviceLockstepTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -206,4 +213,5 @@ add_test(NAME RobotSchemaTest COMMAND FRCBananaSim_Tests --schema)
 add_test(NAME ElevatorMechanismTest COMMAND FRCBananaSim_Tests --elevator-mechanism)
 add_test(NAME ArmFourBarFlywheelTest COMMAND FRCBananaSim_Tests --arm-fourbar-flywheel)
 add_test(NAME SensorSuiteTest COMMAND FRCBananaSim_Tests --sensors)
+add_test(NAME SimDeviceLockstepTest COMMAND FRCBananaSim_Tests --simdevice-lockstep)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

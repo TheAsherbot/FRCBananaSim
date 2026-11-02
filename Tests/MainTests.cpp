@@ -18,6 +18,7 @@
 #include "ElevatorMechanismTest.h"
 #include "ArmFourBarFlywheelTest.h"
 #include "SensorSuiteTest.h"
+#include "SimDeviceLockstepTest.h"
 
 #include <iostream>
 #include <string>
@@ -37,6 +38,7 @@ using FRCBananaSim::Tests::RunRobotSchemaTest;
 using FRCBananaSim::Tests::RunElevatorMechanismTest;
 using FRCBananaSim::Tests::RunArmFourBarFlywheelTest;
 using FRCBananaSim::Tests::RunSensorSuiteTest;
+using FRCBananaSim::Tests::RunSimDeviceLockstepTest;
 
 int main(int argc, char* argv[])
 {
@@ -120,6 +122,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunSensorSuiteTest(ctx);
         }
+        else if (arg == "--simdevice-lockstep")
+        {
+            runAll = false;
+            RunSimDeviceLockstepTest(ctx);
+        }
     }
 
     if (runAll)
@@ -138,6 +145,7 @@ int main(int argc, char* argv[])
         RunElevatorMechanismTest(ctx);
         RunArmFourBarFlywheelTest(ctx);
         RunSensorSuiteTest(ctx);
+        RunSimDeviceLockstepTest(ctx);
     }
 
     std::cout << "======================================\n";
