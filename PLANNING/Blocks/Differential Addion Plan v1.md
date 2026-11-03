@@ -184,8 +184,20 @@ $$\mathbf{A}^{-1} = \frac{1}{\det(\mathbf{A})} \begin{pmatrix} a_{22} & -a_{12} 
 The delivered joint torques injected into Jolt constraints are:
 $$\boldsymbol{\tau}_q^{t+\Delta t} = \frac{1}{\Delta t} \mathbf{M}_{\text{eff}} \left( \dot{\mathbf{q}}^{t+\Delta t} - \dot{\mathbf{q}}^t \right) - \boldsymbol{\tau}_{q, \text{ext}}$$
 
+#### Target Injection: Velocity Motor Mode vs. Open-Loop Torque
+Injecting raw torque $\boldsymbol{\tau}_q = \frac{1}{\Delta t} \mathbf{M}_{\text{eff}} \Delta \dot{\mathbf{q}}$ into Jolt via `bodyInterface.AddTorque` or open-loop torque motors causes severe numerical instability: Jolt integrates that large torque against the small geometric CAD link inertia ($I_{\text{CAD}} \approx 0.00125\text{ kg}\cdot\text{m}^2$) rather than the full reflected rotor inertia ($M_{\text{eff}} \approx 0.042\text{ kg}\cdot\text{m}^2$), overshooting by $33.6\times$ per tick and causing explosive chatter ($> 70,000^\circ/\text{s}$).
+
+Instead, `DifferentialMechanismSystem` injects the solved semi-implicit velocity target directly into Jolt's hinge motor:
+$$\dot{\mathbf{q}}_{\text{target}} = \dot{\mathbf{q}}^{t+\Delta t} = \dot{\mathbf{q}}^t + \mathbf{A}^{-1} \boldsymbol{\tau}_{\text{net}}$$
+```cpp
+hinge->SetMotorState(JPH::EMotorState::Velocity);
+hinge->SetTargetAngularVelocity(static_cast<float>(targetVelRadS));
+motorSettings.SetTorqueLimits(-tauLimit, tauLimit);
+```
+Jolt's constraint solver enforces this velocity target while clamping at the physical motor/stator torque limit, guaranteeing unconditional stability and exact dynamic tracking.
+
 This formulation guarantees:
-1. **Zero High-Frequency Oscillation**: The implicit velocity damping $\Delta t \mathbf{D}_q$ dampens stiff back-EMF without overshoot.
+1. **Zero High-Frequency Oscillation**: The implicit velocity damping $\Delta t \mathbf{D}_q$ and constraint-level velocity targeting eliminate rotor-inertia mismatch overshooting.
 2. **Deterministic Microsecond Runtime**: Evaluating a $2 \times 2$ inverse requires 6 multiplies, 2 additions, and 1 divide—well under 50 nanoseconds per tick.
 
 ---

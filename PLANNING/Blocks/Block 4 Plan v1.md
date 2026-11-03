@@ -319,7 +319,8 @@ Every reference in the sidecar is checked against what the exporter produced:
 | Sidecar field | Must exist in |
 |---|---|
 | `swerve.chassisLink` | links (must be the root) |
-| `mechanisms[].targetJoint` | tree joints |
+| `mechanisms[].targetJoint` | tree joints (single-DOF mechanisms) |
+| `mechanisms[].targetJoints` | tree joints (array of exactly 2 joints for differential mechanisms) |
 | `mechanisms[].parentLink`, `.visualLink` | links |
 | `couplings[].stages[].joint`, `.crankJoint`, `.couplerJoint`, `.followerJoint`, `.powerCoupling.masterJoint` / `.slaveJoint` | tree joints |
 | `couplings[].closureParentLink`, `.closureChildLink` | links |
@@ -360,6 +361,7 @@ The export **still writes files when there are warnings**. It writes a manifest 
 
 1. **Robot origin:** the design origin sits at the **frame center on the floor**. Otherwise, place a construction point named `ROBOT_ORIGIN` and the exporter uses it as $\mathbf{o}_F$.
 2. **Orientation:** declare `fusionUp` / `fusionForward` once in `exporter_config.json`. The robot front is the intake side, matching the WPILib convention.
+3. **Differential Mechanism CAD Hierarchy:** For 2-DOF differential mechanisms (e.g. bevel wrists), author two separate revolute joints in CAD (Pitch hinge connecting base link to yoke link, and Roll hinge connecting yoke link to distal tool). Ground both motor bodies to the parent structure rigid group—do not attach motor bodies to the moving distal wrist links.
 3. **Real joints** with motion limits on every mechanism: revolute for arms and four-bars, slider for elevators. Rigid joints or rigid groups for everything structural.
 4. **Ground** the chassis (one grounded occurrence).
 5. **Joint names = sidecar names** (`elevator_stage1_slider`, `arm_shoulder_hinge`, `fourbar_crank_hinge`, …). Joints inside a reused component export as `<occurrence>_<joint>`, so name the swerve module occurrences `fl`, `fr`, `bl`, `br`.

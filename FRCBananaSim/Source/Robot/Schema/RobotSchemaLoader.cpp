@@ -661,6 +661,15 @@ namespace FRCBananaSim::Robot::Schema
                 isValid = false;
             }
 
+            for (const auto& tj : mech.targetJoints)
+            {
+                if (!tj.empty() && !manifest.FindJoint(tj))
+                {
+                    errors.push_back("Mechanism '" + mech.name + "' references missing targetJoint: '" + tj + "'");
+                    isValid = false;
+                }
+            }
+
             if (!mech.parentLink.empty() && !manifest.FindLink(mech.parentLink))
             {
                 errors.push_back("Mechanism '" + mech.name + "' references missing parentLink: '" + mech.parentLink + "'");

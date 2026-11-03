@@ -235,13 +235,14 @@ Your **C++ Robot Code** (WPILib GradleRIO) runs unmodified as a native desktop p
   - Four-bar linkage under motor load (the bake-off showed 1.26 mm drift with a 15 kg load).
   - Unified `PowerCoupling` transmission between joints (gears, timing belts, roller chains, cables) with velocity ratio, inversion, efficiency, and backlash.
   - A flywheel as a motor-driven joint, with no piece interaction yet.
-- **Robot data schema v1:** Links with mass, center of mass and full inertia tensor about the center of mass (kg and m). Joints with type, axis, origin and limits. Gear ratios. Motor presets keyed by name (Kraken X60, Falcon 500, NEO, NEO Vortex), with constants taken from WPILib's `DCMotor` (verify the values). Intake and shooter contact zones. Material names. The **sidecar format** for what CAD can't hold (motors, CAN IDs, gear ratios, roles).
+  - **Generic 2-DOF Differential Mechanisms:** Dedicated `DifferentialMechanismSystem` handling coupled dual-motor transmissions (symmetric bevel wrists [pitch/roll], CoreXY/H-Bot gantries, base-driven coupled arms) using pure ECS data components (`DifferentialComponent`), $2\times 2$ semi-implicit velocity-targeted integration with back-EMF damping, dual reflected rotor inertia tensors, dual-motor slot allocation, and isolated visual playground scene.
+- **Robot data schema v1:** Links with mass, center of mass and full inertia tensor about the center of mass (kg and m). Joints with type, axis, origin and limits. Gear ratios. Motor presets keyed by name (Kraken X60, Falcon 500, NEO, NEO Vortex), with constants taken from WPILib's `DCMotor` (verify the values). Intake and shooter contact zones. Material names. The **sidecar format** for what CAD can't hold (motors, CAN IDs, gear ratios, roles, differential coupling matrices).
 - **Sensors:** encoders (gear scaling, quantization), 6-axis IMU with bias and noise, limit switches, beam breaks, 8-channel Analog inputs ($0\text{--}5\text{ V}$), and custom I²C/SPI/CAN sensors via generic parameter dictionaries.
 - **HALSim `SimDevice` Dispatcher & Lockstep Hook:**
-  - Maps CTRE Phoenix 6 (`TalonFXSimState`) and REVLib (`SparkMaxSim`) `SimDevice` messages to the CAN IDs in `sidecar.json`.
+  - Maps CTRE Phoenix 6 (`TalonFXSimState`) and REVLib (`SparkMaxSim`) `SimDevice` messages to the CAN IDs in `sidecar.json` (including dual-controller differential mechanisms).
   - Test whether Phoenix 6 on-controller closed-loop modes (`PositionVoltage`, `VelocityVoltage`) step cleanly under `frc::sim::PauseTiming()` + `StepTiming(20_ms)`. If Phoenix's background thread drifts at 10x, fall back to outputting motor voltage from robot code or running WPILib-side PID in sim.
-- Build the Fusion test assembly (chassis, swerve module, elevator, arm, four-bar) with real joints and physical materials. The exporter needs it by Nov 6.
-- **Done when:** a complete robot (swerve, four-bar intake, elevator, arm, flywheel) loads from JSON, all mechanisms run together for 5 simulated minutes driven by your real C++ subsystem code, and **schema v1 is frozen**.
+- Build the Fusion test assembly (chassis, swerve module, elevator, arm, four-bar, differential wrist) with real joints and physical materials. The exporter needs it by Nov 6.
+- **Done when:** a complete robot (swerve, four-bar intake, elevator, arm, flywheel, and 2-DOF differential wrist) loads from JSON, all mechanisms run together for 5 simulated minutes driven by your real C++ subsystem code, and **schema v1 is frozen**.
 - **Gate:** if the schema isn't frozen by Nov 5, the exporter starts on a versioned v0.9 and the importer absorbs the changes.
 
 ### Block 4 (Nov 6-10): Fusion exporter (Python add-in)

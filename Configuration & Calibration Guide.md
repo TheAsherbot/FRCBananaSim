@@ -449,6 +449,34 @@ Verify that the CAN IDs in [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Proje
 ### E. High-RPM Flywheels
 * Configured via `"role": "flywheel"` in `sidecar.json`. Sub-stepped at $800\text{ Hz}$ ($\Delta t = 1.25\text{ ms}$) with equal-and-opposite Newton's 3rd Law recoil torque applied to `"parentLink"`, and rendered at `mountOffset` (`(0.0f, 0.06f, 0.06f)` on the wrist) via `FlywheelSystem::RenderUpdate`.
 
+### F. Generic 2-DOF Differential Mechanisms (`"role": "differential"`)
+* **Kinematic Decoupling Architecture:**
+  Differential transmissions mechanically couple two actuators ($A, B$) to two physical joints ($q_1, q_2$, typically Pitch and Roll in a wrist, or $X, Y$ in a CoreXY gantry). The kinematic mapping between motor rotor angular velocities and joint coordinates is:
+  $$\begin{bmatrix} \dot{\theta}_A \\ \dot{\theta}_B \end{bmatrix} = \mathbf{T}_{mq} \begin{bmatrix} \dot{q}_1 \\ \dot{q}_2 \end{bmatrix} = \begin{bmatrix} G_p & G_r \\ G_p & -G_r \end{bmatrix} \begin{bmatrix} \dot{q}_1 \\ \dot{q}_2 \end{bmatrix}$$
+  Inverting the coupling matrix yields the joint forward kinematics:
+  $$\begin{bmatrix} \dot{q}_1 \\ \dot{q}_2 \end{bmatrix} = \mathbf{T}_{mq}^{-1} \begin{bmatrix} \dot{\theta}_A \\ \dot{\theta}_B \end{bmatrix} = \begin{bmatrix} \frac{1}{2 G_p} & \frac{1}{2 G_p} \\ \frac{1}{2 G_r} & -\frac{1}{2 G_r} \end{bmatrix} \begin{bmatrix} \dot{\theta}_A \\ \dot{\theta}_B \end{bmatrix}$$
+* **Torque Duality & Virtual Work:**
+  By the principle of virtual work, motor output torques map to joint torques via the transpose $\boldsymbol{\tau}_q = \mathbf{T}_{mq}^T \boldsymbol{\tau}_m$:
+  $$\begin{bmatrix} \tau_{q1} \\ \tau_{q2} \end{bmatrix} = \begin{bmatrix} G_p & G_p \\ G_r & -G_r \end{bmatrix} \begin{bmatrix} \tau_A \\ \tau_B \end{bmatrix} = \begin{bmatrix} G_p (\tau_A + \tau_B) \\ G_r (\tau_A - \tau_B) \end{bmatrix}$$
+  Both motors combine their full stall torque into the primary axis (pure pitch: $V_A = V_B \implies \tau_1 = 2 G_p \tau_m$) while differentially sharing roll torque (pure roll: $V_A = -V_B \implies \tau_2 = 2 G_r \tau_m$).
+* **Effective Reflected Inertia Matrix:**
+  Rotor inertias reflect through $\mathbf{T}_{mq}$ onto the joint space as a full $2\times 2$ inertia tensor:
+  $$\mathbf{M}_{\text{eff}} = \mathbf{T}_{mq}^T \begin{bmatrix} J_A & 0 \\ 0 & J_B \end{bmatrix} \mathbf{T}_{mq} = \begin{bmatrix} G_p^2 (J_A + J_B) & G_p G_r (J_A - J_B) \\ G_p G_r (J_A - J_B) & G_r^2 (J_A + J_B) \end{bmatrix}$$
+  For identical motors ($J_A = J_B = J_{\text{rotor}}$), the off-diagonal inertial cross-coupling vanishes ($\mathbf{M}_{\text{eff}} = \text{diag}(2 G_p^2 J_{\text{rotor}}, 2 G_r^2 J_{\text{rotor}})$), but the reflected rotor inertia dominates Jolt's geometric link inertia by $> 30\times$.
+* **Physics Integration & Velocity-Targeted Motor Mode:**
+  Because the reflected inertia $M_{\text{eff}}$ vastly exceeds Jolt CAD link inertias ($I_{\text{CAD}} \approx 0.00125\text{ kg}\cdot\text{m}^2$ vs $M_{\text{eff}} \approx 0.042\text{ kg}\cdot\text{m}^2$), open-loop joint torque injection (`AddTorque`) leads to numerical divergence and high-frequency velocity explosion ($> 70,000^\circ/\text{s}$). `DifferentialMechanismSystem` solves this unconditionally by:
+  1. Evaluating back-EMF damping: $D_{\text{bemf}} = \mathbf{T}_{mq}^T \text{diag}\left(\frac{k_t k_b}{R \eta}\right) \mathbf{T}_{mq}$.
+  2. Inverting the semi-implicit system matrix: $\mathbf{A} = \frac{1}{\Delta t} \mathbf{M}_{\text{eff}} + D_{\text{bemf}} + \text{diag}(b_{\text{visc}})$.
+  3. Computing stable target joint velocities: $\dot{\mathbf{q}}^{t+\Delta t} = \dot{\mathbf{q}}^t + \mathbf{A}^{-1} \boldsymbol{\tau}_{\text{net}}$.
+  4. Driving both Jolt hinges using `JointMotorMode::Velocity` with maximum torque clamped to the stator current limit ($\tau_{\text{stator\_limit}}$).
+* **Friction & Backdrive Calibration:**
+  * **Breakaway Voltage:** Measure the minimum breakaway voltage $V_{\text{break}}$ under pure pitch ($V_A = V_B$) and pure roll ($V_A = -V_B$):
+    $$\tau_{c,\text{pitch}} \approx 2 G_p \eta \tau_{\text{stall}} \left(\frac{V_{\text{break, pitch}}}{12.0}\right), \quad \tau_{c,\text{roll}} \approx 2 G_r \eta \tau_{\text{stall}} \left(\frac{V_{\text{break, roll}}}{12.0}\right)$$
+  * Configure `coulombFriction: [tau_pitch, tau_roll]` and `viscousDamping: [b_pitch, b_roll]` directly in `sidecar.json`.
+* **CAD Modeling Contract:**
+  * The CAD model must define two distinct revolute joints (`joints[0]` for Pitch and `joints[1]` for Roll) organized as a kinematic chain: Parent Link $\to$ Intermediate Yoke Link $\to$ Distal Tool/End-Effector Link.
+  * In `manifest.json`, both the pitch yoke link and distal link must have colliders with `isSensor = true` (or be placed in mutual collision group filters) to prevent overlapping geometric penetration forces against the mounting yoke.
+
 ---
 
 ## 7. Master Configuration Dictionary for `robot_swerve.json` (Block 2)
@@ -534,12 +562,17 @@ This table lists every single property read by `RobotSpawner` and `SwerveDrivetr
 | **`electrical.openCircuitVoltage_V`** | `ElectricalConfig::openCircuitVoltage_V` | $\text{V}$ | Nominal open-circuit battery voltage ($12.6\text{ V}$). |
 | **`electrical.internalResistance_Ohm`** | `ElectricalConfig::internalResistance_Ohm` | $\Omega$ | Battery + main harness resistance ($0.023\ \Omega$). |
 | **`swerve.*`** | `SwerveSidecarConfig` | SI | Motor presets, gear ratios, efficiencies, wheel radius, current limits, and 4 module `[x, y, z]` locations & CAN IDs. |
-| **`mechanisms[i].role`** | `MechanismConfig::role` | string | `"elevator"`, `"arm"`, `"wrist"`, `"four_bar"`, or `"flywheel"`. |
-| **`mechanisms[i].targetJoint`** | `MechanismConfig::targetJoint` | string | Target joint name in `manifest.json` (or `"parentLink"` for flywheels). |
+| **`mechanisms[i].role`** | `MechanismConfig::role` | string | `"elevator"`, `"arm"`, `"wrist"`, `"four_bar"`, `"flywheel"`, or `"differential"`. |
+| **`mechanisms[i].targetJoint`** | `MechanismConfig::targetJoint` | string | Target joint name in `manifest.json` (for 1-DOF mechanisms: elevators, arms, 4-bars; or `"parentLink"` for flywheels). |
+| **`mechanisms[i].targetJoints`** | `MechanismConfig::targetJoints` | array | Array of 2 target joint names in `manifest.json` for `"differential"` mechanisms (`[pitchJoint, rollJoint]`). |
+| **`mechanisms[i].differentialType`** | `MechanismConfig::differentialType` | string | Differential kinematic topology (`"bevel_symmetric"`, `"corexy"`, or `"custom"`). |
 | **`mechanisms[i].motorPreset`** | `MechanismConfig::motorPreset` | string | Motor type preset (`"KrakenX60"`, `"KrakenX44"`, `"NEO"`, etc.). |
-| **`mechanisms[i].gearRatio`** | `MechanismConfig::gearRatio` | ratio | Gearbox reduction $G$ (motor turns per mechanism turn). |
+| **`mechanisms[i].gearRatio`** | `MechanismConfig::gearRatio` | ratio | Single gearbox reduction $G$ for 1-DOF mechanisms. |
+| **`mechanisms[i].gearRatios`** | `MechanismConfig::gearRatios` | array | Array of 2 gear reductions (`[gearRatioPitch, gearRatioRoll]`) for differential mechanisms. |
+| **`mechanisms[i].coulombFriction`** | `MechanismConfig::coulombFriction` | float/array | Single scalar Coulomb friction ($\text{N}\cdot\text{m}$ / $\text{N}$) for 1-DOF mechanisms, or array of 2 values `[pitch, roll]` for differential mechanisms. |
+| **`mechanisms[i].viscousDamping`** | `MechanismConfig::viscousDamping` | float/array | Single scalar viscous damping ($\text{N}\cdot\text{m}\cdot\text{s}$) for 1-DOF mechanisms, or array of 2 values `[pitch, roll]` for differential mechanisms. |
 | **`mechanisms[i].drumRadius_m`** | `MechanismConfig::drumRadius_m` | $\text{m}$ | Sprocket/drum pitch radius for linear elevators ($0.01905\text{ m}$). |
 | **`mechanisms[i].springAssist`** | `SpringAssistConfig` | $\text{N}$ or $\text{N}\cdot\text{m}$ | `"constant_force"` (`force_N`), `"torsion"`, or `"cosine_gas"`. |
-| **`mechanisms[i].controllers`** | `ControllerConfig` | — | Array of `vendor`, `canId`, `canBus`, `inverted`, and `role` (`"leader"` / `"follower"`). Number of controllers sets `motorCount`. |
+| **`mechanisms[i].controllers`** | `ControllerConfig` | — | Array of `vendor`, `canId`, `canBus`, `inverted`, and `role` (`"leader"` / `"follower"`). Number of controllers sets `motorCount` (length 2 for differential mechanisms: `[motorA, motorB]`). |
 | **`couplings[i].type`** | `CouplingConfig::type` | string | `"elevator_cascade"`, `"elevator_continuous"`, `"four_bar_loop"`, or `"power_coupling"`. |
 | **`sensors[i].type`** | `SensorConfig::type` | string | `"imu_pigeon2"`, `"cancoder"`, `"limit_switch"`, `"beam_break"`, `"analog_input"`, or `"laser_can"`. |
