@@ -4,7 +4,7 @@
  */
 
 #include "JoltContext.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include "Utils/Log.h"
 
 #include <Jolt/RegisterTypes.h>

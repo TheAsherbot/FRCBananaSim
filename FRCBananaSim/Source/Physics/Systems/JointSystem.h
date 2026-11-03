@@ -44,6 +44,11 @@ namespace FRCBananaSim::Physics::Systems
          */
         void DestroyJoint(Core::ECS::Core::Entity entity);
 
+        /**
+         * @brief Reads back current angles, velocities, and anchor separation distance (deflection) into JointComponent.
+         */
+        void ReadbackTelemetry();
+
     private:
         /**
          * @brief Creates Jolt constraints for entities whose rigid bodies have finished initializing.
@@ -54,11 +59,6 @@ namespace FRCBananaSim::Physics::Systems
          * @brief Synchronizes motor velocities, target angles, and torque limits into Jolt constraints.
          */
         void UpdateMotors();
-
-        /**
-         * @brief Reads back current angles, velocities, and anchor separation distance (deflection).
-         */
-        void ReadbackTelemetry();
 
         JoltContext& joltContext;
         std::vector<JPH::Ref<JPH::Constraint>> createdConstraints;

@@ -1,0 +1,89 @@
+{
+  "version": "1.0.0",
+  "devices": {
+    "talonfx": {
+      "patterns": [
+        "TalonFX[{id}]",
+        "Talon FX[{id}]",
+        "TalonFX:{bus}[{id}]"
+      ],
+      "inputs": {
+        "motorVoltage": ">motorVoltage",
+        "motorOutputLead": ">motorOutputLead",
+        "bridgeOutput": ">BridgeOutput"
+      },
+      "outputs": {
+        "supplyVoltage": "<supplyVoltage",
+        "rawRotorPosition": "<rawRotorPosition",
+        "rotorVelocity": "<rotorVelocity",
+        "rotorAcceleration": "<rotorAcceleration",
+        "torqueCurrent": "<torqueCurrent",
+        "supplyCurrent": "<supplyCurrent",
+        "forwardLimit": "<forwardLimit",
+        "reverseLimit": "<reverseLimit"
+      }
+    },
+    "cancoder": {
+      "patterns": [
+        "CANcoder[{id}]",
+        "CANcoder:{bus}[{id}]"
+      ],
+      "inputs": {},
+      "outputs": {
+        "supplyVoltage": "<supplyVoltage",
+        "rawPosition": "<rawPosition",
+        "velocity": "<velocity"
+      }
+    },
+    "pigeon2": {
+      "patterns": [
+        "Pigeon2[{id}]",
+        "Pigeon 2[{id}]",
+        "Pigeon2:{bus}[{id}]"
+      ],
+      "inputs": {},
+      "outputs": {
+        "supplyVoltage": "<supplyVoltage",
+        "rawYaw": "<rawYaw",
+        "pitch": "<pitch",
+        "roll": "<roll",
+        "angularVelocityZ": "<angularVelocityZ",
+        "angularVelocityY": "<angularVelocityY",
+        "angularVelocityX": "<angularVelocityX",
+        "accelX": "<accelX",
+        "accelY": "<accelY",
+        "accelZ": "<accelZ"
+      }
+    },
+    "sparkmax": {
+      "patterns": [
+        "SPARK MAX [{id}]",
+        "SPARK Flex [{id}]"
+      ],
+      "inputs": {
+        "appliedOutput": ">Applied Output"
+      },
+      "outputs": {
+        "busVoltage": "<Bus Voltage",
+        "motorCurrent": "<Motor Current",
+        "position": "<Position",
+        "velocity": "<Velocity"
+      }
+    },
+    "navx": {
+      "patterns": [
+        "navX-Sensor[{id}]",
+        "navX-Sensor"
+      ],
+      "inputs": {},
+      "outputs": {
+        "yaw": "<yaw",
+        "pitch": "<pitch",
+        "roll": "<roll",
+        "linearWorldAccelX": "<LinearWorldAccelX",
+        "linearWorldAccelY": "<LinearWorldAccelY",
+        "linearWorldAccelZ": "<LinearWorldAccelZ"
+      }
+    }
+  }
+}

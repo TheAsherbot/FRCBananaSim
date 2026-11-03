@@ -38,6 +38,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Actuation/ServoModel.cpp
+    FRCBananaSim/Source/Actuation/Systems/ElectricalSystem.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveParams.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/TireContactModel.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveModuleModel.cpp
@@ -46,6 +47,24 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveTerrainProbe.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
+    FRCBananaSim/Source/Robot/RobotAssembler.cpp
+    FRCBananaSim/Source/Robot/Schema/MaterialLibrary.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotManifest.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotSidecar.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/ElevatorSystem.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/CompositeMassSystem.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/FlywheelSystem.cpp
+    FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
+    FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
+    FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
+    FRCBananaSim/Source/Control/OnControllerPIDModel.cpp
+    FRCBananaSim/Source/Bridge/SimDeviceDispatcher.cpp
+    FRCBananaSim/Source/Bridge/LockstepCoordinator.cpp
+    FRCBananaSim/Source/Bridge/Sha1.cpp
+    FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
+    FRCBananaSim/Source/Telemetry/DrivetrainLogger.cpp
     FRCBananaSim/Source/Core/Engine.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
@@ -61,14 +80,14 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Renderer/Input.cpp
     FRCBananaSim/Source/Renderer/Renderer.cpp
     FRCBananaSim/Source/Renderer/Systems/RenderSystem.cpp
-    FRCBananaSim/Source/Telemetry/MemoryTracker.cpp
-    FRCBananaSim/Source/Telemetry/ProfilerUI.cpp
-    FRCBananaSim/Source/Telemetry/ProfilerWindow.cpp
-    FRCBananaSim/Source/Telemetry/SessionLoader.cpp
-    FRCBananaSim/Source/Telemetry/SessionManager.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryManager.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryOverlay.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryTimer.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/MemoryTracker.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/ProfilerUI.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/ProfilerWindow.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/SessionLoader.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/SessionManager.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryManager.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryOverlay.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryTimer.cpp
     FRCBananaSim/Source/Utils/DebugDraw.cpp
     FRCBananaSim/Source/Utils/FixedTimestep.cpp
     FRCBananaSim/Source/Utils/Log.cpp
@@ -98,6 +117,7 @@ target_link_libraries(FRCBananaSim PRIVATE
     Jolt
     opengl32
     gdi32
+    ws2_32
 )
 
 # Target 2: Headless CTest Executable
@@ -107,6 +127,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Actuation/DCMotorModel.cpp
     FRCBananaSim/Source/Actuation/BatteryModel.cpp
     FRCBananaSim/Source/Actuation/ServoModel.cpp
+    FRCBananaSim/Source/Actuation/Systems/ElectricalSystem.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveParams.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/TireContactModel.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveModuleModel.cpp
@@ -115,6 +136,24 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveTerrainProbe.cpp
     FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp
     FRCBananaSim/Source/Robot/RobotSpawner.cpp
+    FRCBananaSim/Source/Robot/RobotAssembler.cpp
+    FRCBananaSim/Source/Robot/Schema/MaterialLibrary.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotManifest.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotSidecar.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/ElevatorSystem.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/CompositeMassSystem.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/FlywheelSystem.cpp
+    FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
+    FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
+    FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
+    FRCBananaSim/Source/Control/OnControllerPIDModel.cpp
+    FRCBananaSim/Source/Bridge/SimDeviceDispatcher.cpp
+    FRCBananaSim/Source/Bridge/LockstepCoordinator.cpp
+    FRCBananaSim/Source/Bridge/Sha1.cpp
+    FRCBananaSim/Source/Bridge/HALSimWebSocketServer.cpp
+    FRCBananaSim/Source/Telemetry/DrivetrainLogger.cpp
     FRCBananaSim/Source/Core/ECS/Core/IComponentStorage.cpp
     FRCBananaSim/Source/Core/ECS/Core/Scene.cpp
     FRCBananaSim/Source/Core/ECS/Core/System.cpp
@@ -124,28 +163,38 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Physics/JoltContext.cpp
     FRCBananaSim/Source/Physics/Systems/PhysicsSystem.cpp
     FRCBananaSim/Source/Physics/Systems/JointSystem.cpp
-    FRCBananaSim/Source/Telemetry/MemoryTracker.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryManager.cpp
-    FRCBananaSim/Source/Telemetry/TelemetryTimer.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/MemoryTracker.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryManager.cpp
+    FRCBananaSim/Source/Telemetry/TelemeteryViewer/TelemetryTimer.cpp
     FRCBananaSim/Source/Utils/DebugDraw.cpp
     FRCBananaSim/Source/Utils/FixedTimestep.cpp
     FRCBananaSim/Source/Utils/Log.cpp
     Tests/Support/TestTerrain.cpp
     Tests/MainTests.cpp
-    Tests/UnitsTest.cpp
-    Tests/ParameterStoreTest.cpp
-    Tests/PhysicsDeterminismTest.cpp
-    Tests/MotorBatteryTest.cpp
-    Tests/JointStabilityTest.cpp
-    Tests/RobotSpawnerTest.cpp
-    Tests/SwerveModelTest.cpp
-    Tests/SwerveAdapterTest.cpp
+    Tests/Core/UnitsTest.cpp
+    Tests/Core/ParameterStoreTest.cpp
+    Tests/Physics/PhysicsDeterminismTest.cpp
+    Tests/Physics/JointStabilityTest.cpp
+    Tests/Actuation/MotorBatteryTest.cpp
+    Tests/Robot/RobotSpawnerTest.cpp
+    Tests/Robot/SwerveModelTest.cpp
+    Tests/Robot/SwerveAdapterTest.cpp
+    Tests/Bridge/HALSimBridgeTest.cpp
+    Tests/Telemetry/DrivetrainLoggerTest.cpp
+    Tests/Robot/RobotSchemaTest.cpp
+    Tests/Robot/ElevatorMechanismTest.cpp
+    Tests/Robot/ArmFourBarFlywheelTest.cpp
+    Tests/Robot/SensorSuiteTest.cpp
+    Tests/Bridge/SimDeviceLockstepTest.cpp
+    Tests/Robot/RobotAssemblerTest.cpp
+    Tests/Integration/FullRobotEnduranceTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
 
 target_include_directories(FRCBananaSim_Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/Tests/Support
 )
 
 target_link_directories(FRCBananaSim_Tests PRIVATE
@@ -154,6 +203,7 @@ target_link_directories(FRCBananaSim_Tests PRIVATE
 
 target_link_libraries(FRCBananaSim_Tests PRIVATE
     Jolt
+    ws2_32
 )
 
 add_test(NAME UnitsTest COMMAND FRCBananaSim_Tests --units)
@@ -164,4 +214,13 @@ add_test(NAME JointStabilityTest COMMAND FRCBananaSim_Tests --joint-stability)
 add_test(NAME RobotSpawnerTest COMMAND FRCBananaSim_Tests --robot-spawner)
 add_test(NAME SwerveModelTest COMMAND FRCBananaSim_Tests --swerve-model)
 add_test(NAME SwerveAdapterTest COMMAND FRCBananaSim_Tests --swerve-adapter)
+add_test(NAME HALSimBridgeTest COMMAND FRCBananaSim_Tests --halsim-bridge)
+add_test(NAME DrivetrainLoggerTest COMMAND FRCBananaSim_Tests --drivetrain-logger)
+add_test(NAME RobotSchemaTest COMMAND FRCBananaSim_Tests --schema)
+add_test(NAME ElevatorMechanismTest COMMAND FRCBananaSim_Tests --elevator-mechanism)
+add_test(NAME ArmFourBarFlywheelTest COMMAND FRCBananaSim_Tests --arm-fourbar-flywheel)
+add_test(NAME SensorSuiteTest COMMAND FRCBananaSim_Tests --sensors)
+add_test(NAME SimDeviceLockstepTest COMMAND FRCBananaSim_Tests --simdevice-lockstep)
+add_test(NAME RobotAssemblerTest COMMAND FRCBananaSim_Tests --robot-assembler)
+add_test(NAME FullRobotEnduranceTest COMMAND FRCBananaSim_Tests --full-robot-endurance)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

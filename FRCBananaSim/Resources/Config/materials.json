@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "1.0.0",
+  "materials": [
+    {
+      "name": "aluminum_6061",
+      "density_kg_m3": 2700.0,
+      "friction": 0.45,
+      "restitution": 0.05
+    },
+    {
+      "name": "steel_4140",
+      "density_kg_m3": 7850.0,
+      "friction": 0.50,
+      "restitution": 0.10
+    },
+    {
+      "name": "polycarbonate",
+      "density_kg_m3": 1200.0,
+      "friction": 0.40,
+      "restitution": 0.15
+    },
+    {
+      "name": "hdpe",
+      "density_kg_m3": 960.0,
+      "friction": 0.25,
+      "restitution": 0.10
+    },
+    {
+      "name": "bumper_fabric",
+      "density_kg_m3": 500.0,
+      "friction": 0.70,
+      "restitution": 0.05
+    },
+    {
+      "name": "colson_performa",
+      "density_kg_m3": 1100.0,
+      "friction": 1.10,
+      "restitution": 0.05
+    },
+    {
+      "name": "bilinear_carpet",
+      "density_kg_m3": 400.0,
+      "friction": 0.95,
+      "restitution": 0.01
+    },
+    {
+      "name": "game_piece_foam",
+      "density_kg_m3": 80.0,
+      "friction": 0.65,
+      "restitution": 0.20
+    }
+  ],
+  "materialPairs": [
+    {
+      "materialA": "colson_performa",
+      "materialB": "bilinear_carpet",
+      "staticFriction": 1.25,
+      "dynamicFriction": 1.10,
+      "restitution": 0.02,
+      "rollingResistance": 0.015
+    },
+    {
+      "materialA": "colson_performa",
+      "materialB": "polycarbonate",
+      "staticFriction": 0.65,
+      "dynamicFriction": 0.55,
+      "restitution": 0.08,
+      "rollingResistance": 0.005
+    },
+    {
+      "materialA": "game_piece_foam",
+      "materialB": "polycarbonate",
+      "staticFriction": 0.75,
+      "dynamicFriction": 0.68,
+      "restitution": 0.22,
+      "rollingResistance": 0.0
+    },
+    {
+      "materialA": "colson_performa",
+      "materialB": "game_piece_foam",
+      "staticFriction": 0.95,
+      "dynamicFriction": 0.85,
+      "restitution": 0.18,
+      "rollingResistance": 0.0
+    },
+    {
+      "materialA": "bumper_fabric",
+      "materialB": "polycarbonate",
+      "staticFriction": 0.55,
+      "dynamicFriction": 0.45,
+      "restitution": 0.10,
+      "rollingResistance": 0.0
+    },
+    {
+      "materialA": "bumper_fabric",
+      "materialB": "aluminum_6061",
+      "staticFriction": 0.50,
+      "dynamicFriction": 0.42,
+      "restitution": 0.08,
+      "rollingResistance": 0.0
+    }
+  ]
+}

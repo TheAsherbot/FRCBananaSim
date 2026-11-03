@@ -94,32 +94,32 @@
       "name": "FrontLeft",
       "location_m": [ 0.28, 0.28 ],
       "steerCAN": 1,
-      "driveCAN": 2,
-      "canCoder": 1
+      "driveCAN": 0,
+      "canCoder": 20
     },
     {
       "index": 1,
       "name": "FrontRight",
       "location_m": [ -0.28, 0.28 ],
       "steerCAN": 3,
-      "driveCAN": 4,
-      "canCoder": 2
+      "driveCAN": 2,
+      "canCoder": 21
     },
     {
       "index": 2,
       "name": "BackLeft",
       "location_m": [ 0.28, -0.28 ],
       "steerCAN": 5,
-      "driveCAN": 6,
-      "canCoder": 3
+      "driveCAN": 4,
+      "canCoder": 22
     },
     {
       "index": 3,
       "name": "BackRight",
       "location_m": [ -0.28, -0.28 ],
       "steerCAN": 7,
-      "driveCAN": 8,
-      "canCoder": 4
+      "driveCAN": 6,
+      "canCoder": 23
     }
   ]
 }

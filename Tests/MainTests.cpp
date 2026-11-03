@@ -1,17 +1,26 @@
 /**
  * @file MainTests.cpp
- * @brief Entry point for headless CTest suites including analytic swerve model and Jolt adapter verification.
+ * @brief Entry point for headless CTest suites including analytic swerve model, Jolt adapter, elevator mechanisms, arms/four-bars/flywheels, and full-robot endurance.
  */
 
 #include "TestFramework.h"
-#include "UnitsTest.h"
-#include "ParameterStoreTest.h"
-#include "PhysicsDeterminismTest.h"
-#include "MotorBatteryTest.h"
-#include "JointStabilityTest.h"
-#include "RobotSpawnerTest.h"
-#include "SwerveModelTest.h"
-#include "SwerveAdapterTest.h"
+#include "Core/UnitsTest.h"
+#include "Core/ParameterStoreTest.h"
+#include "Physics/PhysicsDeterminismTest.h"
+#include "Actuation/MotorBatteryTest.h"
+#include "Physics/JointStabilityTest.h"
+#include "Robot/RobotSpawnerTest.h"
+#include "Robot/SwerveModelTest.h"
+#include "Robot/SwerveAdapterTest.h"
+#include "Bridge/HALSimBridgeTest.h"
+#include "Telemetry/DrivetrainLoggerTest.h"
+#include "Robot/RobotSchemaTest.h"
+#include "Robot/ElevatorMechanismTest.h"
+#include "Robot/ArmFourBarFlywheelTest.h"
+#include "Robot/SensorSuiteTest.h"
+#include "Bridge/SimDeviceLockstepTest.h"
+#include "Robot/RobotAssemblerTest.h"
+#include "Integration/FullRobotEnduranceTest.h"
 
 #include <iostream>
 #include <string>
@@ -25,6 +34,15 @@ using FRCBananaSim::Tests::RunJointStabilityTest;
 using FRCBananaSim::Tests::RunRobotSpawnerTest;
 using FRCBananaSim::Tests::RunSwerveModelTest;
 using FRCBananaSim::Tests::RunSwerveAdapterTest;
+using FRCBananaSim::Tests::RunHALSimBridgeTest;
+using FRCBananaSim::Tests::RunDrivetrainLoggerTest;
+using FRCBananaSim::Tests::RunRobotSchemaTest;
+using FRCBananaSim::Tests::RunElevatorMechanismTest;
+using FRCBananaSim::Tests::RunArmFourBarFlywheelTest;
+using FRCBananaSim::Tests::RunSensorSuiteTest;
+using FRCBananaSim::Tests::RunSimDeviceLockstepTest;
+using FRCBananaSim::Tests::RunRobotAssemblerTest;
+using FRCBananaSim::Tests::RunFullRobotEnduranceTest;
 
 int main(int argc, char* argv[])
 {
@@ -78,6 +96,51 @@ int main(int argc, char* argv[])
             runAll = false;
             RunSwerveAdapterTest(ctx);
         }
+        else if (arg == "--halsim-bridge")
+        {
+            runAll = false;
+            RunHALSimBridgeTest(ctx);
+        }
+        else if (arg == "--drivetrain-logger")
+        {
+            runAll = false;
+            RunDrivetrainLoggerTest(ctx);
+        }
+        else if (arg == "--schema")
+        {
+            runAll = false;
+            RunRobotSchemaTest(ctx);
+        }
+        else if (arg == "--elevator-mechanism")
+        {
+            runAll = false;
+            RunElevatorMechanismTest(ctx);
+        }
+        else if (arg == "--arm-fourbar-flywheel")
+        {
+            runAll = false;
+            RunArmFourBarFlywheelTest(ctx);
+        }
+        else if (arg == "--sensors")
+        {
+            runAll = false;
+            RunSensorSuiteTest(ctx);
+        }
+        else if (arg == "--simdevice-lockstep")
+        {
+            runAll = false;
+            RunSimDeviceLockstepTest(ctx);
+        }
+        else if (arg == "--robot-assembler")
+        {
+            runAll = false;
+            RunRobotAssemblerTest(ctx);
+        }
+        else if (arg == "--full-robot-endurance")
+        {
+            runAll = false;
+            RunFullRobotEnduranceTest(ctx);
+        }
     }
 
     if (runAll)
@@ -90,6 +153,15 @@ int main(int argc, char* argv[])
         RunRobotSpawnerTest(ctx);
         RunSwerveModelTest(ctx);
         RunSwerveAdapterTest(ctx);
+        RunHALSimBridgeTest(ctx);
+        RunDrivetrainLoggerTest(ctx);
+        RunRobotSchemaTest(ctx);
+        RunElevatorMechanismTest(ctx);
+        RunArmFourBarFlywheelTest(ctx);
+        RunSensorSuiteTest(ctx);
+        RunSimDeviceLockstepTest(ctx);
+        RunRobotAssemblerTest(ctx);
+        RunFullRobotEnduranceTest(ctx);
     }
 
     std::cout << "======================================\n";

@@ -1,6 +1,6 @@
 /**
  * @file SwerveChassisSolver.cpp
- * @brief Implementation of 6-DOF implicit dynamics solver with 6x6 Cholesky factorisation.
+ * @brief Implementation of 6-DOF implicit dynamics solver with Gaussian elimination linear system solve.
  */
 
 #include "Robot/Drivetrain/Model/SwerveChassisSolver.h"
@@ -28,60 +28,86 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
     }
 
     /**
-     * @brief Closed-form 6x6 Cholesky solver: L * L^T * x = b.
+     * @brief Robust 6x6 linear solver using Gaussian elimination with partial pivoting.
      * Operates purely on the stack with zero heap allocation.
+     * Guaranteed numerically stable for any non-singular matrix (unlike un-pivoted Cholesky).
+     * @param A 6x6 symmetric positive semi-definite or indefinite system matrix.
+     * @param b 6-element right-hand side vector.
+     * @param x 6-element solution vector.
+     * @return True if solve succeeded.
      */
-    static bool SolveCholesky6x6(const double A[6][6], const double b[6], double x[6])
+    static bool SolveLinearSystem6x6(const double A[6][6], const double b[6], double x[6])
     {
-        double L[6][6] = { 0.0 };
-
-        for (int i = 0; i < 6; ++i)
+        // Augmented matrix [A | b]
+        double M[6][7];
+        for (int r = 0; r < 6; ++r)
         {
-            for (int j = 0; j <= i; ++j)
+            for (int c = 0; c < 6; ++c)
             {
-                double sum = 0.0;
-                for (int k = 0; k < j; ++k)
-                {
-                    sum += L[i][k] * L[j][k];
-                }
+                M[r][c] = A[r][c];
+            }
+            M[r][6] = b[r];
+        }
 
-                if (i == j)
+        // Forward elimination with partial pivoting
+        for (int col = 0; col < 6; ++col)
+        {
+            // Find row with maximal absolute pivot
+            int maxRow = col;
+            double maxVal = std::abs(M[col][col]);
+            for (int r = col + 1; r < 6; ++r)
+            {
+                double val = std::abs(M[r][col]);
+                if (val > maxVal)
                 {
-                    double diag = A[i][i] - sum;
-                    if (diag <= 1e-12)
-                    {
-                        diag = 1e-12; // Regularization for singular airborne configurations
-                    }
-                    L[i][j] = std::sqrt(diag);
+                    maxVal = val;
+                    maxRow = r;
                 }
-                else
+            }
+
+            // Swap pivot row into place
+            if (maxRow != col)
+            {
+                for (int c = col; c < 7; ++c)
                 {
-                    L[i][j] = (A[i][j] - sum) / L[j][j];
+                    std::swap(M[col][c], M[maxRow][c]);
+                }
+            }
+
+            double pivot = M[col][col];
+            if (std::abs(pivot) < 1e-12)
+            {
+                // Regularize singular pivot to prevent division by zero
+                pivot = (pivot >= 0.0 ? 1e-12 : -1e-12);
+                M[col][col] = pivot;
+            }
+
+            // Eliminate lower triangular entries
+            for (int r = col + 1; r < 6; ++r)
+            {
+                double factor = M[r][col] / pivot;
+                M[r][col] = 0.0;
+                for (int c = col + 1; c < 7; ++c)
+                {
+                    M[r][c] -= factor * M[col][c];
                 }
             }
         }
 
-        // Forward solve: L * y = b
-        double y[6] = { 0.0 };
-        for (int i = 0; i < 6; ++i)
+        // Backward substitution
+        for (int r = 5; r >= 0; --r)
         {
             double sum = 0.0;
-            for (int k = 0; k < i; ++k)
+            for (int c = r + 1; c < 6; ++c)
             {
-                sum += L[i][k] * y[k];
+                sum += M[r][c] * x[c];
             }
-            y[i] = (b[i] - sum) / L[i][i];
-        }
-
-        // Backward solve: L^T * x = y
-        for (int i = 5; i >= 0; --i)
-        {
-            double sum = 0.0;
-            for (int k = i + 1; k < 6; ++k)
+            double diag = M[r][r];
+            if (std::abs(diag) < 1e-12)
             {
-                sum += L[k][i] * x[k];
+                diag = (diag >= 0.0 ? 1e-12 : -1e-12);
             }
-            x[i] = (y[i] - sum) / L[i][i];
+            x[r] = (M[r][6] - sum) / diag;
         }
 
         return true;
@@ -233,8 +259,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                 }
             }
 
-            // 5. Solve 6x6 linear system via Cholesky decomposition
-            SolveCholesky6x6(A, b, x);
+            // 5. Solve 6x6 linear system via Gaussian elimination with partial pivoting
+            SolveLinearSystem6x6(A, b, x);
 
             glm::vec3 candidateLinVel(static_cast<float>(x[0]), static_cast<float>(x[1]), static_cast<float>(x[2]));
             glm::vec3 candidateAngVel(static_cast<float>(x[3]), static_cast<float>(x[4]), static_cast<float>(x[5]));
@@ -292,5 +318,15 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
 
         outNewLinearVelocity = glm::vec3(static_cast<float>(x[0]), static_cast<float>(x[1]), static_cast<float>(x[2]));
         outNewAngularVelocity = glm::vec3(static_cast<float>(x[3]), static_cast<float>(x[4]), static_cast<float>(x[5]));
+
+        // Guard against non-finite numerical anomalies
+        if (!std::isfinite(outNewLinearVelocity.x) || !std::isfinite(outNewLinearVelocity.y) || !std::isfinite(outNewLinearVelocity.z))
+        {
+            outNewLinearVelocity = currentState.linearVelocity;
+        }
+        if (!std::isfinite(outNewAngularVelocity.x) || !std::isfinite(outNewAngularVelocity.y) || !std::isfinite(outNewAngularVelocity.z))
+        {
+            outNewAngularVelocity = currentState.angularVelocity;
+        }
     }
 }

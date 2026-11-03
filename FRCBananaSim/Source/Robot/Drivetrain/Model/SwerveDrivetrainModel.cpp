@@ -4,7 +4,7 @@
  */
 
 #include "Robot/Drivetrain/Model/SwerveDrivetrainModel.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cmath>
@@ -41,6 +41,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         previousAngularVel = chassisMotion.angularVelocity;
 
         double subDt = tickDeltaTime / static_cast<double>(subSteps);
+        std::array<WheelContactProbe, 4> cachedProbes;
+        std::array<glm::vec3, 4> cachedHubPositions;
 
         for (uint32_t step = 0; step < subSteps; ++step)
         {
@@ -58,7 +60,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                     steerCurrent = std::clamp(std::abs(steerCurrent), 0.0, inputs.motorCommands[i].statorCurrentLimit);
                     double steerBackEmf = modules[i].GetSteerMotor().GetBackEmfConstantKe() *
                         (modules[i].GetState().steerVelocity * modules[i].GetSteerMotor().GetGearRatio());
-                    double steerVw = steerCurrent * modules[i].GetSteerMotor().GetResistance() + std::abs(steerBackEmf);
+                    double steerVw = std::min(std::abs(steerAppliedVolts),
+                        steerCurrent * modules[i].GetSteerMotor().GetResistance() + std::abs(steerBackEmf));
                     double steerDuty = std::clamp(steerVw / std::max(1.0, terminalVoltage), 0.0, 1.0);
                     totalSupplyCurrent += std::min(40.0, steerDuty * steerCurrent);
 
@@ -70,11 +73,14 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                     driveCurrent = std::clamp(std::abs(driveCurrent), 0.0, inputs.motorCommands[4 + i].statorCurrentLimit);
                     double driveBackEmf = modules[i].GetDriveMotor().GetBackEmfConstantKe() *
                         (modules[i].GetState().wheelVelocity * modules[i].GetDriveMotor().GetGearRatio());
-                    double driveVw = driveCurrent * modules[i].GetDriveMotor().GetResistance() + std::abs(driveBackEmf);
+                    double driveVw = std::min(std::abs(driveAppliedVolts),
+                        driveCurrent * modules[i].GetDriveMotor().GetResistance() + std::abs(driveBackEmf));
                     double driveDuty = std::clamp(driveVw / std::max(1.0, terminalVoltage), 0.0, 1.0);
                     totalSupplyCurrent += std::min(40.0, driveDuty * driveCurrent);
                 }
             }
+
+            totalDrivetrainSupplyCurrent = totalSupplyCurrent;
 
             // Sagged battery terminal voltage with double-layer RC filtering (tau ~ 5ms at 800 Hz)
             double targetTerminalVoltage = batteryModel.CalculateTerminalVoltage(totalSupplyCurrent);
@@ -99,7 +105,23 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                 glm::vec3 localHubPos(modLoc.x, modLoc.y, -config.chassis.centerOfMassHeight + config.tire.wheelRadius);
                 glm::vec3 worldHubPos = chassisMotion.position + (rotMatrix * localHubPos);
 
-                WheelContactProbe probe = terrain.QueryWheelContact(worldHubPos, config.tire.wheelRadius, config.tire.wheelWidth);
+                WheelContactProbe probe;
+                if (step == 0)
+                {
+                    probe = terrain.QueryWheelContact(worldHubPos, config.tire.wheelRadius, config.tire.wheelWidth);
+                    cachedProbes[i] = probe;
+                    cachedHubPositions[i] = worldHubPos;
+                }
+                else
+                {
+                    probe = cachedProbes[i];
+                    glm::vec3 deltaHub = worldHubPos - cachedHubPositions[i];
+                    double normalDisp = static_cast<double>(glm::dot(deltaHub, probe.surfaceNormal));
+                    probe.penetrationDepth -= normalDisp;
+                    probe.hasContact = (probe.penetrationDepth > 0.0);
+                    probe.contactPoint = worldHubPos - probe.surfaceNormal *
+                        static_cast<float>(config.tire.wheelRadius - std::max(0.0, probe.penetrationDepth));
+                }
 
                 double cosA = std::cos(modules[i].GetState().steerAngle);
                 double sinA = std::sin(modules[i].GetState().steerAngle);
@@ -153,7 +175,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
                 sumCurrents += modules[i].GetState().steerStatorCurrent + modules[i].GetState().driveStatorCurrent;
             }
 
-            totalBusCurrent = sumCurrents + batteryModel.GetQuiescentCurrent();
+            totalBusCurrent = totalSupplyCurrent + batteryModel.GetQuiescentCurrent();
 
             // 6. Integrate orientation and world position
             glm::vec3 angVel = chassisMotion.angularVelocity;
@@ -209,6 +231,14 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         outMidpointLinearVel = 0.5f * (previousLinearVel + chassisMotion.linearVelocity);
         outMidpointAngularVel = 0.5f * (previousAngularVel + chassisMotion.angularVelocity);
     }
+    
+    void SwerveDrivetrainModel::SetMassProperties(double totalMass, const glm::mat3& inertiaTensor, const glm::vec3& cgOffset)
+    {
+        config.chassis.mass = std::max(totalMass, 1.0);
+        config.chassis.inertiaTensor = inertiaTensor;
+        config.chassis.centerOfMassOffset = cgOffset;
+        chassisSolver.SetChassisParams(config.chassis);
+    }
 
     void SwerveDrivetrainModel::ApplyExternalCorrections(const glm::vec3& correctedPosition,
         const glm::quat& correctedOrientation,
@@ -254,4 +284,5 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
     const DrivetrainEnergyLedger& SwerveDrivetrainModel::GetEnergyLedger() const { return energyLedger; }
     double SwerveDrivetrainModel::GetBatteryTerminalVoltage() const { return terminalVoltage; }
     bool SwerveDrivetrainModel::IsBrownedOut() const { return isBrownedOutState; }
+    double SwerveDrivetrainModel::GetTotalSupplyCurrent() const { return totalDrivetrainSupplyCurrent; }
 }

@@ -10,7 +10,7 @@
 #include "Physics/Components/ColliderComponent.h"
 #include "Core/ECS/Core/Scene.h"
 #include "Core/ECS/Components/TransformComponent.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include "Utils/Log.h"
 
 #include <Jolt/Jolt.h>
@@ -238,6 +238,7 @@ namespace FRCBananaSim::Physics::Systems
             bodySettings.mMaxAngularVelocity = rigidBody->maxAngularVelocity;
             bodySettings.mGravityFactor = rigidBody->gravityFactor;
             bodySettings.mAllowSleeping = rigidBody->allowSleeping;
+            bodySettings.mAllowDynamicOrKinematic = true;
             bodySettings.mIsSensor = rigidBody->isSensor;
 
             // Configure Jolt collision group filtering

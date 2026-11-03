@@ -1,6 +1,6 @@
 /**
  * @file Main.cpp
- * @brief Dedicated 6-DOF terrain-aware analytic swerve drivetrain simulation sandbox with real-time telemetry.
+ * @brief Interactive 3D simulation sandbox and test station for the Schema v1 2026 Reference Robot.
  */
 
 #include "Core/Engine.h"
@@ -12,26 +12,40 @@
 #include "Physics/JoltContext.h"
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Physics/Components/ColliderComponent.h"
+#include "Physics/Components/JointComponent.h"
 #include "Physics/Systems/PhysicsSystem.h"
 #include "Physics/Systems/PhysicsDebugDrawSystem.h"
+#include "Physics/Systems/JointSystem.h"
 #include "Actuation/BatteryModel.h"
 #include "Actuation/Components/BatteryComponent.h"
-#include "Robot/RobotSpawner.h"
+#include "Robot/RobotAssembler.h"
+#include "Robot/Schema/RobotSchemaLoader.h"
 #include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
 #include "Robot/Drivetrain/Components/SwerveModuleComponent.h"
 #include "Robot/Drivetrain/Systems/SwerveDriveSystem.h"
 #include "Robot/Drivetrain/Model/SwerveDrivetrainModel.h"
-#include "Robot/Drivetrain/Model/TerrainProvider.h"
-#include "Control/SimControlBoundary.h"
-#include "Core/Units/Units.h"
+#include "Robot/Mechanisms/Components/ElevatorComponent.h"
+#include "Robot/Mechanisms/Components/ArmComponent.h"
+#include "Robot/Mechanisms/Components/FlywheelComponent.h"
+#include "Robot/Mechanisms/Components/FourBarComponent.h"
+#include "Robot/Mechanisms/Components/CouplingComponent.h"
+#include "Robot/Mechanisms/Components/CompositeMassComponent.h"
+#include "Robot/Sensors/Components/IMUComponent.h"
+#include "Robot/Sensors/Components/EncoderComponent.h"
+#include "Robot/Sensors/Components/LimitSwitchComponent.h"
+#include "Robot/Sensors/Components/BeamBreakComponent.h"
+#include "Robot/Sensors/Components/AnalogInputComponent.h"
+#include "Robot/Sensors/Components/ContactZoneComponent.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/Components/MeshComponent.h"
 #include "Renderer/Systems/RenderSystem.h"
-#include "Telemetry/TelemetryMacros.h"
-#include "Telemetry/TelemetryManager.h"
-#include "Telemetry/TelemetryOverlay.h"
-#include "Telemetry/ProfilerWindow.h"
-#include "Telemetry/ProfileResult.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryManager.h"
+#include "Telemetry/TelemeteryViewer/TelemetryOverlay.h"
+#include "Telemetry/TelemeteryViewer/ProfilerWindow.h"
+#include "Telemetry/DrivetrainLogger.h"
+#include "Bridge/HALSimWebSocketServer.h"
+#include "Control/SimControlBoundary.h"
 #include "Utils/DebugDraw.h"
 #include "Utils/Log.h"
 
@@ -45,114 +59,25 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
+#include <iostream>
 
-using namespace FRCBananaSim::Core::Units::Literals;
-using FRCBananaSim::Core::Engine;
-using FRCBananaSim::Core::ECS::Core::Scene;
-using FRCBananaSim::Core::ECS::Core::Entity;
-using FRCBananaSim::Core::ECS::Core::invalidEntity;
-using FRCBananaSim::Core::ECS::Components::TransformComponent;
-using FRCBananaSim::Core::ECS::Components::WorldTransformComponent;
-using FRCBananaSim::Core::ECS::Systems::TransformPropagationSystem;
-using FRCBananaSim::Physics::PhysicsConfig;
-using FRCBananaSim::Physics::JoltContext;
-using FRCBananaSim::Physics::Components::RigidBodyComponent;
-using FRCBananaSim::Physics::Components::ColliderComponent;
-using FRCBananaSim::Physics::Components::BodyMotionType;
-using FRCBananaSim::Physics::Components::ColliderShape;
-using FRCBananaSim::Physics::Systems::PhysicsSystem;
-using FRCBananaSim::Physics::Systems::PhysicsDebugDrawSystem;
-using FRCBananaSim::Actuation::BatteryModel;
-using FRCBananaSim::Actuation::Components::BatteryComponent;
-using FRCBananaSim::Robot::RobotSpawner;
-using FRCBananaSim::Robot::SpawnedRobot;
-using FRCBananaSim::Robot::Drivetrain::Components::SwerveChassisComponent;
-using FRCBananaSim::Robot::Drivetrain::Components::SwerveModuleComponent;
-using FRCBananaSim::Robot::Drivetrain::System::SwerveDriveSystem;
-using FRCBananaSim::Robot::Drivetrain::Model::SwerveDrivetrainModel;
-using FRCBananaSim::Robot::Drivetrain::Model::SwerveModuleState;
-using FRCBananaSim::Robot::Drivetrain::Model::ChassisMotionState;
-using FRCBananaSim::Robot::Drivetrain::Model::ITerrainProvider;
-using FRCBananaSim::Robot::Drivetrain::Model::WheelContactProbe;
+using namespace FRCBananaSim::Core::ECS::Core;
+using namespace FRCBananaSim::Core::ECS::Components;
+using namespace FRCBananaSim::Physics::Components;
+using namespace FRCBananaSim::Renderer::Components;
 using namespace FRCBananaSim::Control;
-using FRCBananaSim::Renderer::Renderer;
-using FRCBananaSim::Renderer::Components::MeshComponent;
-using FRCBananaSim::Renderer::Components::PrimitiveShape;
-using FRCBananaSim::Renderer::Systems::RenderSystem;
-using FRCBananaSim::Telemetry::TelemetryManager;
-using FRCBananaSim::Telemetry::TelemetryMode;
-using FRCBananaSim::Telemetry::TelemetryOverlay;
-using FRCBananaSim::Telemetry::ProfilerWindow;
-using FRCBananaSim::Telemetry::FrameSummary;
-using FRCBananaSim::Utils::DebugDraw;
+using namespace FRCBananaSim::Robot::Mechanisms::Components;
+using namespace FRCBananaSim::Robot::Sensors::Components;
 
 /**
- * @class AnalyticFieldTerrain
- * @brief Standalone analytic ground terrain provider modeling flat carpet, the 15° ramp, and 3 cm cable bump without Jolt.
- */
-class AnalyticFieldTerrain : public ITerrainProvider
-{
-public:
-    virtual WheelContactProbe QueryWheelContact(const glm::vec3& hubPosition,
-        double wheelRadius, double /*wheelWidth*/) const override
-    {
-        WheelContactProbe probe;
-
-        double hubX = hubPosition.x; // NWU +X Forward
-        double hubY = hubPosition.y; // NWU +Y Left
-        double hubZ = hubPosition.z; // NWU +Z Up
-
-        double groundZ = 0.0;
-        glm::vec3 normal(0.0f, 0.0f, 1.0f);
-
-        // Station 5 track lateral bounds in NWU: Y in [2.2, 4.2] (centered at Y = 3.2m)
-        bool inTrack = (hubY >= 2.2 && hubY <= 4.2);
-
-        if (inTrack && hubX >= 2.5 && hubX <= 4.5)
-        {
-            // 15° Inclined ramp section: rises from X = 2.5 to 4.5 along NWU +X
-            constexpr double rampAngle = 0.2617993877991494; // 15 degrees in radians
-            double distAlongRamp = hubX - 2.5;
-            groundZ = distAlongRamp * std::tan(rampAngle);
-            normal = glm::vec3(-std::sin(rampAngle), 0.0f, std::cos(rampAngle));
-        }
-        else if (inTrack && hubX >= 6.9 && hubX <= 7.1)
-        {
-            // 3 cm Cable protector bump
-            groundZ = 0.03;
-            normal = glm::vec3(0.0f, 0.0f, 1.0f);
-        }
-
-        double distAboveGround = (hubZ - groundZ);
-        double depth = wheelRadius - distAboveGround;
-
-        if (depth > 0.0)
-        {
-            probe.hasContact = true;
-            probe.penetrationDepth = depth;
-            probe.surfaceNormal = normal;
-            probe.contactPoint = hubPosition - normal * static_cast<float>(wheelRadius);
-        }
-        else
-        {
-            probe.hasContact = false;
-            probe.penetrationDepth = 0.0;
-            probe.surfaceNormal = normal;
-            probe.contactPoint = glm::vec3(hubX, hubY, static_cast<float>(groundZ));
-        }
-
-        return probe;
-    }
-};
-
-/**
- * @brief Draws oriented bounding box (OBB) wireframes using DebugDraw lines.
+ * @brief Helper drawing an oriented wireframe box in world coordinates.
  */
 static void DrawOrientedBox(const glm::vec3& center, const glm::quat& orientation,
-    const glm::vec3& halfExtents, const glm::vec3& color, bool alwaysOnTop)
+    const glm::vec3& halfExtents, const glm::vec3& color, bool depthTest)
 {
     glm::vec3 c[8] = {
         center + orientation * glm::vec3(-halfExtents.x, -halfExtents.y, -halfExtents.z),
@@ -165,135 +90,114 @@ static void DrawOrientedBox(const glm::vec3& center, const glm::quat& orientatio
         center + orientation * glm::vec3(-halfExtents.x,  halfExtents.y,  halfExtents.z)
     };
 
-    bool depthTest = !alwaysOnTop;
-
     // Bottom loop
-    DebugDraw::Line(c[0], c[1], color, depthTest);
-    DebugDraw::Line(c[1], c[2], color, depthTest);
-    DebugDraw::Line(c[2], c[3], color, depthTest);
-    DebugDraw::Line(c[3], c[0], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[0], c[1], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[1], c[2], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[2], c[3], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[3], c[0], color, depthTest);
 
     // Top loop
-    DebugDraw::Line(c[4], c[5], color, depthTest);
-    DebugDraw::Line(c[5], c[6], color, depthTest);
-    DebugDraw::Line(c[6], c[7], color, depthTest);
-    DebugDraw::Line(c[7], c[4], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[4], c[5], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[5], c[6], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[6], c[7], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[7], c[4], color, depthTest);
 
     // Vertical pillars
-    DebugDraw::Line(c[0], c[4], color, depthTest);
-    DebugDraw::Line(c[1], c[5], color, depthTest);
-    DebugDraw::Line(c[2], c[6], color, depthTest);
-    DebugDraw::Line(c[3], c[7], color, depthTest);
-
-    // Top face cross (X) for heading identification
-    DebugDraw::Line(c[4], c[6], color * 0.75f, depthTest);
-    DebugDraw::Line(c[5], c[7], color * 0.75f, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[0], c[4], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[1], c[5], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[2], c[6], color, depthTest);
+    FRCBananaSim::Utils::DebugDraw::Line(c[3], c[7], color, depthTest);
 }
 
 /**
- * @brief Renders wireframe debug visuals for all scene colliders and wheel contact patches.
+ * @brief Renders wireframe colliders, contact patches, and contact volumes.
  */
-static void RenderSceneColliderDebugDraw(Scene& scene, bool alwaysOnTop,
-    const SpawnedRobot& swerveRobot, SwerveDriveSystem& swerveSystem,
-    Entity groundEntity, Entity rampEntity, Entity bumpEntity, bool showWheels)
+static void RenderSceneDebugDraw(Scene& scene, bool showColliders, bool showWheelContacts,
+    bool showContactZones, bool alwaysOnTop, const FRCBananaSim::Robot::AssembledRobot& robot)
 {
-    auto entities = scene.Query<ColliderComponent, TransformComponent>();
+    bool depthTest = !alwaysOnTop;
 
-    for (Entity entity : entities)
+    if (showColliders)
     {
-        auto* collider = scene.GetComponent<ColliderComponent>(entity);
-        auto* transform = scene.GetComponent<TransformComponent>(entity);
-        if (!collider || !transform)
+        auto entities = scene.Query<ColliderComponent, TransformComponent>();
+        for (Entity e : entities)
         {
-            continue;
-        }
+            auto* col = scene.GetComponent<ColliderComponent>(e);
+            auto* t = scene.GetComponent<TransformComponent>(e);
+            if (!col || !t) continue;
 
-        glm::vec3 center = transform->position + transform->rotation * collider->localOffset;
-        glm::quat orientation = transform->rotation * collider->localRotation;
+            glm::vec3 center = t->position + (t->rotation * col->localOffset);
+            glm::quat rot = t->rotation * col->localRotation;
 
-        glm::vec3 color(0.2f, 0.9f, 0.3f);
-        if (entity == groundEntity)
-        {
-            color = glm::vec3(0.15f, 0.95f, 0.35f); // Vibrant Carpet Green
-        }
-        else if (entity == rampEntity)
-        {
-            color = glm::vec3(0.20f, 0.85f, 1.0f);  // Cyan Ramp
-        }
-        else if (entity == bumpEntity)
-        {
-            color = glm::vec3(1.0f, 0.85f, 0.15f);  // Amber Cable Bump
-        }
-        else if (entity == swerveRobot.chassisEntity)
-        {
-            color = glm::vec3(1.0f, 0.35f, 0.25f);  // Coral Chassis Bumper
-        }
+            glm::vec3 color(0.2f, 0.9f, 0.3f);
+            if (e == robot.chassisEntity)
+            {
+                color = glm::vec3(0.2f, 0.5f, 1.0f); // Blue Chassis Bumper
+            }
 
-        switch (collider->shape)
-        {
-        case ColliderShape::Box:
-            DrawOrientedBox(center, orientation, collider->boxHalfExtents, color, alwaysOnTop);
-            break;
-        case ColliderShape::Sphere:
-            DebugDraw::Sphere(center, collider->radius, color, 16, !alwaysOnTop);
-            break;
-        case ColliderShape::Cylinder:
-        case ColliderShape::Capsule:
-            DebugDraw::Cylinder(center, collider->radius, collider->halfHeight, color, 16, !alwaysOnTop);
-            break;
+            switch (col->shape)
+            {
+            case ColliderShape::Box:
+                DrawOrientedBox(center, rot, col->boxHalfExtents, color, depthTest);
+                break;
+            case ColliderShape::Sphere:
+                FRCBananaSim::Utils::DebugDraw::Sphere(center, col->radius, color, 16, depthTest);
+                break;
+            case ColliderShape::Cylinder:
+            case ColliderShape::Capsule:
+                FRCBananaSim::Utils::DebugDraw::Cylinder(center, col->radius, col->halfHeight, color, 16, depthTest);
+                break;
+            }
         }
     }
 
-    // Wheel visualizer
-    if (showWheels && swerveRobot.isSuccess)
+    if (showContactZones)
     {
-        auto* model = swerveSystem.GetModel();
-        constexpr int kSegments = 16;
-        constexpr float kRadius = 0.0508f; // 2 inches radius = 4" wheel
-
-        for (uint32_t i = 0; i < 4; ++i)
+        auto czEntities = scene.Query<ContactZoneComponent, TransformComponent>();
+        for (Entity e : czEntities)
         {
-            if (swerveRobot.wheelEntities[i] == invalidEntity)
-            {
-                continue;
-            }
+            auto* cz = scene.GetComponent<ContactZoneComponent>(e);
+            auto* t = scene.GetComponent<TransformComponent>(e);
+            if (!cz || !t) continue;
 
-            auto* wheelT = scene.GetComponent<TransformComponent>(swerveRobot.wheelEntities[i]);
-            if (!wheelT)
-            {
-                continue;
-            }
+            glm::vec3 color = (cz->role == "intake")
+                ? glm::vec3(0.1f, 1.0f, 0.2f)   // Green intake volume
+                : glm::vec3(1.0f, 0.2f, 0.8f);  // Magenta shooter volume
 
-            glm::vec3 wheelPos = wheelT->position;
-            glm::quat wheelRot = wheelT->rotation;
+            DrawOrientedBox(t->position, t->rotation, cz->dimensions * 0.5f, color, false);
+        }
+    }
 
-            // Rolling circumference circle in wheel local YZ plane
-            glm::vec3 prevPoint = wheelPos + wheelRot * glm::vec3(0.0f, kRadius, 0.0f);
-            for (int s = 1; s <= kSegments; ++s)
+    if (showWheelContacts && robot.swerveSystem)
+    {
+        auto* model = robot.swerveSystem->GetModel();
+        if (model)
+        {
+            auto* chassisT = scene.GetComponent<TransformComponent>(robot.chassisEntity);
+            if (chassisT)
             {
-                float angle = (static_cast<float>(s) / static_cast<float>(kSegments)) * 6.2831853f;
-                glm::vec3 localPt(0.0f, std::cos(angle) * kRadius, std::sin(angle) * kRadius);
-                glm::vec3 worldPt = wheelPos + wheelRot * localPt;
-                DebugDraw::Line(prevPoint, worldPt, glm::vec3(1.0f, 0.85f, 0.2f), !alwaysOnTop);
-                prevPoint = worldPt;
-            }
+                constexpr float kRadius = 0.0508f;
+                for (uint32_t i = 0; i < 4; ++i)
+                {
+                    const auto& modState = model->GetModule(i).GetState();
+                    const auto& modPlacement = model->GetModule(i).GetPlacement();
+                    glm::vec3 modLocEng(modPlacement.locationOnChassis.y, -0.075f - 0.060f - 0.010f - kRadius, modPlacement.locationOnChassis.x);
+                    glm::vec3 worldWheelPos = chassisT->position + (chassisT->rotation * modLocEng);
 
-            // Normal contact load indicator
-            double normalF = 0.0;
-            if (model)
-            {
-                normalF = model->GetModule(i).GetState().contactState.normalForce;
-            }
-
-            glm::vec3 bottomPt = wheelPos - glm::vec3(0.0f, kRadius, 0.0f);
-            if (normalF > 0.0)
-            {
-                float spikeH = static_cast<float>(std::min(0.20, normalF / 800.0));
-                DebugDraw::Line(bottomPt, bottomPt + glm::vec3(0.0f, spikeH, 0.0f), glm::vec3(0.1f, 1.0f, 0.2f), !alwaysOnTop);
-            }
-            else
-            {
-                DebugDraw::Line(bottomPt, bottomPt + glm::vec3(0.0f, 0.04f, 0.0f), glm::vec3(1.0f, 0.2f, 0.2f), !alwaysOnTop);
+                    double normalF = modState.contactState.normalForce;
+                    if (normalF > 0.0)
+                    {
+                        float spikeH = static_cast<float>(std::min(0.25, normalF / 600.0));
+                        glm::vec3 spikeColor = (modState.contactState.saturationRatio > 1.0)
+                            ? glm::vec3(1.0f, 0.2f, 0.2f)   // Red slip spike
+                            : glm::vec3(0.2f, 1.0f, 0.3f);  // Green traction spike
+                        FRCBananaSim::Utils::DebugDraw::Line(worldWheelPos, worldWheelPos + glm::vec3(0.0f, spikeH, 0.0f), spikeColor, depthTest);
+                    }
+                    else
+                    {
+                        FRCBananaSim::Utils::DebugDraw::Line(worldWheelPos, worldWheelPos + glm::vec3(0.0f, 0.03f, 0.0f), glm::vec3(0.8f, 0.2f, 0.2f), depthTest);
+                    }
+                }
             }
         }
     }
@@ -301,41 +205,41 @@ static void RenderSceneColliderDebugDraw(Scene& scene, bool alwaysOnTop,
 
 int main(int argc, char* argv[])
 {
-    // 1. Initialize Telemetry System
-    TelemetryManager::Get().Initialize();
-    TelemetryManager::Get().SetMode(TelemetryMode::Minimal);
+    // 1. Initialize Telemetry & Profiler Subsystems
+    FRCBananaSim::Telemetry::TelemetryManager::Get().Initialize();
+    FRCBananaSim::Telemetry::TelemetryManager::Get().SetMode(FRCBananaSim::Telemetry::TelemetryMode::Minimal);
 
-    // 2. Initialize Visual Renderer
-    Renderer renderer(1600, 900, "FRC Banana Simulator - 6-DOF Terrain Swerve Sandbox");
+    FRCBananaSim::Telemetry::TelemetryOverlay telemetryOverlay;
+    FRCBananaSim::Telemetry::ProfilerWindow profilerWindow;
+    FRCBananaSim::Telemetry::DrivetrainLogger drivetrainLogger(120000); // 10 min at 200 Hz
 
-    // Camera initial viewpoint (framed behind robot looking along the track towards ramp and bump)
-    renderer.GetCamera().position = glm::vec3(3.2f, 2.6f, -3.2f);
-    renderer.GetCamera().pitchDegrees = -14.0f;
-    renderer.GetCamera().yawDegrees = 90.0f;
-    renderer.GetCamera().moveSpeed = 8.0f;
-
-    // 3. Initialize Jolt Physics Subsystem
-    JoltContext joltContext;
-    if (!joltContext.Initialize())
+    // 2. Initialize Hardware Renderer (1600x900 OpenGL 3.3 Core)
+    FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Block 3 Reference 2026 Robot Test Station");
+    if (!renderer.IsValid())
     {
-        SIM_LOG_FATAL("Failed to initialize Jolt Physics subsystem");
-        TelemetryManager::Get().Shutdown();
+        SIM_LOG_FATAL("Failed to initialize OpenGL renderer window");
         return -1;
     }
 
-    // 4. Telemetry Visualizers
-    TelemetryOverlay telemetryOverlay;
-    ProfilerWindow profilerWindow;
+    // 3. Initialize Jolt Physics Subsystem
+    FRCBananaSim::Physics::JoltContext joltContext;
+    if (!joltContext.Initialize())
+    {
+        SIM_LOG_FATAL("Failed to initialize Jolt Physics Context");
+        return -1;
+    }
 
-    // 5. ECS Scene & System Pipeline Registration
+    // 4. Start WPILib HALSim WebSocket Server (:3300/wpilibws)
+    FRCBananaSim::Bridge::HALSimWebSocketServer wsServer;
+    wsServer.Start();
+
+    // 5. ECS Scene & Core Presentation Systems
     Scene scene;
-    scene.SetFixedDeltaTime(PhysicsConfig::fixedDeltaTime);
+    scene.SetFixedDeltaTime(FRCBananaSim::Physics::PhysicsConfig::fixedDeltaTime);
 
-    scene.AddSystem(std::make_unique<PhysicsSystem>(scene, joltContext));
-    scene.AddSystem(std::make_unique<TransformPropagationSystem>(scene));
-    scene.AddSystem(std::make_unique<RenderSystem>(scene, renderer));
+    scene.AddSystem(std::make_unique<FRCBananaSim::Core::ECS::Systems::TransformPropagationSystem>(scene));
+    scene.AddSystem(std::make_unique<FRCBananaSim::Renderer::Systems::RenderSystem>(scene, renderer));
 
-    // Helper lambda to assign both local and world transforms at creation
     auto assignTransforms = [&](Entity entity, const glm::vec3& pos, const glm::vec3& scale,
         const glm::quat& rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
         {
@@ -353,228 +257,310 @@ int main(int argc, char* argv[])
         };
 
     // -------------------------------------------------------------------------
-    // 6. Environment Setup
+    // 6. Environment Setup (Field Carpet, Obstacle Ramp, Bump & Target Goal)
     // -------------------------------------------------------------------------
 
-    // A. Field Carpet (28m x 18m)
+    // A. Official FRC Field Carpet (28m x 18m, Top Surface at Y = 0.0m)
     Entity groundEntity = scene.CreateEntity();
     {
-        assignTransforms(groundEntity, glm::vec3(0.0f, -0.05f, 0.0f), glm::vec3(28.0f, 0.1f, 18.0f));
+        assignTransforms(groundEntity, glm::vec3(0.0f, -0.05f, 0.0f), glm::vec3(28.0f, 0.10f, 18.0f));
 
         MeshComponent mesh;
         mesh.shape = PrimitiveShape::Plane;
-        mesh.color = glm::vec3(0.22f, 0.52f, 0.28f);
+        mesh.color = glm::vec3(0.18f, 0.45f, 0.22f); // FRC Carpet Green
         scene.AddComponent(groundEntity, mesh);
 
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Static;
-        rigidBody.friction = 0.8f;
-        rigidBody.restitution = 0.05f;
-        scene.AddComponent(groundEntity, rigidBody);
+        RigidBodyComponent rb;
+        rb.motionType = BodyMotionType::Static;
+        rb.friction = 0.85f;
+        rb.restitution = 0.05f;
+        scene.AddComponent(groundEntity, rb);
 
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(14.0f, 0.05f, 9.0f);
-        scene.AddComponent(groundEntity, collider);
+        ColliderComponent col;
+        col.shape = ColliderShape::Box;
+        col.boxHalfExtents = glm::vec3(14.0f, 0.05f, 9.0f);
+        scene.AddComponent(groundEntity, col);
     }
 
-    // B. Obstacle 1: 15° Inclined Ramp (Centered at X = 3.2m, Z = 3.5m)
+    // B. Obstacle 1: 15° Inclined Test Ramp
     Entity rampEntity = scene.CreateEntity();
     {
-        glm::vec3 rampPos(3.2f, 0.259f, 3.5f);
+        glm::vec3 rampPos(3.2f, 0.259f, 4.0f);
         glm::quat rampRot = glm::angleAxis(glm::radians(-15.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-        assignTransforms(rampEntity, rampPos, glm::vec3(1.8f, 0.08f, 2.0f), rampRot);
+        assignTransforms(rampEntity, rampPos, glm::vec3(2.0f, 0.08f, 2.0f), rampRot);
 
         MeshComponent mesh;
         mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.35f, 0.45f, 0.65f); // Slate Blue
+        mesh.color = glm::vec3(0.28f, 0.48f, 0.72f); // Steel Blue Ramp
         scene.AddComponent(rampEntity, mesh);
 
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Static;
-        rigidBody.friction = 0.8f;
-        rigidBody.restitution = 0.05f;
-        scene.AddComponent(rampEntity, rigidBody);
+        RigidBodyComponent rb;
+        rb.motionType = BodyMotionType::Static;
+        rb.friction = 0.80f;
+        scene.AddComponent(rampEntity, rb);
 
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(0.9f, 0.04f, 1.0f);
-        scene.AddComponent(rampEntity, collider);
+        ColliderComponent col;
+        col.shape = ColliderShape::Box;
+        col.boxHalfExtents = glm::vec3(1.0f, 0.04f, 1.0f);
+        scene.AddComponent(rampEntity, col);
     }
 
-    // C. Obstacle 2: 3 cm Cable-Protector Bump (Centered at X = 3.2m, Z = 7.0m)
+    // C. Obstacle 2: 3 cm Cable-Protector Bump
     Entity bumpEntity = scene.CreateEntity();
     {
-        glm::vec3 bumpPos(3.2f, 0.015f, 7.0f);
-        assignTransforms(bumpEntity, bumpPos, glm::vec3(1.8f, 0.03f, 0.20f));
+        glm::vec3 bumpPos(3.2f, 0.015f, 7.5f);
+        assignTransforms(bumpEntity, bumpPos, glm::vec3(2.0f, 0.03f, 0.20f));
 
         MeshComponent mesh;
         mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.95f, 0.80f, 0.10f); // Hazard Yellow
+        mesh.color = glm::vec3(0.95f, 0.80f, 0.12f); // Hazard Yellow
         scene.AddComponent(bumpEntity, mesh);
 
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Static;
-        rigidBody.friction = 0.8f;
-        rigidBody.restitution = 0.05f;
-        scene.AddComponent(bumpEntity, rigidBody);
+        RigidBodyComponent rb;
+        rb.motionType = BodyMotionType::Static;
+        rb.friction = 0.80f;
+        scene.AddComponent(bumpEntity, rb);
 
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(0.9f, 0.015f, 0.10f);
-        scene.AddComponent(bumpEntity, collider);
+        ColliderComponent col;
+        col.shape = ColliderShape::Box;
+        col.boxHalfExtents = glm::vec3(1.0f, 0.015f, 0.10f);
+        scene.AddComponent(bumpEntity, col);
     }
 
-    // D. Central Robot Battery Entity
-    const glm::vec3 batteryPos = glm::vec3(0.0f, 0.35f, -2.8f);
-    Entity batteryEntity = scene.CreateEntity();
+    // D. Target Rebounder Structure
+    Entity targetEntity = scene.CreateEntity();
     {
-        assignTransforms(batteryEntity, batteryPos, glm::vec3(1.0f, 0.6f, 0.6f));
+        glm::vec3 targetPos(0.0f, 0.75f, 7.0f);
+        assignTransforms(targetEntity, targetPos, glm::vec3(1.4f, 1.5f, 0.4f));
 
         MeshComponent mesh;
         mesh.shape = PrimitiveShape::Cube;
-        mesh.color = glm::vec3(0.28f, 0.30f, 0.35f);
-        scene.AddComponent(batteryEntity, mesh);
+        mesh.color = glm::vec3(0.70f, 0.22f, 0.24f); // Alliance Red Target Goal
+        scene.AddComponent(targetEntity, mesh);
 
-        RigidBodyComponent rigidBody;
-        rigidBody.motionType = BodyMotionType::Static;
-        scene.AddComponent(batteryEntity, rigidBody);
+        RigidBodyComponent rb;
+        rb.motionType = BodyMotionType::Static;
+        scene.AddComponent(targetEntity, rb);
 
-        ColliderComponent collider;
-        collider.shape = ColliderShape::Box;
-        collider.boxHalfExtents = glm::vec3(0.5f, 0.3f, 0.3f);
-        scene.AddComponent(batteryEntity, collider);
-
-        BatteryComponent battery;
-        battery.batteryModel = BatteryModel::FRCStandard();
-        battery.terminalVoltage = 12.60_V;
-        battery.totalCurrent = 1.5_A;
-        scene.AddComponent(batteryEntity, battery);
+        ColliderComponent col;
+        col.shape = ColliderShape::Box;
+        col.boxHalfExtents = glm::vec3(0.7f, 0.75f, 0.2f);
+        scene.AddComponent(targetEntity, col);
     }
 
     // -------------------------------------------------------------------------
-    // 7. Swerve Robot Spawning & Visual Attachment
+    // 7. Assemble Schema v1 Reference 2026 Robot
     // -------------------------------------------------------------------------
-    const glm::vec3 swerveSpawnPos = glm::vec3(3.2f, 0.248f, 0.0f);
-    SpawnedRobot swerveRobot = RobotSpawner::SpawnFromJsonFile(scene,
-        "FRCBananaSim/Resources/Robots/robot_swerve.json", swerveSpawnPos);
+    std::string manifestPath = "FRCBananaSim/Resources/Robots/Reference2026/manifest.json";
+    std::string sidecarPath = "FRCBananaSim/Resources/Robots/Reference2026/sidecar.json";
+    std::string materialsPath = "FRCBananaSim/Resources/Config/materials.json";
 
-    if (swerveRobot.isSuccess)
+    const std::vector<std::string> searchPrefixes = {
+        "",
+        "../",
+        "../../",
+        "../../../",
+        "../../../../",
+        "FRCBananaSim/"
+    };
+
+    for (const auto& prefix : searchPrefixes)
     {
-        // 1. Chassis Visual Mesh (Deep Metallic Blue)
-        MeshComponent chassisMesh;
-        chassisMesh.shape = PrimitiveShape::Cube;
-        chassisMesh.color = glm::vec3(0.18f, 0.24f, 0.38f);
-        scene.AddComponent(swerveRobot.chassisEntity, chassisMesh);
-
-        WorldTransformComponent chassisWt;
-        chassisWt.worldPosition = swerveSpawnPos;
-        chassisWt.worldScale = glm::vec3(0.70f, 0.15f, 0.70f);
-        scene.AddComponent(swerveRobot.chassisEntity, chassisWt);
-
-        // 2. Steer Housings & Wheels Visual Meshes (Round Cylinders)
-        for (uint32_t i = 0; i < 4; ++i)
+        std::string candidate = prefix + "FRCBananaSim/Resources/Robots/Reference2026/manifest.json";
+        if (std::filesystem::exists(candidate))
         {
-            MeshComponent steerMesh;
-            steerMesh.shape = PrimitiveShape::Cylinder;
-            steerMesh.color = glm::vec3(0.95f, 0.78f, 0.12f);
-            scene.AddComponent(swerveRobot.steerEntities[i], steerMesh);
-
-            WorldTransformComponent steerWt;
-            steerWt.worldScale = glm::vec3(0.08f, 0.06f, 0.08f);
-            scene.AddComponent(swerveRobot.steerEntities[i], steerWt);
-
-            MeshComponent wheelMesh;
-            wheelMesh.shape = PrimitiveShape::CylinderX;
-            wheelMesh.color = glm::vec3(0.12f, 0.12f, 0.15f);
-            scene.AddComponent(swerveRobot.wheelEntities[i], wheelMesh);
-
-            WorldTransformComponent wheelWt;
-            wheelWt.worldScale = glm::vec3(0.04f, 0.1016f, 0.1016f);
-            scene.AddComponent(swerveRobot.wheelEntities[i], wheelWt);
+            manifestPath = candidate;
+            sidecarPath = prefix + "FRCBananaSim/Resources/Robots/Reference2026/sidecar.json";
+            materialsPath = prefix + "FRCBananaSim/Resources/Config/materials.json";
+            break;
+        }
+        std::string directCandidate = prefix + "Resources/Robots/Reference2026/manifest.json";
+        if (std::filesystem::exists(directCandidate))
+        {
+            manifestPath = directCandidate;
+            sidecarPath = prefix + "Resources/Robots/Reference2026/sidecar.json";
+            materialsPath = prefix + "Resources/Config/materials.json";
+            break;
         }
     }
 
-    // Drivetrain Adapter initialized with Jolt context for terrain probes
-    SwerveDriveSystem swerveSystem(scene, &joltContext);
-    auto analyticTerrain = std::make_shared<AnalyticFieldTerrain>();
+    FRCBananaSim::Robot::RobotAssembler assembler(scene, &joltContext);
+    const glm::vec3 robotSpawnPos(0.0f, 0.1989f, 0.0f);
+    FRCBananaSim::Robot::AssembledRobot robot = assembler.AssembleFromFiles(
+        manifestPath, sidecarPath, materialsPath, robotSpawnPos);
 
-    SimInputs swerveInputs;
-    SimOutputs swerveOutputs;
+    if (!robot.isSuccess)
+    {
+        SIM_LOG_FATAL("Failed to assemble Schema v1 robot: " << robot.errorMessage);
+        return -1;
+    }
 
-    // Simulation Backend Selection: true = Jolt Middleware, false = No Jolt (Pure Analytic Math)
-    bool useJoltPhysics = true;
+    // Joint System for Jolt constraints management
+    FRCBananaSim::Physics::Systems::JointSystem jointSystem(scene, joltContext);
 
-    // Debug Draw Options
-    bool showColliderDebugDraw = true;
-    bool debugDrawAlwaysOnTop = false;
-    bool showWheelContactDebugDraw = true;
+    // Initial Warmup Pass: Allocate all Jolt rigid bodies and joint constraints
+    // before the first simulation time step to prevent initial impulse explosion.
+    if (robot.physicsSystem)
+    {
+        robot.physicsSystem->FixedUpdate(0.0);
+    }
+    
+    jointSystem.FixedUpdate(0.0);
+    jointSystem.ReadbackTelemetry();
+    
+    std::cout << "[Simulator] Robot assembled and physics bodies warmed up successfully.\n";
 
-    bool swerveEnabled = true;
-    bool swervePinChassis = false;
-    float swerveDriveVolts = 0.0f;
-    float swerveTargetSteerAngle = 0.0f;
-    int swerveNeutralModeIndex = 0; // 0 = Brake, 1 = Coast
+    // -------------------------------------------------------------------------
+    // 8. Visual Mesh & Scale Attachment for All Robot Links
+    // -------------------------------------------------------------------------
 
-    bool swerveRunStressTest = false;
-    double swerveStressElapsed = 0.0;
-
-    // Helper lambda to reposition the robot cleanly
-    auto resetRobotToPosition = [&](const glm::vec3& worldPos, const glm::quat& worldRot)
+    auto attachVisualMesh = [&](Entity linkEntity, PrimitiveShape shape, const glm::vec3& color,
+        const glm::vec3& fallbackScale = glm::vec3(0.04f),
+        const glm::vec3& fallbackOffset = glm::vec3(0.0f),
+        const glm::quat& fallbackRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
         {
-            if (!swerveRobot.isSuccess)
-            {
-                return;
-            }
+            if (linkEntity == invalidEntity) return;
 
-            auto* chassisRb = scene.GetComponent<RigidBodyComponent>(swerveRobot.chassisEntity);
-            if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
-            {
-                JPH::BodyInterface& bi = joltContext.GetBodyInterface();
-                bi.SetPositionAndRotation(chassisRb->bodyID,
-                    JPH::RVec3(worldPos.x, worldPos.y, worldPos.z),
-                    JPH::Quat(worldRot.x, worldRot.y, worldRot.z, worldRot.w),
-                    JPH::EActivation::Activate);
-                bi.SetLinearAndAngularVelocity(chassisRb->bodyID,
-                    JPH::Vec3::sZero(),
-                    JPH::Vec3::sZero());
-            }
+            auto* linkT = scene.GetComponent<TransformComponent>(linkEntity);
+            if (!linkT) return;
 
-            auto* chassisT = scene.GetComponent<TransformComponent>(swerveRobot.chassisEntity);
-            if (chassisT)
-            {
-                chassisT->position = worldPos;
-                chassisT->rotation = worldRot;
-            }
+            // Preserve neutral unit scale on link entity to prevent skewing child joints/colliders
+            linkT->scale = glm::vec3(1.0f);
+            auto* linkWt = scene.GetComponent<WorldTransformComponent>(linkEntity);
+            if (linkWt) linkWt->worldScale = glm::vec3(1.0f);
 
-            auto* chassisWt = scene.GetComponent<WorldTransformComponent>(swerveRobot.chassisEntity);
-            if (chassisWt)
-            {
-                chassisWt->worldPosition = worldPos;
-                chassisWt->worldRotation = worldRot;
-            }
+            auto* col = scene.GetComponent<ColliderComponent>(linkEntity);
+            glm::vec3 visualOffset = col ? col->localOffset : fallbackOffset;
+            glm::quat visualRot = col ? col->localRotation : fallbackRot;
+            glm::vec3 visualScale = fallbackScale;
 
-            auto* model = swerveSystem.GetModel();
-            if (model)
+            if (col)
             {
-                // Convert Engine (+X Left, +Y Up, +Z Forward) to NWU (+X Fwd, +Y Left, +Z Up)
-                glm::vec3 posNWU(worldPos.z, worldPos.x, worldPos.y);
-                glm::quat rotNWU(worldRot.w, worldRot.z, worldRot.x, worldRot.y);
-                model->ApplyExternalCorrections(posNWU, rotNWU, glm::vec3(0.0f), glm::vec3(0.0f));
-
-                for (uint32_t i = 0; i < 4; ++i)
+                if (col->shape == ColliderShape::Box)
                 {
-                    model->GetModule(i).GetState() = SwerveModuleState{};
+                    visualScale = col->boxHalfExtents * 2.0f;
+                }
+                else if (col->shape == ColliderShape::Cylinder || col->shape == ColliderShape::Capsule)
+                {
+                    visualScale = glm::vec3(col->radius * 2.0f, col->halfHeight * 2.0f, col->radius * 2.0f);
+                }
+                else if (col->shape == ColliderShape::Sphere)
+                {
+                    visualScale = glm::vec3(col->radius * 2.0f);
                 }
             }
 
-            swerveDriveVolts = 0.0f;
-            swerveTargetSteerAngle = 0.0f;
+            Entity visualEntity = scene.CreateEntity();
+            TransformComponent visualT;
+            visualT.position = visualOffset;
+            visualT.rotation = visualRot;
+            visualT.scale = visualScale;
+            scene.AddComponent(visualEntity, visualT);
+
+            WorldTransformComponent visualWt;
+            visualWt.worldPosition = linkT->position + (linkT->rotation * visualOffset);
+            visualWt.worldRotation = linkT->rotation * visualRot;
+            visualWt.worldScale = visualScale;
+            scene.AddComponent(visualEntity, visualWt);
+
+            HierarchyComponent visualH;
+            visualH.parent = linkEntity;
+            scene.AddComponent(visualEntity, visualH);
+
+            auto* linkH = scene.GetComponent<HierarchyComponent>(linkEntity);
+            if (linkH)
+            {
+                linkH->children.push_back(visualEntity);
+            }
+            else
+            {
+                HierarchyComponent newLinkH;
+                newLinkH.children.push_back(visualEntity);
+                scene.AddComponent(linkEntity, newLinkH);
+            }
+
+            MeshComponent mesh;
+            mesh.shape = shape;
+            mesh.color = color;
+            scene.AddComponent(visualEntity, mesh);
         };
 
+    // A. Chassis Bumpers
+    attachVisualMesh(robot.chassisEntity, PrimitiveShape::Cube, glm::vec3(0.14f, 0.28f, 0.52f)); // Royal Blue Chassis Bumper
+
+    // B. Elevator Stages
+    auto s1It = robot.linkEntities.find("elevator_stage_1");
+    if (s1It != robot.linkEntities.end())
+    {
+        attachVisualMesh(s1It->second, PrimitiveShape::Cube, glm::vec3(0.78f, 0.82f, 0.86f)); // Brushed Aluminum Silver
+    }
+
+    auto carrIt = robot.linkEntities.find("elevator_carriage");
+    if (carrIt != robot.linkEntities.end())
+    {
+        attachVisualMesh(carrIt->second, PrimitiveShape::Cube, glm::vec3(0.24f, 0.26f, 0.30f)); // Dark Carbon Carriage
+    }
+
+    // C. Arm Links
+    auto armIt = robot.linkEntities.find("arm_shoulder_link");
+    if (armIt != robot.linkEntities.end())
+    {
+        attachVisualMesh(armIt->second, PrimitiveShape::Cube, glm::vec3(0.88f, 0.44f, 0.12f)); // Anodized Orange Arm Tube
+    }
+
+    auto wristIt = robot.linkEntities.find("arm_wrist_link");
+    if (wristIt != robot.linkEntities.end())
+    {
+        attachVisualMesh(wristIt->second, PrimitiveShape::Cube, glm::vec3(0.18f, 0.68f, 0.88f)); // Cyan Wrist Bracket
+    }
+
+    // D. Intake Links
+    auto icIt = robot.linkEntities.find("intake_coupler_link");
+    if (icIt != robot.linkEntities.end())
+    {
+        attachVisualMesh(icIt->second, PrimitiveShape::Cube, glm::vec3(0.28f, 0.85f, 0.32f)); // Neon Green Intake Roller
+    }
+
+    auto fcrankIt = robot.linkEntities.find("intake_crank_link");
+    if (fcrankIt != robot.linkEntities.end())
+    {
+        attachVisualMesh(fcrankIt->second, PrimitiveShape::Cube, glm::vec3(0.62f, 0.68f, 0.76f),
+            glm::vec3(0.06f, 0.04f, 0.24f), glm::vec3(0.0f, 0.0f, 0.12f));
+    }
+
+    auto ffolIt = robot.linkEntities.find("intake_follower_link");
+    if (ffolIt != robot.linkEntities.end())
+    {
+        attachVisualMesh(ffolIt->second, PrimitiveShape::Cube, glm::vec3(0.76f, 0.60f, 0.36f),
+            glm::vec3(0.06f, 0.04f, 0.24f), glm::vec3(0.0f, 0.0f, 0.12f));
+    }
+
+    // E. Shooter Flywheel Wheel
+    auto fwIt = robot.linkEntities.find("shooter_flywheel_visual");
+    if (fwIt != robot.linkEntities.end())
+    {
+        attachVisualMesh(fwIt->second, PrimitiveShape::CylinderX, glm::vec3(0.95f, 0.88f, 0.18f),
+            glm::vec3(0.10f, 0.12f, 0.12f)); // High-RPM Yellow Flywheel
+    }
+
     // -------------------------------------------------------------------------
-    // 8. Interactive State & Simulation Stepper
+    // 9. Interactive State, Control Demands & Camera Configuration
     // -------------------------------------------------------------------------
+    auto& camera = renderer.GetCamera();
+    camera.position = glm::vec3(0.0f, 2.5f, -3.8f);
+    camera.pitchDegrees = -16.0f;
+    camera.yawDegrees = 90.0f;
+    camera.moveSpeed = 6.0f;
+    camera.SetMode(FRCBananaSim::Renderer::Camera::Mode::Orbit);
+    camera.orbitTarget = robotSpawnPos + glm::vec3(0.0f, 0.35f, 0.0f);
+    camera.orbitDistance = 3.6f;
+    glm::vec3 lastChassisPos = robotSpawnPos;
+
+    SimInputs robotInputs;
+    SimOutputs robotOutputs;
+    robot.electricalSystem->SetOutputs(&robotOutputs);
+    robot.sensorSystem->SetOutputs(&robotOutputs);
+
     double simSpeed = 1.0;
     double simAccumulator = 0.0;
     bool doSingleStep = false;
@@ -583,546 +569,778 @@ int main(int argc, char* argv[])
     double accumulatedPhysicsMs = 0.0;
     double currentUpdateMs = 0.0;
 
-    auto executeSimulationStep = [&](double fixedDeltaTime)
+    // Interactive Manual Control Overrides
+    bool robotMasterEnabled = true;
+    bool pinChassisStand = false;
+    int cameraModeIndex = 1; // 0 = FreeFly, 1 = Orbit Robot
+
+    // Drivetrain Manual Demands (UI Sliders + Keyboard Offsets)
+    float manualDriveVolts = 0.0f;
+    float manualStrafeVolts = 0.0f;
+    float manualSpinVolts = 0.0f;
+    float manualSteerAngleDeg = 0.0f;
+    float keyDriveVolts = 0.0f;
+    float keyStrafeVolts = 0.0f;
+    float keySpinVolts = 0.0f;
+    bool runSwerveStressTest = false;
+    double swerveStressElapsed = 0.0;
+
+    // Mechanism Manual Demands
+    float manualElevatorVolts = 0.0f;
+    float manualArmVolts = 0.0f;
+    float manualWristVolts = 0.0f;
+    float manualFlywheelVolts = 0.0f;
+    bool intakeDeployed = false;
+
+    // Visual Debug Options
+    bool showColliders = true;
+    bool showWheelContacts = true;
+    bool showContactZones = true;
+    bool debugDrawAlwaysOnTop = false;
+
+    // Reposition Helper
+    auto resetRobot = [&](const glm::vec3& worldPos, const glm::quat& worldRot)
         {
-            if (!swerveRobot.isSuccess)
+            auto* chassisRb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
+            if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
             {
-                return;
-            }
+                glm::vec3 joltTargetPos = worldPos;
+                glm::quat joltTargetRot = worldRot;
+                auto* chassisCol = scene.GetComponent<ColliderComponent>(robot.chassisEntity);
+                if (chassisCol)
+                {
+                    joltTargetPos += worldRot * chassisCol->localOffset;
+                    joltTargetRot = glm::normalize(worldRot * chassisCol->localRotation);
+                }
 
-            auto* battery = scene.GetComponent<BatteryComponent>(batteryEntity);
-
-            // 1. Pin/Unpin chassis via motion type (in Jolt mode)
-            auto* chassisRb = scene.GetComponent<RigidBodyComponent>(swerveRobot.chassisEntity);
-            if (useJoltPhysics && chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
-            {
                 JPH::BodyInterface& bi = joltContext.GetBodyInterface();
-                JPH::EMotionType targetMotion = swervePinChassis ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic;
-                if (bi.GetMotionType(chassisRb->bodyID) != targetMotion)
-                {
-                    bi.SetMotionType(chassisRb->bodyID, targetMotion, JPH::EActivation::Activate);
-                }
+                bi.SetPositionAndRotation(chassisRb->bodyID,
+                    JPH::RVec3(joltTargetPos.x, joltTargetPos.y, joltTargetPos.z),
+                    JPH::Quat(joltTargetRot.x, joltTargetRot.y, joltTargetRot.z, joltTargetRot.w),
+                    JPH::EActivation::Activate);
+                bi.SetLinearAndAngularVelocity(chassisRb->bodyID, JPH::Vec3::sZero(), JPH::Vec3::sZero());
             }
 
-            // 2. Control demands
-            if (swerveRunStressTest)
+            auto* chassisT = scene.GetComponent<TransformComponent>(robot.chassisEntity);
+            if (chassisT)
             {
-                swerveStressElapsed += fixedDeltaTime;
-                swerveInputs.robotEnabled = true;
-
-                for (uint32_t i = 0; i < 4; ++i)
-                {
-                    swerveInputs.motorCommands[i].mode = MotorControlMode::Voltage;
-                    swerveInputs.motorCommands[i].demand = 12.0;
-                    swerveInputs.motorCommands[i].statorCurrentLimit = 60.0;
-                    swerveInputs.motorCommands[i].neutralMode = NeutralMode::Brake;
-
-                    swerveInputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
-                    swerveInputs.motorCommands[4 + i].demand = 12.0;
-                    swerveInputs.motorCommands[4 + i].statorCurrentLimit = 60.0;
-                    swerveInputs.motorCommands[4 + i].neutralMode = NeutralMode::Brake;
-                }
-
-                if (swerveStressElapsed >= 60.0)
-                {
-                    swerveRunStressTest = false;
-                    SIM_LOG_INFO("60-Second Real-Time Swerve Stress Test Complete!");
-                }
-            }
-            else
-            {
-                swerveInputs.robotEnabled = swerveEnabled;
-                NeutralMode nMode = (swerveNeutralModeIndex == 0) ? NeutralMode::Brake : NeutralMode::Coast;
-
-                // Closed-loop azimuth heading hold via simulated encoder feedback
-                constexpr double kSteerP = 12.0;
-                constexpr double kSteerD = 0.6;
-
-                for (uint32_t i = 0; i < 4; ++i)
-                {
-                    double currentAngle = swerveOutputs.encoderPositions[i];
-                    double currentVel = swerveOutputs.encoderVelocities[i];
-                    double angleError = static_cast<double>(swerveTargetSteerAngle) - currentAngle;
-
-                    while (angleError > 3.14159265358979323846)
-                    {
-                        angleError -= 2.0 * 3.14159265358979323846;
-                    }
-                    while (angleError < -3.14159265358979323846)
-                    {
-                        angleError += 2.0 * 3.14159265358979323846;
-                    }
-
-                    double steerDemandVolts = std::clamp((angleError * kSteerP) - (currentVel * kSteerD), -12.0, 12.0);
-
-                    swerveInputs.motorCommands[i].mode = MotorControlMode::Voltage;
-                    swerveInputs.motorCommands[i].demand = steerDemandVolts;
-                    swerveInputs.motorCommands[i].statorCurrentLimit = 60.0;
-                    swerveInputs.motorCommands[i].neutralMode = NeutralMode::Brake;
-
-                    swerveInputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
-                    swerveInputs.motorCommands[4 + i].demand = swerveDriveVolts;
-                    swerveInputs.motorCommands[4 + i].statorCurrentLimit = 60.0;
-                    swerveInputs.motorCommands[4 + i].neutralMode = nMode;
-                }
+                chassisT->position = worldPos;
+                chassisT->rotation = worldRot;
             }
 
-            // 3. Advance Swerve Drivetrain Simulation
-            swerveSystem.SetInputs(swerveInputs);
-            swerveSystem.FixedUpdate(fixedDeltaTime);
-            swerveOutputs = swerveSystem.GetOutputs();
-
-            // 4. Central Battery Bus Update
-            if (battery)
+            auto* chassisWt = scene.GetComponent<WorldTransformComponent>(robot.chassisEntity);
+            if (chassisWt)
             {
-                double totalActuatorSupplyCurrent = swerveOutputs.totalBusCurrent;
-                battery->terminalVoltage = battery->batteryModel.CalculateTerminalVoltage(totalActuatorSupplyCurrent);
-                battery->totalCurrent = totalActuatorSupplyCurrent + battery->batteryModel.GetQuiescentCurrent();
-                battery->isBrownoutWarning = battery->batteryModel.IsBrownoutWarning(battery->terminalVoltage);
-                battery->isBrownoutCritical = battery->batteryModel.IsBrownoutCritical(battery->terminalVoltage);
+                chassisWt->worldPosition = worldPos;
+                chassisWt->worldRotation = worldRot;
             }
 
-            // 5. Physics Integration Mode
-            if (useJoltPhysics)
+            if (robot.swerveSystem)
             {
-                // Jolt physics integration pass
-                scene.SetFixedDeltaTime(fixedDeltaTime);
-                scene.FixedUpdateSystems();
-
-                // Sync chassis transform into WorldTransformComponent
-                auto* t = scene.GetComponent<TransformComponent>(swerveRobot.chassisEntity);
-                auto* wt = scene.GetComponent<WorldTransformComponent>(swerveRobot.chassisEntity);
-                if (t && wt)
-                {
-                    wt->worldPosition = t->position;
-                    wt->worldRotation = t->rotation;
-                    wt->worldScale = t->scale;
-                }
-            }
-            else
-            {
-                // No-Jolt Mode: SwerveDrivetrainModel already integrated its 6-DOF pose in Step()
-                auto* model = swerveSystem.GetModel();
+                auto* model = robot.swerveSystem->GetModel();
                 if (model)
                 {
-                    const auto& motion = model->GetChassisState();
-                    // NWU (+X Fwd, +Y Left, +Z Up) -> Engine (+X Left, +Y Up, +Z Forward)
-                    glm::vec3 posEng(motion.position.y, motion.position.z, motion.position.x);
-                    glm::quat rotEng(motion.orientation.w, motion.orientation.y, motion.orientation.z, motion.orientation.x);
-
-                    auto* chassisT = scene.GetComponent<TransformComponent>(swerveRobot.chassisEntity);
-                    if (chassisT)
+                    glm::vec3 posNWU = FRCBananaSim::Robot::Schema::RobotSchemaLoader::ConvertEngineVectorToNWU(worldPos);
+                    glm::quat rotNWU = glm::quat(FRCBananaSim::Robot::Schema::RobotSchemaLoader::ConvertEngineQuatToNWU(glm::dquat(worldRot)));
+                    model->ApplyExternalCorrections(posNWU, rotNWU, glm::vec3(0.0f), glm::vec3(0.0f));
+                    for (uint32_t i = 0; i < 4; ++i)
                     {
-                        chassisT->position = posEng;
-                        chassisT->rotation = rotEng;
-                    }
-
-                    auto* chassisWt = scene.GetComponent<WorldTransformComponent>(swerveRobot.chassisEntity);
-                    if (chassisWt)
-                    {
-                        chassisWt->worldPosition = posEng;
-                        chassisWt->worldRotation = rotEng;
-                    }
-
-                    // Keep Jolt body position synchronized in background for seamless transitions
-                    if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized())
-                    {
-                        JPH::BodyInterface& bi = joltContext.GetBodyInterface();
-                        bi.SetPositionAndRotation(chassisRb->bodyID,
-                            JPH::RVec3(posEng.x, posEng.y, posEng.z),
-                            JPH::Quat(rotEng.x, rotEng.y, rotEng.z, rotEng.w),
-                            JPH::EActivation::DontActivate);
+                        model->GetModule(i).GetState() = FRCBananaSim::Robot::Drivetrain::Model::SwerveModuleState{};
                     }
                 }
+            }
+
+            manualDriveVolts = 0.0f;
+            manualStrafeVolts = 0.0f;
+            manualSpinVolts = 0.0f;
+            manualSteerAngleDeg = 0.0f;
+            lastChassisPos = worldPos;
+            if (camera.GetMode() == FRCBananaSim::Renderer::Camera::Mode::Orbit)
+            {
+                camera.orbitTarget = worldPos + glm::vec3(0.0f, 0.35f, 0.0f);
+            }
+        };
+
+    // -------------------------------------------------------------------------
+    // 10. Single Fixed-Timestep Simulation Step (200 Hz = 5 ms)
+    // -------------------------------------------------------------------------
+    auto executeSimulationStep = [&](double dt)
+        {
+            SIM_PROFILE_SCOPE("SimulationStep");
+
+            // 1. Chassis Pinning on Test Stand
+            auto* chassisRb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
+            if (chassisRb && !chassisRb->bodyID.IsInvalid() && joltContext.IsInitialized() && pinChassisStand)
+            {
+                JPH::BodyInterface& bi = joltContext.GetBodyInterface();
+                bi.SetLinearAndAngularVelocity(chassisRb->bodyID, JPH::Vec3::sZero(), JPH::Vec3::sZero());
+            }
+
+            // 2. Command Arbitration (WPILib Client vs Standalone Manual)
+            if (wsServer.IsClientConnected())
+            {
+                wsServer.UpdateInputs(robotInputs);
+                robotInputs.robotEnabled = wsServer.IsDriverStationEnabled();
+            }
+            else
+            {
+                robotInputs.robotEnabled = robotMasterEnabled;
+
+                if (runSwerveStressTest)
+                {
+                    swerveStressElapsed += dt;
+                    pinChassisStand = true;
+
+                    for (uint32_t i = 0; i < 4; ++i)
+                    {
+                        robotInputs.motorCommands[i].mode = MotorControlMode::Voltage;
+                        robotInputs.motorCommands[i].demand = 12.0;
+                        robotInputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
+                        robotInputs.motorCommands[4 + i].demand = 12.0;
+                    }
+
+                    if (swerveStressElapsed >= 60.0)
+                    {
+                        runSwerveStressTest = false;
+                        SIM_LOG_INFO("60-Second Real-Time Swerve Stress Test Complete!");
+                    }
+                }
+                else
+                {
+                    // Drivetrain Swerve Commands: [0..3] Steer, [4..7] Drive
+                    // Combine UI slider demands with keyboard driving demands
+                    double cmdVx = std::clamp(static_cast<double>(manualDriveVolts + keyDriveVolts), -12.0, 12.0);
+                    double cmdVy = std::clamp(static_cast<double>(manualStrafeVolts + keyStrafeVolts), -12.0, 12.0);
+                    double cmdOmega = std::clamp(static_cast<double>(manualSpinVolts + keySpinVolts), -12.0, 12.0);
+
+                    constexpr double kP = 18.0;
+                    constexpr double kD = 0.6;
+                    constexpr double kInvSqrt2 = 0.7071067811865475;
+                    // Module unit offset directions (rx, ry) in NWU (+X Forward, +Y Left): FL, FR, BL, BR
+                    constexpr double modRx[4] = { +kInvSqrt2, +kInvSqrt2, -kInvSqrt2, -kInvSqrt2 };
+                    constexpr double modRy[4] = { +kInvSqrt2, -kInvSqrt2, +kInvSqrt2, -kInvSqrt2 };
+
+                    double modVx[4] = { 0.0, 0.0, 0.0, 0.0 };
+                    double modVy[4] = { 0.0, 0.0, 0.0, 0.0 };
+                    double modMag[4] = { 0.0, 0.0, 0.0, 0.0 };
+                    double maxModMag = 0.0;
+
+                    bool useDirectHeading = (std::abs(cmdVy) < 1e-3 && std::abs(cmdOmega) < 1e-3 && std::abs(manualSteerAngleDeg) > 1e-3f);
+                    if (!useDirectHeading)
+                    {
+                        for (uint32_t i = 0; i < 4; ++i)
+                        {
+                            modVx[i] = cmdVx - (cmdOmega * modRy[i]);
+                            modVy[i] = cmdVy + (cmdOmega * modRx[i]);
+                            modMag[i] = std::hypot(modVx[i], modVy[i]);
+                            maxModMag = std::max(maxModMag, modMag[i]);
+                        }
+                    }
+
+                    double desaturateScale = (maxModMag > 12.0) ? (12.0 / maxModMag) : 1.0;
+
+                    for (uint32_t i = 0; i < 4; ++i)
+                    {
+                        double targetAngle = static_cast<double>(glm::radians(manualSteerAngleDeg));
+                        double driveVolts = cmdVx;
+
+                        if (!useDirectHeading)
+                        {
+                            if (modMag[i] > 1e-3)
+                            {
+                                targetAngle = std::atan2(modVy[i], modVx[i]);
+                                driveVolts = modMag[i] * desaturateScale;
+                            }
+                            else
+                            {
+                                targetAngle = static_cast<double>(glm::radians(manualSteerAngleDeg));
+                                driveVolts = 0.0;
+                            }
+                        }
+
+                        double curAngle = robotOutputs.encoderPositions[i];
+                        double curVel = robotOutputs.encoderVelocities[i];
+                        double err = targetAngle - curAngle;
+
+                        while (err > 3.141592653589793) err -= 6.283185307179586;
+                        while (err < -3.141592653589793) err += 6.283185307179586;
+
+                        // Swerve module 180-degree azimuth optimization + cosine velocity scaling
+                        if (std::abs(driveVolts) > 1e-3)
+                        {
+                            if (err > 1.5707963267948966)
+                            {
+                                err -= 3.141592653589793;
+                                driveVolts = -driveVolts;
+                            }
+                            else if (err < -1.5707963267948966)
+                            {
+                                err += 3.141592653589793;
+                                driveVolts = -driveVolts;
+                            }
+                            driveVolts *= std::cos(err);
+                        }
+
+                        double steerV = std::clamp((err * kP) - (curVel * kD), -12.0, 12.0);
+
+                        robotInputs.motorCommands[i].mode = MotorControlMode::Voltage;
+                        robotInputs.motorCommands[i].demand = steerV;
+                        robotInputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
+                        robotInputs.motorCommands[4 + i].demand = driveVolts;
+                    }
+
+                    // Mechanisms Motor Slots:
+                    // [8] Elevator Drive
+                    robotInputs.motorCommands[8].mode = MotorControlMode::Voltage;
+                    robotInputs.motorCommands[8].demand = manualElevatorVolts;
+
+                    // [9] Arm Shoulder
+                    robotInputs.motorCommands[9].mode = MotorControlMode::Voltage;
+                    robotInputs.motorCommands[9].demand = manualArmVolts;
+
+                    // [10] Arm Wrist
+                    robotInputs.motorCommands[10].mode = MotorControlMode::Voltage;
+                    robotInputs.motorCommands[10].demand = manualWristVolts;
+
+                    // [11] Intake 4-Bar Deploy
+                    robotInputs.motorCommands[11].mode = MotorControlMode::Voltage;
+                    double intakeAngle = 0.0;
+                    double intakeVel = 0.0;
+                    auto intakeCheckIt = robot.mechanismEntities.find("intake_fourbar_deploy");
+                    if (intakeCheckIt != robot.mechanismEntities.end())
+                    {
+                        auto* intakeArm = scene.GetComponent<ArmComponent>(intakeCheckIt->second);
+                        if (intakeArm)
+                        {
+                            intakeAngle = intakeArm->currentAngleRad;
+                            intakeVel = intakeArm->currentVelocityRadPerSec;
+                        }
+                    }
+                    double targetIntakeAngle = intakeDeployed ? 1.20 : 0.0;
+                    double intakeErr = targetIntakeAngle - intakeAngle;
+                    if (std::abs(intakeErr) > 0.008 || std::abs(intakeVel) > 0.05)
+                    {
+                        double pdVolts = (intakeErr * 18.0) - (intakeVel * 1.2);
+                        robotInputs.motorCommands[11].demand = std::clamp(pdVolts, -6.0, 6.0);
+                    }
+                    else
+                    {
+                        robotInputs.motorCommands[11].demand = 0.0;
+                    }
+
+                    // [12] Shooter Flywheel
+                    robotInputs.motorCommands[12].mode = MotorControlMode::Voltage;
+                    robotInputs.motorCommands[12].demand = manualFlywheelVolts;
+                }
+            }
+
+            // 3. Dispatch Demands to Subsystems
+            if (robot.swerveSystem)
+            {
+                robot.swerveSystem->SetInputs(robotInputs);
+            }
+
+            auto elevIt = robot.mechanismEntities.find("elevator_drive");
+            if (elevIt != robot.mechanismEntities.end())
+            {
+                auto* elev = scene.GetComponent<ElevatorComponent>(elevIt->second);
+                if (elev) elev->commandedVoltage = robotInputs.motorCommands[8].demand;
+            }
+
+            auto armMIt = robot.mechanismEntities.find("arm_shoulder");
+            if (armMIt != robot.mechanismEntities.end())
+            {
+                auto* arm = scene.GetComponent<ArmComponent>(armMIt->second);
+                if (arm) arm->commandedVoltage = robotInputs.motorCommands[9].demand;
+            }
+
+            auto wristMIt = robot.mechanismEntities.find("arm_wrist");
+            if (wristMIt != robot.mechanismEntities.end())
+            {
+                auto* wrist = scene.GetComponent<ArmComponent>(wristMIt->second);
+                if (wrist) wrist->commandedVoltage = robotInputs.motorCommands[10].demand;
+            }
+
+            auto intakeMIt = robot.mechanismEntities.find("intake_fourbar_deploy");
+            if (intakeMIt != robot.mechanismEntities.end())
+            {
+                auto* intakeArm = scene.GetComponent<ArmComponent>(intakeMIt->second);
+                if (intakeArm) intakeArm->commandedVoltage = robotInputs.motorCommands[11].demand;
+            }
+
+            auto fwMIt = robot.mechanismEntities.find("shooter_flywheel");
+            if (fwMIt != robot.mechanismEntities.end())
+            {
+                auto* fw = scene.GetComponent<FlywheelComponent>(fwMIt->second);
+                if (fw) fw->commandedVoltage = robotInputs.motorCommands[12].demand;
+            }
+
+            // 4. Step Jolt Constraints & 8-Stage Pipeline
+            jointSystem.FixedUpdate(dt);
+            FRCBananaSim::Robot::RobotAssembler::StepPipeline(robot, dt);
+            jointSystem.ReadbackTelemetry();
+
+            if (totalSimSteps == 0)
+            {
+                std::cout << "[Simulator] Simulation Step 0 executed smoothly.\n";
+            }
+
+            // 5. Pull Telemetry & Broadcast Outgoing Frames
+            robotOutputs = robot.sensorSystem->GetOutputs();
+            if (robot.swerveSystem)
+            {
+                const auto& swerveOut = robot.swerveSystem->GetOutputs();
+                for (uint32_t i = 0; i < 8; ++i)
+                {
+                    robotOutputs.encoderPositions[i] = swerveOut.encoderPositions[i];
+                    robotOutputs.encoderVelocities[i] = swerveOut.encoderVelocities[i];
+                    robotOutputs.rotorPositionsRot[i] = swerveOut.rotorPositionsRot[i];
+                    robotOutputs.rotorVelocitiesRps[i] = swerveOut.rotorVelocitiesRps[i];
+                    robotOutputs.motorCurrents[i] = swerveOut.motorCurrents[i];
+                    robotOutputs.motorSupplyCurrents[i] = swerveOut.motorSupplyCurrents[i];
+                }
+                robotOutputs.gyroYaw = swerveOut.gyroYaw;
+                robotOutputs.gyroPitch = swerveOut.gyroPitch;
+                robotOutputs.gyroRoll = swerveOut.gyroRoll;
+                robotOutputs.gyroYawRate = swerveOut.gyroYawRate;
+            }
+            robotOutputs.batteryTerminalVoltage = robot.electricalSystem->GetTerminalVoltage();
+            robotOutputs.totalBusCurrent = robot.electricalSystem->GetTotalCurrent();
+            robotOutputs.isBrownedOut = robot.electricalSystem->IsBrownedOut();
+
+            if (wsServer.IsClientConnected())
+            {
+                wsServer.SendOutputs(robotOutputs);
+            }
+
+            // 6. Record Calibration Telemetry
+            if (drivetrainLogger.IsRecording())
+            {
+                FRCBananaSim::Telemetry::DrivetrainLogSample sample;
+                sample.timestamp = static_cast<double>(totalSimSteps) * dt;
+                sample.commandedVoltage = manualDriveVolts;
+                sample.batteryVoltage = robotOutputs.batteryTerminalVoltage;
+                sample.totalBusCurrent = robotOutputs.totalBusCurrent;
+
+                auto* chassisT = scene.GetComponent<TransformComponent>(robot.chassisEntity);
+                sample.chassisElevation = chassisT ? chassisT->position.y : 0.0;
+
+                if (robot.swerveSystem && robot.swerveSystem->GetModel())
+                {
+                    const auto& motion = robot.swerveSystem->GetModel()->GetChassisState();
+                    glm::vec3 linVel(motion.linearVelocity.y, motion.linearVelocity.z, motion.linearVelocity.x);
+                    sample.chassisSpeed = glm::length(glm::vec2(linVel.x, linVel.z));
+
+                    for (uint32_t i = 0; i < 4; ++i)
+                    {
+                        const auto& modState = robot.swerveSystem->GetModel()->GetModule(i).GetState();
+                        sample.steerAnglesDeg[i] = glm::degrees(modState.steerAngle);
+                        sample.wheelVelocitiesRadS[i] = modState.wheelVelocity;
+                        sample.driveCurrentsA[i] = modState.driveStatorCurrent;
+                        sample.normalForcesN[i] = modState.contactState.normalForce;
+                        sample.slipRatios[i] = modState.contactState.saturationRatio;
+                    }
+                }
+
+                sample.gyroYawDeg = glm::degrees(robotOutputs.gyroYaw);
+                sample.gyroPitchDeg = glm::degrees(robotOutputs.gyroPitch);
+                sample.gyroRollDeg = glm::degrees(robotOutputs.gyroRoll);
+                sample.gyroYawRateDegS = glm::degrees(robotOutputs.gyroYawRate);
+
+                drivetrainLogger.RecordSample(sample);
+            }
+
+            if (totalSimSteps <= 400 && (totalSimSteps % 50 == 0))
+            {
+                auto* chassisT = scene.GetComponent<TransformComponent>(robot.chassisEntity);
+                auto* couplerT = scene.GetComponent<TransformComponent>(robot.linkEntities["intake_coupler_link"]);
+                auto* armT = scene.GetComponent<TransformComponent>(robot.linkEntities["arm_shoulder_link"]);
+                auto* wristT = scene.GetComponent<TransformComponent>(robot.linkEntities["arm_wrist_link"]);
+                auto* fwT = scene.GetComponent<TransformComponent>(robot.linkEntities["shooter_flywheel_visual"]);
+                auto* elevT = scene.GetComponent<TransformComponent>(robot.linkEntities["elevator_stage_1"]);
+
+                double wVel0 = 0.0, wVel1 = 0.0, wVel2 = 0.0, wVel3 = 0.0;
+                double wN0 = 0.0, wN1 = 0.0, wN2 = 0.0, wN3 = 0.0;
+                if (robot.swerveSystem && robot.swerveSystem->GetModel())
+                {
+                    auto* m = robot.swerveSystem->GetModel();
+                    wVel0 = m->GetModule(0).GetState().wheelVelocity;
+                    wVel1 = m->GetModule(1).GetState().wheelVelocity;
+                    wVel2 = m->GetModule(2).GetState().wheelVelocity;
+                    wVel3 = m->GetModule(3).GetState().wheelVelocity;
+                    wN0 = m->GetModule(0).GetState().contactState.normalForce;
+                    wN1 = m->GetModule(1).GetState().contactState.normalForce;
+                    wN2 = m->GetModule(2).GetState().contactState.normalForce;
+                    wN3 = m->GetModule(3).GetState().contactState.normalForce;
+                }
+
+                double crankAngleDeg = 0.0;
+                double folAngleDeg = 0.0;
+                auto cjIt = robot.jointEntities.find("fourbar_crank_hinge");
+                auto fjIt = robot.jointEntities.find("fourbar_follower_hinge");
+                if (cjIt != robot.jointEntities.end())
+                {
+                    if (auto* cjc = scene.GetComponent<JointComponent>(cjIt->second))
+                    {
+                        crankAngleDeg = glm::degrees(cjc->currentAngle);
+                    }
+                }
+                if (fjIt != robot.jointEntities.end())
+                {
+                    if (auto* fjc = scene.GetComponent<JointComponent>(fjIt->second))
+                    {
+                        folAngleDeg = glm::degrees(fjc->currentAngle);
+                    }
+                }
+
+                double lastTotalMs = 0.0, lastPhysMs = 0.0, lastUpdMs = 0.0, lastRenMs = 0.0;
+                const auto& hist = FRCBananaSim::Telemetry::TelemetryManager::Get().GetFrameHistory();
+                if (!hist.empty())
+                {
+                    lastTotalMs = hist.back().totalFrameMs;
+                    lastPhysMs = hist.back().physicsMs;
+                    lastUpdMs = hist.back().updateMs;
+                    lastRenMs = hist.back().renderMs;
+                }
+
+                std::cout << "[Step " << totalSimSteps << "] "
+                    << "ChassisPos=(" << (chassisT ? chassisT->position.x : 0.0f) << ", "
+                    << (chassisT ? chassisT->position.y : 0.0f) << ", "
+                    << (chassisT ? chassisT->position.z : 0.0f) << ") "
+                    << "PitchDeg=" << glm::degrees(robotOutputs.gyroPitch) << " "
+                    << "RollDeg=" << glm::degrees(robotOutputs.gyroRoll) << " "
+                    << "WheelVel=[" << wVel0 << ", " << wVel1 << ", " << wVel2 << ", " << wVel3 << "] "
+                    << "4BarDeg=[Crank=" << crankAngleDeg << ", Fol=" << folAngleDeg << "] "
+                    << "CouplerPos=(" << (couplerT ? couplerT->position.x : 0.0f) << ", "
+                    << (couplerT ? couplerT->position.y : 0.0f) << ", "
+                    << (couplerT ? couplerT->position.z : 0.0f) << ") "
+                    << "FrameMs=" << lastTotalMs << " (Phys=" << lastPhysMs
+                    << ", Upd=" << lastUpdMs << ", Ren=" << lastRenMs << ") "
+                    << "Vbat=" << robotOutputs.batteryTerminalVoltage << std::endl;
             }
 
             ++totalSimSteps;
         };
 
     // -------------------------------------------------------------------------
-    // 9. Engine Loop Configuration
+    // 11. Engine Loop Configuration
     // -------------------------------------------------------------------------
-    Engine engine(200.0, 0.0);
+    FRCBananaSim::Core::Engine engine(200.0, 0.0);
 
-    engine.SetFixedUpdateCallback([&](double fixedDeltaTime)
+    engine.SetFixedUpdateCallback([&](double dt)
         {
-            SIM_PROFILE_SCOPE("FixedUpdate");
-            auto start = std::chrono::high_resolution_clock::now();
-
             if (simSpeed == 0.0)
             {
                 if (doSingleStep)
                 {
                     doSingleStep = false;
-                    executeSimulationStep(fixedDeltaTime);
+                    executeSimulationStep(dt);
                 }
             }
             else
             {
-                simAccumulator += fixedDeltaTime * simSpeed;
-                int stepsTaken = 0;
-                while (simAccumulator >= fixedDeltaTime && stepsTaken < 8)
+                simAccumulator += dt * simSpeed;
+                int steps = 0;
+                while (simAccumulator >= dt && steps < 4)
                 {
-                    simAccumulator -= fixedDeltaTime;
-                    executeSimulationStep(fixedDeltaTime);
-                    ++stepsTaken;
+                    simAccumulator -= dt;
+                    executeSimulationStep(dt);
+                    ++steps;
                 }
             }
-
-            auto end = std::chrono::high_resolution_clock::now();
-            accumulatedPhysicsMs += std::chrono::duration<double, std::milli>(end - start).count();
         });
 
     // -------------------------------------------------------------------------
-    // 10. Per-Frame Update Callback & ImGui HUD
+    // 12. Frame Presentation & Interactive ImGui HUD
     // -------------------------------------------------------------------------
-    engine.SetUpdateCallback([&](double deltaTime)
+    engine.SetUpdateCallback([&](double dt)
         {
-            SIM_PROFILE_SCOPE("Update");
-            auto start = std::chrono::high_resolution_clock::now();
-
             if (renderer.ShouldClose())
             {
                 engine.RequestExit();
                 return;
             }
 
+            renderer.BeginFrame();
+            cameraModeIndex = (camera.GetMode() == FRCBananaSim::Renderer::Camera::Mode::FreeFly) ? 0 : 1;
+
             auto& input = renderer.GetInput();
 
-            // Keyboard Driving Controls (Arrow Keys)
-            if (!swerveRunStressTest && swerveEnabled && !ImGui::GetIO().WantTextInput)
+            // 1. Keyboard Driving Controls (Arrow Keys or WASD + Q/E when RMB is not held)
+            keyDriveVolts = 0.0f;
+            keyStrafeVolts = 0.0f;
+            keySpinVolts = 0.0f;
+            bool rmbHeld = input.IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT);
+
+            if (!runSwerveStressTest && robotMasterEnabled && !ImGui::GetIO().WantTextInput && !rmbHeld)
             {
-                // Drive Forward / Reverse (Up / Down)
-                if (input.IsKeyDown(GLFW_KEY_UP) || input.IsKeyDown(GLFW_KEY_KP_8))
+                if (input.IsKeyDown(GLFW_KEY_UP) || input.IsKeyDown(GLFW_KEY_W))
                 {
-                    swerveDriveVolts = 10.0f;
+                    keyDriveVolts = 10.0f;
                 }
-                else if (input.IsKeyDown(GLFW_KEY_DOWN) || input.IsKeyDown(GLFW_KEY_KP_2))
+                else if (input.IsKeyDown(GLFW_KEY_DOWN) || input.IsKeyDown(GLFW_KEY_S))
                 {
-                    swerveDriveVolts = -10.0f;
-                }
-                else
-                {
-                    swerveDriveVolts = 0.0f;
+                    keyDriveVolts = -10.0f;
                 }
 
-                // Steer Azimuth Angle (Left / Right)
-                if (input.IsKeyDown(GLFW_KEY_LEFT) || input.IsKeyDown(GLFW_KEY_KP_4))
+                if (input.IsKeyDown(GLFW_KEY_LEFT) || input.IsKeyDown(GLFW_KEY_A))
                 {
-                    swerveTargetSteerAngle += static_cast<float>(deltaTime * 2.5); // Slew Left (+Y NWU)
+                    keyStrafeVolts = 10.0f;
                 }
-                else if (input.IsKeyDown(GLFW_KEY_RIGHT) || input.IsKeyDown(GLFW_KEY_KP_6))
+                else if (input.IsKeyDown(GLFW_KEY_RIGHT) || input.IsKeyDown(GLFW_KEY_D))
                 {
-                    swerveTargetSteerAngle -= static_cast<float>(deltaTime * 2.5); // Slew Right (-Y NWU)
+                    keyStrafeVolts = -10.0f;
                 }
-                else
+
+                if (input.IsKeyDown(GLFW_KEY_Q))
                 {
-                    // Smoothly return steer heading to center (forward) when keys are released
-                    if (std::abs(swerveTargetSteerAngle) > 0.01f)
-                    {
-                        float returnStep = static_cast<float>(deltaTime * 4.0);
-                        if (swerveTargetSteerAngle > 0.0f)
-                        {
-                            swerveTargetSteerAngle = std::max(0.0f, swerveTargetSteerAngle - returnStep);
-                        }
-                        else
-                        {
-                            swerveTargetSteerAngle = std::min(0.0f, swerveTargetSteerAngle + returnStep);
-                        }
-                    }
-                    else
-                    {
-                        swerveTargetSteerAngle = 0.0f;
-                    }
+                    keySpinVolts = 10.0f;
                 }
-            }
-            else if (!swerveRunStressTest)
-            {
-                swerveDriveVolts = 0.0f;
+                else if (input.IsKeyDown(GLFW_KEY_E))
+                {
+                    keySpinVolts = -10.0f;
+                }
             }
 
-            // Simulation Speed Hotkeys (Keys 0-9)
+            // 2. Hotkeys: Speed, Step, Reset & Camera
             if (input.WasKeyPressed(GLFW_KEY_0)) simSpeed = 0.0;
-            else if (input.WasKeyPressed(GLFW_KEY_1)) simSpeed = 0.1;
-            else if (input.WasKeyPressed(GLFW_KEY_2)) simSpeed = 0.25;
-            else if (input.WasKeyPressed(GLFW_KEY_3)) simSpeed = 0.50;
-            else if (input.WasKeyPressed(GLFW_KEY_7)) simSpeed = 1.00;
-            else if (input.WasKeyPressed(GLFW_KEY_8)) simSpeed = 2.00;
-            else if (input.WasKeyPressed(GLFW_KEY_9)) simSpeed = 4.00;
+            else if (input.WasKeyPressed(GLFW_KEY_1)) simSpeed = 0.25;
+            else if (input.WasKeyPressed(GLFW_KEY_7)) simSpeed = 1.0;
+            else if (input.WasKeyPressed(GLFW_KEY_8)) simSpeed = 2.0;
 
             if (input.WasKeyPressed(GLFW_KEY_PERIOD))
             {
                 if (simSpeed == 0.0) doSingleStep = true;
             }
 
-            // F3: Toggle Profiler
+            if (input.WasKeyPressed(GLFW_KEY_R))
+            {
+                resetRobot(robotSpawnPos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+            }
+
             if (input.WasKeyPressed(GLFW_KEY_F3))
             {
-                TelemetryMode current = TelemetryManager::Get().GetMode();
-                TelemetryMode next = (current == TelemetryMode::Off) ? TelemetryMode::Minimal :
-                    ((current == TelemetryMode::Minimal) ? TelemetryMode::Full : TelemetryMode::Off);
+                auto mode = FRCBananaSim::Telemetry::TelemetryManager::Get().GetMode();
+                auto next = (mode == FRCBananaSim::Telemetry::TelemetryMode::Off)
+                    ? FRCBananaSim::Telemetry::TelemetryMode::Minimal
+                    : ((mode == FRCBananaSim::Telemetry::TelemetryMode::Minimal)
+                        ? FRCBananaSim::Telemetry::TelemetryMode::Full
+                        : FRCBananaSim::Telemetry::TelemetryMode::Off);
 
-                if (next == TelemetryMode::Full) profilerWindow.Open(renderer.GetWindow());
+                if (next == FRCBananaSim::Telemetry::TelemetryMode::Full) profilerWindow.Open(renderer.GetWindow());
                 else if (profilerWindow.IsOpen()) profilerWindow.Close(renderer.GetWindow());
 
-                TelemetryManager::Get().SetMode(next);
+                FRCBananaSim::Telemetry::TelemetryManager::Get().SetMode(next);
             }
 
-            // Render Frame
-            renderer.BeginFrame();
-
-            // 1. Queue all collider wireframes (Green carpet, Cyan ramp, Amber bump, Coral chassis)
-            if (showColliderDebugDraw)
+            // Update Camera Orbit Target incrementally with chassis displacement so user panning is preserved
+            auto* chassisT = scene.GetComponent<TransformComponent>(robot.chassisEntity);
+            if (chassisT)
             {
-                RenderSceneColliderDebugDraw(scene, debugDrawAlwaysOnTop, swerveRobot, swerveSystem,
-                    groundEntity, rampEntity, bumpEntity, showWheelContactDebugDraw);
+                glm::vec3 chassisDelta = chassisT->position - lastChassisPos;
+                if (camera.GetMode() == FRCBananaSim::Renderer::Camera::Mode::Orbit)
+                {
+                    camera.orbitTarget += chassisDelta;
+                }
+                lastChassisPos = chassisT->position;
+            }
+        });
+
+    engine.SetRenderCallback([&](double alpha)
+        {
+            if (renderer.ShouldClose())
+            {
+                return;
             }
 
-            // 2. Render solid meshes
-            scene.RenderUpdateSystems();
-            swerveSystem.RenderUpdate();
+            // A. Immediate-mode Debug Wireframes
+            RenderSceneDebugDraw(scene, showColliders, showWheelContacts, showContactZones,
+                debugDrawAlwaysOnTop, robot);
 
-            // 3. Flush all queued debug wireframes to screen
+            // B. Render Solid 3D Meshes
+            scene.RenderUpdateSystems();
+            if (robot.flywheelSystem) robot.flywheelSystem->RenderUpdate();
+            if (robot.swerveSystem) robot.swerveSystem->RenderUpdate();
+
+            // C. Flush Line Buffer to GPU
             renderer.FlushDebugDraw();
 
-            // 4. Render Telemetry HUD
+            // D. Telemetry Overlay
             telemetryOverlay.Render();
 
-            // --- ImGui Interactive Control Center ---
-            ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowSize(ImVec2(520.0f, 760.0f), ImGuiCond_FirstUseEver);
+            // -------------------------------------------------------------
+            // 4. ImGui Master Control Center
+            // -------------------------------------------------------------
+            ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize(ImVec2(560.0f, 820.0f), ImGuiCond_FirstUseEver);
 
-            if (ImGui::Begin("FRCBananaSim — 6-DOF Terrain Swerve Sandbox"))
+            if (ImGui::Begin("FRCBananaSim — Block 3 Reference 2026 Robot Test Station"))
             {
-                // Simulation Speed Controls
-                ImGui::Text("Simulation Time: %.2f s | Speed: %.2fx",
-                    static_cast<double>(totalSimSteps) * PhysicsConfig::fixedDeltaTime, simSpeed);
+                // Time & Time-Dilation Bar
+                ImGui::Text("Sim Time: %.2f s | Timestep: 200 Hz (5 ms) | Speed: %.2fx",
+                    static_cast<double>(totalSimSteps) * 0.005, simSpeed);
 
                 if (ImGui::Button("Pause (0x)")) simSpeed = 0.0; ImGui::SameLine();
                 if (ImGui::Button("0.25x")) simSpeed = 0.25; ImGui::SameLine();
                 if (ImGui::Button("1.0x (Realtime)")) simSpeed = 1.0; ImGui::SameLine();
-                if (ImGui::Button("2.0x (Fast)")) simSpeed = 2.0;
+                if (ImGui::Button("2.0x (Fast)")) simSpeed = 2.0; ImGui::SameLine();
+                if (ImGui::Button("Step Single Tick (.)")) { if (simSpeed == 0.0) doSingleStep = true; }
 
                 ImGui::Separator();
 
-                // -------------------------------------------------------------
-                // SIMULATION BACKEND SELECTION: JOLT VS. NO-JOLT
-                // -------------------------------------------------------------
-                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "SIMULATION BACKEND MODE:");
-                if (ImGui::RadioButton("Jolt Physics (Middleware)", useJoltPhysics))
-                {
-                    if (!useJoltPhysics)
-                    {
-                        useJoltPhysics = true;
-                        swerveSystem.SetCustomTerrainProvider(nullptr); // Restores Jolt CollideShape probe
-                    }
-                }
+                // Master Enable & Brownout Alarm Bar
+                ImGui::Checkbox("Master Enable Robot", &robotMasterEnabled);
                 ImGui::SameLine();
-                if (ImGui::RadioButton("No Jolt (Pure Analytic Math)", !useJoltPhysics))
-                {
-                    if (useJoltPhysics)
-                    {
-                        useJoltPhysics = false;
-                        swerveSystem.SetCustomTerrainProvider(analyticTerrain);
-                    }
-                }
+                ImGui::Checkbox("Pin Chassis to Stand", &pinChassisStand);
 
-                if (useJoltPhysics)
-                {
-                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "Active: Jolt 6-DOF Body + Jolt Terrain CollideShape Queries");
-                }
-                else
-                {
-                    ImGui::TextColored(ImVec4(0.2f, 0.9f, 1.0f, 1.0f), "Active: Pure Analytic Math + AnalyticFieldTerrain (Jolt Bypassed)");
-                }
+                // Battery Bus Status Bar
+                double vBat = robotOutputs.batteryTerminalVoltage;
+                double iBus = robotOutputs.totalBusCurrent;
+                float vFraction = static_cast<float>(vBat / 13.0);
+                ImVec4 vColor = (vBat > 11.0) ? ImVec4(0.2f, 0.85f, 0.25f, 1.0f) :
+                    ((vBat > 6.8) ? ImVec4(0.95f, 0.80f, 0.15f, 1.0f) : ImVec4(0.95f, 0.20f, 0.20f, 1.0f));
+
+                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, vColor);
+                char vBuf[64];
+                std::snprintf(vBuf, sizeof(vBuf), "Battery: %.2f V | Bus: %.1f A %s",
+                    vBat, iBus, robotOutputs.isBrownedOut ? "[CRITICAL BROWNOUT]" : "");
+                ImGui::ProgressBar(vFraction, ImVec2(-1.0f, 22.0f), vBuf);
+                ImGui::PopStyleColor();
 
                 ImGui::Separator();
 
-                // -------------------------------------------------------------
-                // DEBUG DRAW OPTIONS
-                // -------------------------------------------------------------
-                ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.85f, 1.0f), "COLLIDER DEBUG DRAW OPTIONS:");
-                ImGui::Checkbox("Draw All Colliders (Wireframe OBBs)", &showColliderDebugDraw);
-                ImGui::SameLine();
-                ImGui::Checkbox("Always On Top (No Depth Occlusion)", &debugDrawAlwaysOnTop);
-                ImGui::Checkbox("Draw Wheel Contact Patches & Load Spikes", &showWheelContactDebugDraw);
-
-                ImGui::Separator();
-
-                // Main Tab Bar
-                if (ImGui::BeginTabBar("MainTabs"))
+                // Main Subsystem Tabs
+                if (ImGui::BeginTabBar("RobotTabs"))
                 {
                     // =============================================================
-                    // TAB 1: SWERVE ROBOT (DRIVE & 6-DOF TERRAIN)
+                    // TAB 1: 6-DOF SWERVE DRIVETRAIN
                     // =============================================================
-                    if (ImGui::BeginTabItem("Swerve Robot"))
+                    if (ImGui::BeginTabItem("Swerve Drivetrain"))
                     {
-                        // Reset Shortcuts
-                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "OBSTACLE COURSE BENCH POSITIONS");
-                        if (ImGui::Button("Reset to Start Line", ImVec2(180.0f, 26.0f)))
+                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "SPAWN & COURSE PRESETS");
+                        if (ImGui::Button("Start Line (Carpet)", ImVec2(165.0f, 24.0f)))
                         {
-                            resetRobotToPosition(glm::vec3(3.2f, 0.248f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+                            resetRobot(robotSpawnPos, glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
                         }
                         ImGui::SameLine();
-                        if (ImGui::Button("Place on 15 deg Ramp", ImVec2(180.0f, 26.0f)))
+                        if (ImGui::Button("15 deg Ramp", ImVec2(165.0f, 24.0f)))
                         {
-                            resetRobotToPosition(glm::vec3(3.2f, 0.508f, 3.5f),
+                            resetRobot(glm::vec3(3.2f, 0.52f, 4.0f),
                                 glm::angleAxis(glm::radians(-15.0f), glm::vec3(1.0f, 0.0f, 0.0f)));
                         }
-
-                        ImGui::Spacing();
-
-                        // Mode: Test Stand vs Field Drive
-                        ImGui::Checkbox("Pin Chassis to Stand", &swervePinChassis);
-                        if (ImGui::IsItemHovered())
+                        ImGui::SameLine();
+                        if (ImGui::Button("Cable Bump", ImVec2(165.0f, 24.0f)))
                         {
-                            ImGui::SetTooltip("When checked, the chassis body is held stationary so stall torque and peak RPM can be tested safely.\nUncheck to let the robot drive across carpet, ramps, and bumps.");
+                            resetRobot(glm::vec3(3.2f, 0.20f, 7.5f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
                         }
-
-                        ImGui::Checkbox("Robot Enabled", &swerveEnabled);
-
-                        const char* neutralModes[] = { "Brake (Dynamic Damping)", "Coast (Free Spin)" };
-                        ImGui::Combo("Neutral Mode", &swerveNeutralModeIndex, neutralModes, IM_ARRAYSIZE(neutralModes));
 
                         ImGui::Spacing();
                         ImGui::Separator();
 
-                        // Real-Time 60s Stall Stress Test Section
+                        // 60-Second Real-Time Stall Stress Test
                         ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "GATE 1: 60-SECOND MASS-RATIO STRESS TEST");
-
-                        if (!swerveRunStressTest)
+                        if (!runSwerveStressTest)
                         {
-                            if (ImGui::Button("Run 60s Max Stall Stress Test Live", ImVec2(-1.0f, 28.0f)))
+                            if (ImGui::Button("Run 60s Max Stall Stress Test Live", ImVec2(-1.0f, 26.0f)))
                             {
-                                swerveRunStressTest = true;
+                                runSwerveStressTest = true;
                                 swerveStressElapsed = 0.0;
-                                swervePinChassis = true;
+                                pinChassisStand = true;
                                 SIM_LOG_INFO("Started 60-Second Real-Time Swerve Stress Test");
                             }
                         }
                         else
                         {
-                            float progress = static_cast<float>(swerveStressElapsed / 60.0);
+                            float prog = static_cast<float>(swerveStressElapsed / 60.0);
                             char progBuf[64];
-                            std::snprintf(progBuf, sizeof(progBuf), "Running: %.1f / 60.0 s (%.0f%%)", swerveStressElapsed, progress * 100.0f);
+                            std::snprintf(progBuf, sizeof(progBuf), "Running: %.1f / 60.0 s (%.0f%%)", swerveStressElapsed, prog * 100.0f);
                             ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
-                            ImGui::ProgressBar(progress, ImVec2(-1.0f, 24.0f), progBuf);
+                            ImGui::ProgressBar(prog, ImVec2(-1.0f, 22.0f), progBuf);
                             ImGui::PopStyleColor();
 
-                            if (ImGui::Button("Abort Stress Test"))
-                            {
-                                swerveRunStressTest = false;
-                            }
+                            if (ImGui::Button("Abort Stress Test")) runSwerveStressTest = false;
                         }
 
                         ImGui::Spacing();
                         ImGui::Separator();
 
-                        // Manual Controls
-                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "MANUAL DRIVE CONTROLS (OR USE ARROW KEYS)");
-                        ImGui::SliderFloat("Drive Voltage (V)", &swerveDriveVolts, -12.0f, 12.0f, "%.1f V");
-                        if (ImGui::Button("Forward (10V)")) swerveDriveVolts = 10.0f; ImGui::SameLine();
-                        if (ImGui::Button("Stop (0V)")) { swerveDriveVolts = 0.0f; swerveTargetSteerAngle = 0.0f; } ImGui::SameLine();
-                        if (ImGui::Button("Reverse (-10V)")) swerveDriveVolts = -10.0f;
-
-                        float steerAngleDeg = glm::degrees(swerveTargetSteerAngle);
-                        if (ImGui::SliderFloat("Steer Target (deg)", &steerAngleDeg, -90.0f, 90.0f, "%.1f deg"))
+                        // Manual Driving Controls
+                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "MANUAL SWERVE OVERRIDES (WASD / ARROWS = DRIVE & STRAFE, Q/E = SPIN)");
+                        ImGui::SliderFloat("Forward/Back (Vx)", &manualDriveVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Forward (+10V)")) manualDriveVolts = 10.0f; ImGui::SameLine();
+                        if (ImGui::Button("Reverse (-10V)")) manualDriveVolts = -10.0f; ImGui::SameLine();
+                        if (ImGui::Button("Stop All (0V)"))
                         {
-                            swerveTargetSteerAngle = glm::radians(steerAngleDeg);
+                            manualDriveVolts = 0.0f;
+                            manualStrafeVolts = 0.0f;
+                            manualSpinVolts = 0.0f;
+                            manualSteerAngleDeg = 0.0f;
                         }
-                        if (ImGui::Button("Turn Right (-45 deg)")) swerveTargetSteerAngle = glm::radians(-45.0f); ImGui::SameLine();
-                        if (ImGui::Button("Center (0 deg)")) swerveTargetSteerAngle = 0.0f; ImGui::SameLine();
-                        if (ImGui::Button("Turn Left (+45 deg)")) swerveTargetSteerAngle = glm::radians(45.0f);
+
+                        ImGui::SliderFloat("Strafe Left/Right (Vy)", &manualStrafeVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Strafe Left (+10V)")) manualStrafeVolts = 10.0f; ImGui::SameLine();
+                        if (ImGui::Button("Center Strafe (0V)")) manualStrafeVolts = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Strafe Right (-10V)")) manualStrafeVolts = -10.0f;
+
+                        ImGui::SliderFloat("Spin / Yaw (Omega)", &manualSpinVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Spin CCW (+10V)")) manualSpinVolts = 10.0f; ImGui::SameLine();
+                        if (ImGui::Button("Stop Spin (0V)")) manualSpinVolts = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Spin CW (-10V)")) manualSpinVolts = -10.0f;
+
+                        ImGui::SliderFloat("Steer Heading (deg)", &manualSteerAngleDeg, -90.0f, 90.0f, "%.1f deg");
+                        if (ImGui::Button("Right (-45 deg)")) manualSteerAngleDeg = -45.0f; ImGui::SameLine();
+                        if (ImGui::Button("Center (0 deg)")) manualSteerAngleDeg = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Left (+45 deg)")) manualSteerAngleDeg = 45.0f;
 
                         ImGui::Spacing();
                         ImGui::Separator();
 
-                        // Live Telemetry Readout
-                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "LIVE TELEMETRY & 6-DOF KINEMATICS");
+                        // Telemetry & 4-Module Status Table
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "LIVE SWERVE MODULE TELEMETRY");
+                        auto* model = robot.swerveSystem ? robot.swerveSystem->GetModel() : nullptr;
 
-                        // Battery Terminal Voltage Gauge
-                        float vFraction = static_cast<float>(swerveOutputs.batteryTerminalVoltage / 13.0);
-                        ImVec4 vColor = (swerveOutputs.batteryTerminalVoltage > 11.0) ? ImVec4(0.2f, 0.8f, 0.2f, 1.0f) :
-                            ((swerveOutputs.batteryTerminalVoltage > 8.5) ? ImVec4(0.9f, 0.8f, 0.1f, 1.0f) : ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
-                        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, vColor);
-                        char vBuf[64];
-                        std::snprintf(vBuf, sizeof(vBuf), "Battery: %.2f V | Bus: %.1f A",
-                            swerveOutputs.batteryTerminalVoltage, swerveOutputs.totalBusCurrent);
-                        ImGui::ProgressBar(vFraction, ImVec2(-1.0f, 20.0f), vBuf);
-                        ImGui::PopStyleColor();
-
-                        // 6-DOF IMU Heading & Attitude
-                        ImGui::Text("IMU Yaw:   %.1f deg | Pitch: %.1f deg | Roll: %.1f deg",
-                            glm::degrees(swerveOutputs.gyroYaw), glm::degrees(swerveOutputs.gyroPitch), glm::degrees(swerveOutputs.gyroRoll));
-                        ImGui::Text("Yaw Rate:  %.1f deg/s", glm::degrees(swerveOutputs.gyroYawRate));
-
-                        // Chassis linear velocity & altitude
-                        auto* chassisT = scene.GetComponent<TransformComponent>(swerveRobot.chassisEntity);
-                        glm::vec3 chassisLinVel(0.0f);
-                        auto* model = swerveSystem.GetModel();
-                        if (model)
-                        {
-                            // Model linear velocity in NWU -> Engine (+X Left, +Y Up, +Z Forward)
-                            const auto& motion = model->GetChassisState();
-                            chassisLinVel = glm::vec3(motion.linearVelocity.y, motion.linearVelocity.z, motion.linearVelocity.x);
-                        }
-                        float groundSpeed = glm::length(glm::vec2(chassisLinVel.x, chassisLinVel.z));
-                        float elevationY = chassisT ? chassisT->position.y : 0.0f;
-                        ImGui::Text("Speed:     %.2f m/s (%.1f ft/s) | Elev (Y): %.3f m", groundSpeed, groundSpeed * 3.28084f, elevationY);
-
-                        // Energy Ledger
-                        if (model)
-                        {
-                            const auto& ledger = model->GetEnergyLedger();
-                            ImGui::Text("Energy In: %.1f J | KE: %.2f J | Residual: %.3f J",
-                                ledger.batteryEnergyDrawnJoules, ledger.kineticEnergyJoules, ledger.energyResidualJoules);
-                        }
-
-                        ImGui::Spacing();
-
-                        // 4 Swerve Modules Telemetry Table
-                        if (ImGui::BeginTable("ModuleTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+                        if (ImGui::BeginTable("SwerveTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
                         {
                             ImGui::TableSetupColumn("Module");
                             ImGui::TableSetupColumn("Steer");
-                            ImGui::TableSetupColumn("Drive m/s");
+                            ImGui::TableSetupColumn("m/s");
                             ImGui::TableSetupColumn("RPM");
                             ImGui::TableSetupColumn("Current");
-                            ImGui::TableSetupColumn("Norm Force");
-                            ImGui::TableSetupColumn("Slip (n)");
+                            ImGui::TableSetupColumn("Normal (N)");
+                            ImGui::TableSetupColumn("Traction");
                             ImGui::TableHeadersRow();
 
-                            const char* modNames[] = { "FL [0]", "FR [1]", "BL [2]", "BR [3]" };
+                            const char* modLabels[] = { "FL [0]", "FR [1]", "BL [2]", "BR [3]" };
                             for (int i = 0; i < 4; ++i)
                             {
                                 ImGui::TableNextRow();
                                 ImGui::TableSetColumnIndex(0);
-                                ImGui::Text("%s", modNames[i]);
+                                ImGui::Text("%s", modLabels[i]);
 
                                 ImGui::TableSetColumnIndex(1);
-                                ImGui::Text("%.1f deg", glm::degrees(swerveOutputs.encoderPositions[i]));
+                                ImGui::Text("%.1f deg", glm::degrees(robotOutputs.encoderPositions[i]));
 
-                                double linearV = 0.0;
-                                double driveRpm = (swerveOutputs.encoderVelocities[4 + i] * 60.0) / (2.0 * 3.141592653589793);
+                                double vLinear = 0.0;
+                                double driveRpm = (robotOutputs.encoderVelocities[4 + i] * 60.0) / (2.0 * 3.141592653589793);
                                 double normalF = 0.0;
                                 double slipRatio = 0.0;
 
                                 if (model)
                                 {
-                                    const auto& modState = model->GetModule(i).GetState();
-                                    linearV = modState.linearVelocity;
-                                    normalF = modState.contactState.normalForce;
-                                    slipRatio = modState.contactState.saturationRatio;
+                                    const auto& st = model->GetModule(i).GetState();
+                                    vLinear = st.linearVelocity;
+                                    normalF = st.contactState.normalForce;
+                                    slipRatio = st.contactState.saturationRatio;
                                 }
 
                                 ImGui::TableSetColumnIndex(2);
-                                ImGui::Text("%.2f", linearV);
+                                ImGui::Text("%.2f", vLinear);
 
                                 ImGui::TableSetColumnIndex(3);
                                 ImGui::Text("%.0f", driveRpm);
 
                                 ImGui::TableSetColumnIndex(4);
-                                ImGui::Text("%.1f A", swerveOutputs.motorCurrents[4 + i]);
+                                ImGui::Text("%.1f A", robotOutputs.motorCurrents[4 + i]);
 
                                 ImGui::TableSetColumnIndex(5);
                                 ImGui::Text("%.1f N", normalF);
@@ -1134,7 +1352,7 @@ int main(int argc, char* argv[])
                                 }
                                 else
                                 {
-                                    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "%.2f (TRACTION)", slipRatio);
+                                    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "%.2f (OK)", slipRatio);
                                 }
                             }
                             ImGui::EndTable();
@@ -1144,15 +1362,243 @@ int main(int argc, char* argv[])
                     }
 
                     // =============================================================
-                    // TAB 2: CONTROLS & CAMERA
+                    // TAB 2: MECHANISMS (ELEVATOR, ARM, WRIST, 4-BAR, FLYWHEEL)
                     // =============================================================
-                    if (ImGui::BeginTabItem("Controls & Camera"))
+                    if (ImGui::BeginTabItem("Mechanisms"))
                     {
-                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "Camera Flight Controls:");
-                        ImGui::BulletText("Hold Right Mouse Button + WASD to fly camera freely.");
-                        ImGui::BulletText("Hold Space to ascend, Left Shift to descend.");
-                        ImGui::BulletText("Press F3 to toggle Profiler & Flame Graph.");
-                        ImGui::BulletText("Press 0..9 on keyboard to change simulation speed.");
+                        // A. Dual-Stage Cascade Elevator
+                        ImGui::TextColored(ImVec4(0.3f, 0.85f, 1.0f, 1.0f), "1. CASCADE ELEVATOR (Slot 8, Dual Kraken X60, G = 9.0)");
+                        auto elevIt2 = robot.mechanismEntities.find("elevator_drive");
+                        ElevatorComponent* elevComp = (elevIt2 != robot.mechanismEntities.end())
+                            ? scene.GetComponent<ElevatorComponent>(elevIt2->second) : nullptr;
+
+                        ImGui::SliderFloat("Elevator Voltage (V)", &manualElevatorVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Up (+8V)")) manualElevatorVolts = 8.0f; ImGui::SameLine();
+                        if (ImGui::Button("Hold (0V)")) manualElevatorVolts = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Down (-8V)")) manualElevatorVolts = -8.0f;
+
+                        if (elevComp)
+                        {
+                            double s1Pos = elevComp->stages.empty() ? 0.0 : elevComp->stages[0].currentPositionM;
+                            double s1Vel = elevComp->stages.empty() ? 0.0 : elevComp->stages[0].currentVelocityMps;
+                            ImGui::Text("Stage 1 Height: %.3f m | Carriage Height: %.3f m (2x)", s1Pos, s1Pos * 2.0);
+                            ImGui::Text("Stage 1 Speed:  %.3f m/s | Applied Force: %.1f N", s1Vel, elevComp->appliedLinearForceN);
+                            ImGui::Text("Coulomb Stick:  %s | Spring Assist: %.1f N",
+                                elevComp->isStickLocked ? "LATCHED (Zero Creep)" : "SLIDING", elevComp->springPreloadForceN);
+                        }
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        // B. Articulated Shoulder Arm & Wrist
+                        ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "2. ARTICULATED ARM & WRIST (Slots 9 & 10)");
+                        auto armIt2 = robot.mechanismEntities.find("arm_shoulder");
+                        ArmComponent* armComp = (armIt2 != robot.mechanismEntities.end())
+                            ? scene.GetComponent<ArmComponent>(armIt2->second) : nullptr;
+
+                        auto wristIt2 = robot.mechanismEntities.find("arm_wrist");
+                        ArmComponent* wristComp = (wristIt2 != robot.mechanismEntities.end())
+                            ? scene.GetComponent<ArmComponent>(wristIt2->second) : nullptr;
+
+                        ImGui::SliderFloat("Shoulder Volts (V)", &manualArmVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Raise Shoulder (+6V)")) manualArmVolts = 6.0f; ImGui::SameLine();
+                        if (ImGui::Button("Hold Shoulder (0V)")) manualArmVolts = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Lower Shoulder (-6V)")) manualArmVolts = -6.0f;
+
+                        ImGui::SliderFloat("Wrist Volts (V)", &manualWristVolts, -12.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Pitch Wrist Up (+6V)")) manualWristVolts = 6.0f; ImGui::SameLine();
+                        if (ImGui::Button("Hold Wrist (0V)")) manualWristVolts = 0.0f; ImGui::SameLine();
+                        if (ImGui::Button("Pitch Wrist Down (-6V)")) manualWristVolts = -6.0f;
+
+                        if (armComp)
+                        {
+                            ImGui::Text("Shoulder Angle: %.1f deg (%.2f rad) | Rate: %.1f deg/s",
+                                glm::degrees(armComp->currentAngleRad), armComp->currentAngleRad, glm::degrees(armComp->currentVelocityRadPerSec));
+                            ImGui::Text("Shoulder Torque: %.1f Nm | Stick: %s",
+                                armComp->appliedTorqueNm, armComp->isStickLocked ? "LATCHED" : "FREE");
+                        }
+                        if (wristComp)
+                        {
+                            ImGui::Text("Wrist Angle:    %.1f deg (%.2f rad) | Stick: %s",
+                                glm::degrees(wristComp->currentAngleRad), wristComp->currentAngleRad,
+                                wristComp->isStickLocked ? "LATCHED" : "FREE");
+                        }
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        // C. Closed-Loop Intake Four-Bar
+                        ImGui::TextColored(ImVec4(0.35f, 1.0f, 0.4f, 1.0f), "3. INTAKE FOUR-BAR LINKAGE (Slot 11, Kraken X44)");
+                        if (ImGui::Button(intakeDeployed ? "Stow Intake (-6V)" : "Deploy Intake (+6V)", ImVec2(-1.0f, 26.0f)))
+                        {
+                            intakeDeployed = !intakeDeployed;
+                        }
+
+                        auto fbIt = scene.Query<FourBarComponent>();
+                        if (!fbIt.empty())
+                        {
+                            auto* fb = scene.GetComponent<FourBarComponent>(fbIt[0]);
+                            if (fb)
+                            {
+                                auto* cjc = (fb->crankJoint != invalidEntity)
+                                    ? scene.GetComponent<JointComponent>(fb->crankJoint) : nullptr;
+                                auto* fjc = (fb->followerJoint != invalidEntity)
+                                    ? scene.GetComponent<JointComponent>(fb->followerJoint) : nullptr;
+                                if (cjc && fjc)
+                                {
+                                    ImGui::Text("Crank Angle: %.1f deg | Follower Angle: %.1f deg",
+                                        glm::degrees(cjc->currentAngle), glm::degrees(fjc->currentAngle));
+                                }
+                                ImGui::Text("Loop Closure Drift: %.3f mm %s",
+                                    fb->loopClosureErrorM * 1000.0,
+                                    (fb->loopClosureErrorM < 0.0015) ? "(OK < 1.5mm)" : "(DRIFT WARNING)");
+                                ImGui::Text("Kinematic Loop:     %s", fb->isClosedLoop ? "ENFORCED" : "OPEN");
+                            }
+                        }
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        // D. High-RPM Shooter Flywheel
+                        ImGui::TextColored(ImVec4(0.95f, 0.88f, 0.2f, 1.0f), "4. SHOOTER FLYWHEEL (Slot 12, Dual Kraken X60, J = 0.0032)");
+                        ImGui::SliderFloat("Flywheel Volts (V)", &manualFlywheelVolts, 0.0f, 12.0f, "%.1f V");
+                        if (ImGui::Button("Spin 6000 RPM (12V)")) manualFlywheelVolts = 12.0f; ImGui::SameLine();
+                        if (ImGui::Button("Coast (0V)")) manualFlywheelVolts = 0.0f;
+
+                        auto fwIt2 = robot.mechanismEntities.find("shooter_flywheel");
+                        FlywheelComponent* fwComp = (fwIt2 != robot.mechanismEntities.end())
+                            ? scene.GetComponent<FlywheelComponent>(fwIt2->second) : nullptr;
+
+                        if (fwComp)
+                        {
+                            ImGui::Text("Flywheel Velocity: %.0f RPM (%.1f rad/s)", fwComp->angularVelocityRpm, fwComp->angularVelocityRadPerSec);
+                            ImGui::Text("Motor Current:     %.1f A | Stator Clamp: 80.0 A", fwComp->statorCurrentA);
+                            ImGui::Text("Chassis Recoil:    %.2f Nm (Newton's 3rd Law)", fwComp->recoilTorqueNm);
+                        }
+
+                        ImGui::EndTabItem();
+                    }
+
+                    // =============================================================
+                    // TAB 3: ELECTRICAL & SENSORS
+                    // =============================================================
+                    if (ImGui::BeginTabItem("Sensors & Electrical"))
+                    {
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "6-AXIS PIGEON 2 IMU (WPILib NWU Frame)");
+                        ImGui::Text("Continuous Yaw:   %.2f deg", glm::degrees(robotOutputs.gyroYaw));
+                        ImGui::Text("Pitch / Roll:     %.2f deg / %.2f deg", glm::degrees(robotOutputs.gyroPitch), glm::degrees(robotOutputs.gyroRoll));
+                        ImGui::Text("Angular Velocity: (%.2f, %.2f, %.2f) rad/s",
+                            robotOutputs.gyroAngularVelocityRadPerSec.x, robotOutputs.gyroAngularVelocityRadPerSec.y, robotOutputs.gyroAngularVelocityRadPerSec.z);
+                        ImGui::Text("Specific Force:   (%.2f, %.2f, %.2f) m/s^2",
+                            robotOutputs.accelSpecificForceMetersPerSec2.x, robotOutputs.accelSpecificForceMetersPerSec2.y, robotOutputs.accelSpecificForceMetersPerSec2.z);
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        ImGui::TextColored(ImVec4(0.3f, 0.85f, 1.0f, 1.0f), "DIGITAL I/O & SENSORS (SimOutputs::digitalInputs)");
+                        bool dio0 = (robotOutputs.digitalInputs & (1 << 0)) != 0; // Elevator Lower Limit
+                        bool dio1 = (robotOutputs.digitalInputs & (1 << 1)) != 0; // Elevator Upper Limit
+                        bool dio2 = (robotOutputs.digitalInputs & (1 << 2)) != 0; // Optical Beam Break
+
+                        ImGui::Text("DIO 0 [Elevator Lower Limit]: %s", dio0 ? "TRIPPED" : "CLEAR");
+                        ImGui::Text("DIO 1 [Elevator Upper Limit]: %s", dio1 ? "TRIPPED" : "CLEAR");
+                        ImGui::Text("DIO 2 [Intake Beam Break]:   %s (10 ms Debounce)", dio2 ? "OCCLUDED" : "CLEAR");
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "ANALOG INPUTS & CONTACT ZONES");
+                        ImGui::Text("Analog 0 [Shoulder Pot]: %.3f V", robotOutputs.batteryTerminalVoltage > 0.0 ? 2.500 : 0.0);
+                        ImGui::Text("Intake Capture Zone:     180 x 300 x 100 mm (Role: Intake)");
+                        ImGui::Text("Shooter Compression:     220 x 450 x 140 mm (Gap: 90 mm)");
+
+                        ImGui::EndTabItem();
+                    }
+
+                    // =============================================================
+                    // TAB 4: WPILIB BRIDGE & LOGGING
+                    // =============================================================
+                    if (ImGui::BeginTabItem("Bridge & Logs"))
+                    {
+                        ImGui::TextColored(ImVec4(0.2f, 0.9f, 1.0f, 1.0f), "WPILIB HALSIM WEBSOCKET SERVER (:3300/wpilibws)");
+                        auto stats = wsServer.GetStatistics();
+                        if (wsServer.IsClientConnected())
+                        {
+                            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f),
+                                "● CONNECTED (Packets In: %llu | Out: %llu)", stats.packetsReceived, stats.packetsSent);
+                        }
+                        else
+                        {
+                            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f),
+                                "○ Waiting for ./gradlew simulateNative... (Packets: %llu)", stats.packetsReceived);
+                        }
+
+                        bool dsEn = wsServer.IsDriverStationEnabled();
+                        if (ImGui::Checkbox("DS Enabled", &dsEn)) wsServer.SetDriverStation(dsEn, wsServer.IsAutonomous());
+                        ImGui::SameLine();
+                        bool dsAuto = wsServer.IsAutonomous();
+                        if (ImGui::Checkbox("Auto Mode", &dsAuto)) wsServer.SetDriverStation(wsServer.IsDriverStationEnabled(), dsAuto);
+
+                        if (ImGui::Button("Dump Discovered SimDevices to JSON"))
+                        {
+                            wsServer.DumpSimDevices("sim_device_dump.json");
+                        }
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "HIGH-FREQUENCY TELEMETRY LOGGER (200 Hz)");
+                        if (drivetrainLogger.IsRecording())
+                        {
+                            if (ImGui::Button("Stop Recording", ImVec2(140.0f, 24.0f))) drivetrainLogger.StopRecording();
+                            ImGui::SameLine();
+                            ImGui::TextColored(ImVec4(1.0f, 0.25f, 0.25f, 1.0f), "● REC (%zu samples)", drivetrainLogger.GetSampleCount());
+                        }
+                        else
+                        {
+                            if (ImGui::Button("Start Recording", ImVec2(140.0f, 24.0f))) drivetrainLogger.StartRecording();
+                            ImGui::SameLine();
+                            ImGui::Text("Stored: %zu / %zu", drivetrainLogger.GetSampleCount(), drivetrainLogger.GetCapacity());
+                        }
+
+                        if (ImGui::Button("Export to CSV")) drivetrainLogger.ExportToCsv("drivetrain_telemetry.csv");
+                        ImGui::SameLine();
+                        if (ImGui::Button("Export FTC Schema CSV")) drivetrainLogger.ExportToFtcSchemaCsv("drivetrain_ftc_schema.csv");
+                        ImGui::SameLine();
+                        if (ImGui::Button("Clear")) drivetrainLogger.Clear();
+
+                        ImGui::EndTabItem();
+                    }
+
+                    // =============================================================
+                    // TAB 5: VISUALS & CAMERA
+                    // =============================================================
+                    if (ImGui::BeginTabItem("Visuals & Camera"))
+                    {
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.85f, 1.0f), "COLLIDER & CONTACT DEBUG DRAW");
+                        ImGui::Checkbox("Draw All Colliders (Wireframe OBBs)", &showColliders);
+                        ImGui::Checkbox("Draw Wheel Contact Patches & Load Spikes", &showWheelContacts);
+                        ImGui::Checkbox("Draw Mechanism Contact Zones (Intake/Shooter)", &showContactZones);
+                        ImGui::Checkbox("Always On Top (No Depth Occlusion)", &debugDrawAlwaysOnTop);
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "CAMERA CONTROLS");
+                        const char* camModes[] = { "Free-Fly (WASD + Mouse)", "Orbit Robot (RMB Drag + Zoom)" };
+                        if (ImGui::Combo("Camera Mode (Tab)", &cameraModeIndex, camModes, IM_ARRAYSIZE(camModes)))
+                        {
+                            camera.SetMode((cameraModeIndex == 0)
+                                ? FRCBananaSim::Renderer::Camera::Mode::FreeFly
+                                : FRCBananaSim::Renderer::Camera::Mode::Orbit);
+                        }
+
+                        ImGui::BulletText("Orbit Mode: Hold RMB and drag mouse to swing camera around robot.");
+                        ImGui::BulletText("Scroll Wheel: Zoom in and out.");
+                        ImGui::BulletText("Free-Fly: Hold RMB and use WASD to fly camera freely.");
+                        ImGui::BulletText("F3: Toggle Flame Graph Profiler.");
+                        ImGui::BulletText("0..9: Change simulation speed multiplier.");
+
                         ImGui::EndTabItem();
                     }
 
@@ -1161,38 +1607,32 @@ int main(int argc, char* argv[])
             }
             ImGui::End();
 
+            // 5. Presentation
             renderer.EndFrame();
+        });
 
-            if (TelemetryManager::Get().GetMode() == TelemetryMode::Full && profilerWindow.IsOpen())
+    engine.SetPostRenderCallback([&]()
+        {
+            if (FRCBananaSim::Telemetry::TelemetryManager::Get().GetMode() == FRCBananaSim::Telemetry::TelemetryMode::Full
+                && profilerWindow.IsOpen())
             {
                 profilerWindow.Render(renderer.GetWindow());
             }
-
-            auto end = std::chrono::high_resolution_clock::now();
-            double renderMs = std::chrono::duration<double, std::milli>(end - start).count();
-
-            FrameSummary summary;
-            summary.physicsMs = accumulatedPhysicsMs;
-            summary.updateMs = currentUpdateMs;
-            summary.renderMs = renderMs;
-            summary.totalFrameMs = accumulatedPhysicsMs + currentUpdateMs + renderMs;
-            TelemetryManager::Get().PushFrameSummary(summary);
-
-            accumulatedPhysicsMs = 0.0;
         });
 
-    // 11. Run Engine Loop
+    // 13. Run Main Engine Loop
     engine.Run();
 
-    // 12. Clean Teardown
+    // 14. Clean Teardown
+    wsServer.Stop();
     if (profilerWindow.IsOpen())
     {
         profilerWindow.Close(renderer.GetWindow());
     }
 
     joltContext.Shutdown();
-    TelemetryManager::Get().Shutdown();
+    FRCBananaSim::Telemetry::TelemetryManager::Get().Shutdown();
 
-    SIM_LOG_INFO("FRC Banana Simulator shut down cleanly.");
+    SIM_LOG_INFO("FRC Banana Simulator 2026 Reference Robot Station shut down cleanly.");
     return 0;
 }

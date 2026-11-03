@@ -6,7 +6,7 @@
 #include "Renderer/Renderer.h"
 #include "Renderer/Components/MeshComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 #include "Utils/DebugDraw.h"
 #include "Utils/Log.h"
 
@@ -127,7 +127,7 @@ void main()
             face({ 1,0,0 }, { 0.5f,-0.5f,0.5f }, { 0.5f,-0.5f,-0.5f }, { 0.5f,0.5f,-0.5f }, { 0.5f,0.5f,0.5f });
             face({ -1,0,0 }, { -0.5f,-0.5f,-0.5f }, { -0.5f,-0.5f,0.5f }, { -0.5f,0.5f,0.5f }, { -0.5f,0.5f,-0.5f });
             face({ 0,1,0 }, { -0.5f,0.5f,0.5f }, { 0.5f,0.5f,0.5f }, { 0.5f,0.5f,-0.5f }, { -0.5f,0.5f,-0.5f });
-            face({ 0,-1,0 }, { -0.5f,-0.5f,-0.5f }, { 0.5f,-0.5f,-0.5f }, { 0.5f,0.5f,0.5f }, { -0.5f,-0.5f,0.5f });
+            face({ 0,-1,0 }, { -0.5f,-0.5f,-0.5f }, { 0.5f,-0.5f,-0.5f }, { 0.5f,-0.5f,0.5f }, { -0.5f,-0.5f,0.5f });
             return v;
         }
 
@@ -340,6 +340,18 @@ void main()
 
         GLuint meshProgram = 0;
         GLuint debugLineProgram = 0;
+        GLint meshLocModel = -1;
+        GLint meshLocView = -1;
+        GLint meshLocProjection = -1;
+        GLint meshLocColor = -1;
+        GLint meshLocLightDir = -1;
+        GLint lineLocView = -1;
+        GLint lineLocProjection = -1;
+
+        glm::mat4 cachedView{ 1.0f };
+        glm::mat4 cachedProj{ 1.0f };
+        glm::vec3 cachedLightDir = glm::normalize(glm::vec3(-0.4f, -1.0f, -0.3f));
+
         std::unordered_map<PrimitiveShape, PrimitiveMesh> primitives;
 
         GLuint debugLineVao = 0;
@@ -403,6 +415,15 @@ void main()
         glDeleteShader(lineVS);
         glDeleteShader(lineFS);
 
+        impl->meshLocModel = glGetUniformLocation(impl->meshProgram, "uModel");
+        impl->meshLocView = glGetUniformLocation(impl->meshProgram, "uView");
+        impl->meshLocProjection = glGetUniformLocation(impl->meshProgram, "uProjection");
+        impl->meshLocColor = glGetUniformLocation(impl->meshProgram, "uColor");
+        impl->meshLocLightDir = glGetUniformLocation(impl->meshProgram, "uLightDir");
+
+        impl->lineLocView = glGetUniformLocation(impl->debugLineProgram, "uView");
+        impl->lineLocProjection = glGetUniformLocation(impl->debugLineProgram, "uProjection");
+
         impl->primitives[PrimitiveShape::Cube] = UploadMesh(GenerateCube());
         impl->primitives[PrimitiveShape::Sphere] = UploadMesh(GenerateSphere());
         impl->primitives[PrimitiveShape::Plane] = UploadMesh(GeneratePlane());
@@ -423,6 +444,12 @@ void main()
 
         impl->valid = true;
         impl->lastFrameTime = glfwGetTime();
+
+        // Immediately clear and present dark background so window never appears white on creation
+        glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glfwSwapBuffers(impl->window);
+        glfwPollEvents();
     }
 
     Renderer::~Renderer()
@@ -514,6 +541,12 @@ void main()
         glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        int fbWidth = 1, fbHeight = 1;
+        glfwGetFramebufferSize(impl->window, &fbWidth, &fbHeight);
+        float aspect = fbHeight > 0 ? static_cast<float>(fbWidth) / static_cast<float>(fbHeight) : 1.0f;
+        impl->cachedView = impl->camera.GetViewMatrix();
+        impl->cachedProj = impl->camera.GetProjectionMatrix(aspect);
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -536,19 +569,12 @@ void main()
             * glm::mat4_cast(worldTransform.worldRotation)
             * glm::scale(glm::mat4(1.0f), worldTransform.worldScale);
 
-        int fbWidth = 1, fbHeight = 1;
-        glfwGetFramebufferSize(impl->window, &fbWidth, &fbHeight);
-        float aspect = fbHeight > 0 ? static_cast<float>(fbWidth) / static_cast<float>(fbHeight) : 1.0f;
-
         glUseProgram(impl->meshProgram);
-        glUniformMatrix4fv(glGetUniformLocation(impl->meshProgram, "uModel"), 1, GL_FALSE, glm::value_ptr(model));
-        glUniformMatrix4fv(glGetUniformLocation(impl->meshProgram, "uView"), 1, GL_FALSE,
-            glm::value_ptr(impl->camera.GetViewMatrix()));
-        glUniformMatrix4fv(glGetUniformLocation(impl->meshProgram, "uProjection"), 1, GL_FALSE,
-            glm::value_ptr(impl->camera.GetProjectionMatrix(aspect)));
-        glUniform3fv(glGetUniformLocation(impl->meshProgram, "uColor"), 1, glm::value_ptr(mesh.color));
-        glm::vec3 lightDir = glm::normalize(glm::vec3(-0.4f, -1.0f, -0.3f));
-        glUniform3fv(glGetUniformLocation(impl->meshProgram, "uLightDir"), 1, glm::value_ptr(lightDir));
+        glUniformMatrix4fv(impl->meshLocModel, 1, GL_FALSE, glm::value_ptr(model));
+        glUniformMatrix4fv(impl->meshLocView, 1, GL_FALSE, glm::value_ptr(impl->cachedView));
+        glUniformMatrix4fv(impl->meshLocProjection, 1, GL_FALSE, glm::value_ptr(impl->cachedProj));
+        glUniform3fv(impl->meshLocColor, 1, glm::value_ptr(mesh.color));
+        glUniform3fv(impl->meshLocLightDir, 1, glm::value_ptr(impl->cachedLightDir));
 
         glBindVertexArray(it->second.vao);
         glDrawArrays(GL_TRIANGLES, 0, it->second.vertexCount);
@@ -567,15 +593,9 @@ void main()
             return;
         }
 
-        int fbWidth = 1, fbHeight = 1;
-        glfwGetFramebufferSize(impl->window, &fbWidth, &fbHeight);
-        float aspect = fbHeight > 0 ? static_cast<float>(fbWidth) / static_cast<float>(fbHeight) : 1.0f;
-
         glUseProgram(impl->debugLineProgram);
-        glUniformMatrix4fv(glGetUniformLocation(impl->debugLineProgram, "uView"), 1, GL_FALSE,
-            glm::value_ptr(impl->camera.GetViewMatrix()));
-        glUniformMatrix4fv(glGetUniformLocation(impl->debugLineProgram, "uProjection"), 1, GL_FALSE,
-            glm::value_ptr(impl->camera.GetProjectionMatrix(aspect)));
+        glUniformMatrix4fv(impl->lineLocView, 1, GL_FALSE, glm::value_ptr(impl->cachedView));
+        glUniformMatrix4fv(impl->lineLocProjection, 1, GL_FALSE, glm::value_ptr(impl->cachedProj));
 
         glBindVertexArray(impl->debugLineVao);
         glBindBuffer(GL_ARRAY_BUFFER, impl->debugLineVbo);

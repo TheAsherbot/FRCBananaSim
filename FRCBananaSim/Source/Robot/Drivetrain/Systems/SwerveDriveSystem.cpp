@@ -6,18 +6,22 @@
 #include "Robot/Drivetrain/Systems/SwerveDriveSystem.h"
 #include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
 #include "Robot/Drivetrain/Components/SwerveModuleComponent.h"
+#include "Robot/Mechanisms/Components/CompositeMassComponent.h"
+#include "Robot/Schema/RobotSchemaLoader.h"
 #include "Actuation/Components/BatteryComponent.h"
 #include "Physics/Components/RigidBodyComponent.h"
+#include "Physics/Components/ColliderComponent.h"
 #include "Core/ECS/Components/TransformComponent.h"
 #include "Core/ECS/Core/Scene.h"
-#include "Telemetry/TelemetryMacros.h"
+#include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
+#include "Utils/Log.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <algorithm>
 #include <cmath>
 
-namespace FRCBananaSim::Robot::Drivetrain::System
+namespace FRCBananaSim::Robot::Drivetrain::Systems
 {
     using namespace Control;
     using namespace Actuation;
@@ -35,7 +39,7 @@ namespace FRCBananaSim::Robot::Drivetrain::System
     {
         if (joltContext && joltContext->IsInitialized())
         {
-            defaultProbe = std::make_unique<Systems::SwerveTerrainProbe>(*joltContext);
+            defaultProbe = std::make_unique<SwerveTerrainProbe>(*joltContext);
             activeTerrainProvider = std::shared_ptr<Model::ITerrainProvider>(defaultProbe.get(), [](Model::ITerrainProvider*) {});
         }
     }
@@ -57,11 +61,19 @@ namespace FRCBananaSim::Robot::Drivetrain::System
 
     void SwerveDriveSystem::SetCustomTerrainProvider(std::shared_ptr<Model::ITerrainProvider> provider)
     {
-        activeTerrainProvider = provider;
+        if (provider)
+        {
+            activeTerrainProvider = provider;
+        }
     }
 
-    SwerveDrivetrainModel* SwerveDriveSystem::GetModel()
+    Model::SwerveDrivetrainModel* SwerveDriveSystem::GetModel()
     {
+        if (!isInitialized)
+        {
+            InitializeModel();
+        }
+
         auto chasses = scene.Query<SwerveChassisComponent>();
         if (chasses.empty())
         {
@@ -94,10 +106,9 @@ namespace FRCBananaSim::Robot::Drivetrain::System
         SwerveDrivetrainConfig config = SwerveDrivetrainConfig::CreateMK5nR3Reference();
         config.chassis.mass = chassisComp->chassisMass;
 
-        // Ingest initial pose from ECS transform (+X Left, +Y Up, +Z Forward -> NWU: X Fwd, Y Left, Z Up)
-        glm::vec3 posNWU(chassisTransform->position.z, chassisTransform->position.x, chassisTransform->position.y);
-        glm::quat q = chassisTransform->rotation;
-        glm::quat rotNWU(q.w, q.z, q.x, q.y);
+        // Ingest initial pose from ECS transform using canonical frame conversion
+        glm::vec3 posNWU = Schema::RobotSchemaLoader::ConvertEngineVectorToNWU(chassisTransform->position);
+        glm::quat rotNWU = glm::quat(Schema::RobotSchemaLoader::ConvertEngineQuatToNWU(glm::dquat(chassisTransform->rotation)));
 
         BatteryModel battery = BatteryModel::FRCStandard();
         if (chassisComp->batteryEntity != invalidEntity)
@@ -146,21 +157,47 @@ namespace FRCBananaSim::Robot::Drivetrain::System
             return;
         }
 
+        auto* compMass = scene.GetComponent<Mechanisms::Components::CompositeMassComponent>(chassisEntity);
+        auto* collider = scene.GetComponent<ColliderComponent>(chassisEntity);
+
         // 1. Ingest post-Jolt state and restore velocity offset: V = v_Jolt + Delta
         if (joltContext && joltContext->IsInitialized() && chassisRb && !chassisRb->bodyID.IsInvalid())
         {
             JPH::BodyInterface& bodyInterface = joltContext->GetBodyInterface();
+
+            if (defaultProbe)
+            {
+                defaultProbe->SetIgnoredBody(chassisRb->bodyID);
+            }
+
+            if (compMass && bodyInterface.GetMotionType(chassisRb->bodyID) != JPH::EMotionType::Kinematic)
+            {
+                bodyInterface.SetMotionType(chassisRb->bodyID, JPH::EMotionType::Kinematic, JPH::EActivation::Activate);
+            }
+
             JPH::RVec3 joltPos = bodyInterface.GetPosition(chassisRb->bodyID);
             JPH::Quat joltRot = bodyInterface.GetRotation(chassisRb->bodyID);
             JPH::Vec3 joltLinVel = bodyInterface.GetLinearVelocity(chassisRb->bodyID);
             JPH::Vec3 joltAngVel = bodyInterface.GetAngularVelocity(chassisRb->bodyID);
 
-            // Convert Jolt Engine frame to NWU (+X Fwd, +Y Left, +Z Up)
-            glm::vec3 posNWU(static_cast<float>(joltPos.GetZ()), static_cast<float>(joltPos.GetX()), static_cast<float>(joltPos.GetY()));
-            glm::quat rotNWU(joltRot.GetW(), joltRot.GetZ(), joltRot.GetX(), joltRot.GetY());
+            // Canonical conversion: Engine -> NWU
+            glm::vec3 posEngine(static_cast<float>(joltPos.GetX()), static_cast<float>(joltPos.GetY()), static_cast<float>(joltPos.GetZ()));
+            glm::dquat rotEngine(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
+            glm::vec3 linVelEngine(joltLinVel.GetX(), joltLinVel.GetY(), joltLinVel.GetZ());
+            glm::vec3 angVelEngine(joltAngVel.GetX(), joltAngVel.GetY(), joltAngVel.GetZ());
 
-            glm::vec3 linVelNWU(joltLinVel.GetZ(), joltLinVel.GetX(), joltLinVel.GetY());
-            glm::vec3 angVelNWU(joltAngVel.GetZ(), joltAngVel.GetX(), joltAngVel.GetY());
+            if (collider)
+            {
+                rotEngine = rotEngine * glm::inverse(glm::dquat(collider->localRotation));
+                glm::vec3 worldOffset = glm::quat(rotEngine) * collider->localOffset;
+                posEngine -= worldOffset;
+                linVelEngine -= glm::cross(angVelEngine, worldOffset);
+            }
+
+            glm::vec3 posNWU = Schema::RobotSchemaLoader::ConvertEngineVectorToNWU(posEngine);
+            glm::quat rotNWU = glm::quat(Schema::RobotSchemaLoader::ConvertEngineQuatToNWU(rotEngine));
+            glm::vec3 linVelNWU = Schema::RobotSchemaLoader::ConvertEngineVectorToNWU(linVelEngine);
+            glm::vec3 angVelNWU = Schema::RobotSchemaLoader::ConvertEngineVectorToNWU(angVelEngine);
 
             // Fold in stored delta to maintain continuous momentum across external collisions
             linVelNWU += velocityDeltaLin;
@@ -181,16 +218,35 @@ namespace FRCBananaSim::Robot::Drivetrain::System
         velocityDeltaLin = finalState.linearVelocity - midLinVelNWU;
         velocityDeltaAng = finalState.angularVelocity - midAngVelNWU;
 
-        // 4. Write midpoint velocities to Jolt rigid body
+        // 4. Write midpoint velocities to Jolt rigid body with strict finiteness validation
         if (joltContext && joltContext->IsInitialized() && chassisRb && !chassisRb->bodyID.IsInvalid())
         {
             JPH::BodyInterface& bodyInterface = joltContext->GetBodyInterface();
 
             // Convert NWU -> Jolt Engine
-            JPH::Vec3 midLinVelEng(midLinVelNWU.y, midLinVelNWU.z, midLinVelNWU.x);
-            JPH::Vec3 midAngVelEng(midAngVelNWU.y, midAngVelNWU.z, midAngVelNWU.x);
+            glm::vec3 midLinVelEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(midLinVelNWU);
+            glm::vec3 midAngVelEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(midAngVelNWU);
 
-            bodyInterface.SetLinearAndAngularVelocity(chassisRb->bodyID, midLinVelEng, midAngVelEng);
+            if (collider)   
+            {
+                JPH::Quat joltRot = bodyInterface.GetRotation(chassisRb->bodyID);
+                glm::dquat rotEngine(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());
+                rotEngine = rotEngine * glm::inverse(glm::dquat(collider->localRotation));
+                glm::vec3 worldOffset = glm::quat(rotEngine) * collider->localOffset;
+                midLinVelEng += glm::cross(midAngVelEng, worldOffset);
+            }
+
+            if (std::isfinite(midLinVelEng.x) && std::isfinite(midLinVelEng.y) && std::isfinite(midLinVelEng.z) &&
+                std::isfinite(midAngVelEng.x) && std::isfinite(midAngVelEng.y) && std::isfinite(midAngVelEng.z))
+            {
+                JPH::Vec3 joltLin(midLinVelEng.x, midLinVelEng.y, midLinVelEng.z);
+                JPH::Vec3 joltAng(midAngVelEng.x, midAngVelEng.y, midAngVelEng.z);
+                bodyInterface.SetLinearAndAngularVelocity(chassisRb->bodyID, joltLin, joltAng);
+            }
+            else
+            {
+                SIM_LOG_ERROR("SwerveDriveSystem: Non-finite velocity encountered in midpoint integration!");
+            }
         }
 
         // 5. Populate feedback telemetry
