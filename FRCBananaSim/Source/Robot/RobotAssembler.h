@@ -17,6 +17,7 @@
 #include "Robot/Mechanisms/Systems/ElevatorSystem.h"
 #include "Robot/Mechanisms/Systems/MechanismSystem.h"
 #include "Robot/Mechanisms/Systems/FlywheelSystem.h"
+#include "Robot/Mechanisms/Systems/DifferentialMechanismSystem.h"
 #include "Robot/Mechanisms/Systems/CompositeMassSystem.h"
 #include "Robot/Drivetrain/Systems/SwerveDriveSystem.h"
 #include "Physics/Systems/PhysicsSystem.h"
@@ -58,6 +59,7 @@ namespace FRCBananaSim::Robot
         std::shared_ptr<Actuation::Systems::ElectricalSystem> electricalSystem;
         std::shared_ptr<Mechanisms::Systems::ElevatorSystem> elevatorSystem;
         std::shared_ptr<Mechanisms::Systems::MechanismSystem> mechanismSystem;
+        std::shared_ptr<Mechanisms::Systems::DifferentialMechanismSystem> differentialSystem;
         std::shared_ptr<Mechanisms::Systems::FlywheelSystem> flywheelSystem;
         std::shared_ptr<Mechanisms::Systems::CompositeMassSystem> compositeMassSystem;
         std::shared_ptr<Physics::Systems::PhysicsSystem> physicsSystem;

@@ -69,6 +69,7 @@ namespace FRCBananaSim::Playground
          * @brief Resets the wrist joints and rigid body velocities back to zero rest pose.
          */
         void ResetPose();
+        void Shutdown();
 
     private:
         Core::ECS::Core::Scene* activeScene;

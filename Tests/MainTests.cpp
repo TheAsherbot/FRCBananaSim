@@ -21,6 +21,7 @@
 #include "Bridge/SimDeviceLockstepTest.h"
 #include "Robot/RobotAssemblerTest.h"
 #include "Integration/FullRobotEnduranceTest.h"
+#include "Robot/DifferentialMechanismTest.h"
 
 #include <iostream>
 #include <string>
@@ -43,6 +44,7 @@ using FRCBananaSim::Tests::RunSensorSuiteTest;
 using FRCBananaSim::Tests::RunSimDeviceLockstepTest;
 using FRCBananaSim::Tests::RunRobotAssemblerTest;
 using FRCBananaSim::Tests::RunFullRobotEnduranceTest;
+using FRCBananaSim::Tests::RunDifferentialMechanismTest;
 
 int main(int argc, char* argv[])
 {
@@ -141,6 +143,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunFullRobotEnduranceTest(ctx);
         }
+        else if (arg == "--differential-mechanism")
+        {
+            runAll = false;
+            RunDifferentialMechanismTest(ctx);
+        }
     }
 
     if (runAll)
@@ -162,6 +169,7 @@ int main(int argc, char* argv[])
         RunSimDeviceLockstepTest(ctx);
         RunRobotAssemblerTest(ctx);
         RunFullRobotEnduranceTest(ctx);
+        RunDifferentialMechanismTest(ctx);
     }
 
     std::cout << "======================================\n";

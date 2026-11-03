@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{c8f33195-6b23-4e6a-8b9d-3f5e7e2c9d1b}</ProjectGuid>
+    <RootNamespace>Playground</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)Builds\Playground\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Builds\Playground\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>Playground</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(ProjectDir)Builds\Playground\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Builds\Playground\Intermediates\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>Playground</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;JPH_PROFILE_ENABLED;JPH_DEBUG_RENDERER;JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_OBJECT_STREAM;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include;$(SolutionDir)External\nlohmann</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;Gdi32.lib;Jolt.lib;ws2_32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)External\glfw\bin\$(Configuration);$(SolutionDir)External\jolt\bin\$(Configuration)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;JPH_PROFILE_ENABLED;JPH_DEBUG_RENDERER;JPH_FLOATING_POINT_EXCEPTIONS_ENABLED;JPH_OBJECT_STREAM;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(SolutionDir)External\glm;$(SolutionDir)External\glfw\include;$(SolutionDir)External\glad\include;$(SolutionDir)External\imgui\include;$(SolutionDir)External\jolt\include;$(SolutionDir)External\nlohmann</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;Gdi32.lib;Jolt.lib;ws2_32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)External\glfw\bin\$(Configuration);$(SolutionDir)External\jolt\bin\$(Configuration)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <!-- Third-Party GLAD & ImGui -->
+    <ClCompile Include="..\External\glad\src\glad.c" />
+    <ClCompile Include="..\External\imgui\include\imgui\backend\imgui_impl_glfw.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\backend\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui_demo.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\External\imgui\include\imgui\imgui_widgets.cpp" />
+
+    <!-- Engine Core, ECS & Units -->
+    <ClCompile Include="Source\Core\Engine.cpp" />
+    <ClCompile Include="Source\Core\ECS\Core\Scene.cpp" />
+    <ClCompile Include="Source\Core\ECS\Core\System.cpp" />
+    <ClCompile Include="Source\Core\ECS\Core\IComponentStorage.cpp" />
+    <ClCompile Include="Source\Core\ECS\Systems\TransformPropagationSystem.cpp" />
+    <ClCompile Include="Source\Core\Units\Units.cpp" />
+    <ClCompile Include="Source\Core\Parameters\ParameterStore.cpp" />
+
+    <!-- Physics & Jolt -->
+    <ClCompile Include="Source\Physics\JoltContext.cpp" />
+    <ClCompile Include="Source\Physics\Systems\PhysicsSystem.cpp" />
+    <ClCompile Include="Source\Physics\Systems\JointSystem.cpp" />
+
+    <!-- 3D Renderer -->
+    <ClCompile Include="Source\Renderer\Renderer.cpp" />
+    <ClCompile Include="Source\Renderer\Camera.cpp" />
+    <ClCompile Include="Source\Renderer\Input.cpp" />
+    <ClCompile Include="Source\Renderer\Systems\RenderSystem.cpp" />
+
+    <!-- Actuation Motor Models -->
+    <ClCompile Include="Source\Actuation\DCMotorModel.cpp" />
+
+    <!-- Telemetry & Utils -->
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\TelemetryManager.cpp" />
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\TelemetryTimer.cpp" />
+    <ClCompile Include="Source\Telemetry\TelemeteryViewer\MemoryTracker.cpp" />
+    <ClCompile Include="Source\Utils\DebugDraw.cpp" />
+    <ClCompile Include="Source\Utils\FixedTimestep.cpp" />
+    <ClCompile Include="Source\Utils\Log.cpp" />
+
+    <!-- Differential Mechanism & Playground -->
+    <ClCompile Include="Source\Robot\Mechanisms/Systems/DifferentialMechanismSystem.cpp" />
+    <ClCompile Include="Source\Playground\PlaygroundScene.cpp" />
+    <ClCompile Include="Source\Playground\PlaygroundMain.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Source\Robot\Mechanisms\Components\DifferentialComponent.h" />
+    <ClInclude Include="Source\Robot\Mechanisms\Systems\DifferentialMechanismSystem.h" />
+    <ClInclude Include="Source\Playground\PlaygroundScene.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

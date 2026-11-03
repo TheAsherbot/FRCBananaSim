@@ -346,6 +346,9 @@ namespace FRCBananaSim::Robot::Schema
         }
 
         // Mechanisms
+                // -------------------------------------------------------------
+        // In FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp (around line 355):
+        // -------------------------------------------------------------
         if (json.contains("mechanisms") && json["mechanisms"].is_array())
         {
             for (const auto& mNode : json["mechanisms"])
@@ -366,6 +369,56 @@ namespace FRCBananaSim::Robot::Schema
                 mech.supplyCurrentLimitA = mNode.value("supplyCurrentLimit_A", 40.0);
                 mech.coulombFriction = mNode.value("coulombFriction", 0.0);
                 mech.viscousDamping = mNode.value("viscousDamping", 0.0);
+
+                // ==================== [START NEW DIFFERENTIAL PARSING] ====================
+                if (mNode.contains("targetJoints") && mNode["targetJoints"].is_array())
+                {
+                    for (const auto& tj : mNode["targetJoints"])
+                    {
+                        mech.targetJoints.push_back(tj.get<std::string>());
+                    }
+                }
+                if (mNode.contains("differentialType") && mNode["differentialType"].is_string())
+                {
+                    mech.differentialType = mNode["differentialType"].get<std::string>();
+                }
+                if (mNode.contains("gearRatios") && mNode["gearRatios"].is_array())
+                {
+                    for (const auto& gr : mNode["gearRatios"])
+                    {
+                        mech.gearRatios.push_back(gr.get<double>());
+                    }
+                }
+                if (mNode.contains("couplingMatrix") && mNode["couplingMatrix"].is_array())
+                {
+                    for (const auto& row : mNode["couplingMatrix"])
+                    {
+                        std::vector<double> r;
+                        if (row.is_array())
+                        {
+                            for (const auto& val : row)
+                            {
+                                r.push_back(val.get<double>());
+                            }
+                        }
+                        mech.couplingMatrix.push_back(r);
+                    }
+                }
+                if (mNode.contains("coulombFriction") && mNode["coulombFriction"].is_array())
+                {
+                    for (const auto& cf : mNode["coulombFriction"])
+                    {
+                        mech.coulombFrictions.push_back(cf.get<double>());
+                    }
+                }
+                if (mNode.contains("viscousDamping") && mNode["viscousDamping"].is_array())
+                {
+                    for (const auto& vd : mNode["viscousDamping"])
+                    {
+                        mech.viscousDampings.push_back(vd.get<double>());
+                    }
+                }
+                // ===================== [END NEW DIFFERENTIAL PARSING] =====================
 
                 if (mNode.contains("springAssist"))
                 {

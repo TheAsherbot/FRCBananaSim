@@ -59,6 +59,8 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
         glm::dvec2 viscousDampingNms = { 0.0, 0.0 };  ///< Joint-space viscous damping [b_1, b_2] (N*m*s/rad).
         double statorCurrentLimitA = 60.0;            ///< Motor A stator current limit (A).
         double statorCurrentLimitB = 60.0;            ///< Motor B stator current limit (A).
+        double supplyCurrentLimitA = 40.0;            ///< Motor A supply current limit (A).
+        double supplyCurrentLimitB = 40.0;            ///< Motor B supply current limit (A).
 
         // Reflected & Effective Inertia Matrices
         glm::dmat2 reflectedInertia = glm::dmat2(0.0); ///< T_mq^T * J_rotor * T_mq (kg*m^2).

@@ -1,20 +1,20 @@
 /**
  * @file PlaygroundScene.cpp
- * @brief Implementation of the interactive differential mechanism playground.
+ * @brief Implementation of the visual playground testbed for 2-DOF differential mechanisms.
  */
 
 #include "Playground/PlaygroundScene.h"
 #include "Core/ECS/Components/TransformComponent.h"
+#include "Renderer/Components/MeshComponent.h"
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Physics/Components/ColliderComponent.h"
 #include "Physics/Components/JointComponent.h"
-#include "Renderer/Components/MeshComponent.h"
 #include "Robot/Mechanisms/Components/DifferentialComponent.h"
-#include "Actuation/DCMotorModel.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
 #include <imgui/imgui.h>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <cmath>
 #include <algorithm>
 
@@ -23,9 +23,24 @@ namespace FRCBananaSim::Playground
     using namespace Core::ECS::Core;
     using namespace Core::ECS::Components;
     using namespace Physics::Components;
-    using namespace Renderer::Components;
     using namespace Robot::Mechanisms::Components;
     using namespace Robot::Mechanisms::Systems;
+
+    namespace
+    {
+        /**
+         * @brief Attaches Transform, PreviousTransform, and Velocity components to a playground entity.
+         */
+        void AttachTransforms(Scene& scene, Entity entity, const glm::vec3& pos, const glm::vec3& scale,
+            const glm::quat& rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
+        {
+            TransformComponent transform;
+            transform.position = pos;
+            transform.rotation = rot;
+            transform.scale = scale;
+            scene.AddComponent(entity, transform);
+        }
+    }
 
     PlaygroundScene::PlaygroundScene()
         : activeScene(nullptr),
@@ -37,18 +52,15 @@ namespace FRCBananaSim::Playground
         pitchJointEntity(invalidEntity),
         rollJointEntity(invalidEntity),
         diffMechanismEntity(invalidEntity),
-        physicsSystem(nullptr),
-        jointSystem(nullptr),
-        diffSystem(nullptr),
         controlMode(PlaygroundControlMode::ManualSliders),
         manualVoltageA(0.0f),
         manualVoltageB(0.0f),
         testVoltageMagnitude(6.0f),
-        testFrequencyHz(0.5f),
+        testFrequencyHz(0.75f),
         testTimeSeconds(0.0),
         brakeModeA(true),
         brakeModeB(true),
-        gearRatioPitch(45.0f),
+        gearRatioPitch(40.0f),
         gearRatioRoll(30.0f),
         transmissionEfficiency(0.95f),
         frictionPitchNm(0.35f),
@@ -56,22 +68,8 @@ namespace FRCBananaSim::Playground
     {}
 
     PlaygroundScene::~PlaygroundScene()
-    {}
-
-    static void AttachTransforms(Scene& scene, Entity entity, const glm::vec3& pos,
-        const glm::vec3& scale, const glm::quat& rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
     {
-        TransformComponent transform;
-        transform.position = pos;
-        transform.scale = scale;
-        transform.rotation = rot;
-        scene.AddComponent(entity, transform);
-
-        WorldTransformComponent worldTransform;
-        worldTransform.worldPosition = pos;
-        worldTransform.worldScale = scale;
-        worldTransform.worldRotation = rot;
-        scene.AddComponent(entity, worldTransform);
+        Shutdown();
     }
 
     bool PlaygroundScene::Initialize(Scene& scene, Physics::JoltContext& jolt)
@@ -91,8 +89,8 @@ namespace FRCBananaSim::Playground
         {
             AttachTransforms(scene, groundEntity, glm::vec3(0.0f, -0.05f, 0.0f), glm::vec3(10.0f, 0.10f, 10.0f));
 
-            MeshComponent mesh;
-            mesh.shape = PrimitiveShape::Plane;
+            Renderer::Components::MeshComponent mesh;
+            mesh.shape = Renderer::Components::PrimitiveShape::Plane;
             mesh.color = glm::vec3(0.15f, 0.17f, 0.20f); // Slate dark testing pad
             scene.AddComponent(groundEntity, mesh);
 
@@ -114,13 +112,14 @@ namespace FRCBananaSim::Playground
             glm::vec3 standDims(0.18f, 1.00f, 0.18f);
             AttachTransforms(scene, mountStandEntity, standPos, standDims);
 
-            MeshComponent mesh;
-            mesh.shape = PrimitiveShape::Cube;
+            Renderer::Components::MeshComponent mesh;
+            mesh.shape = Renderer::Components::PrimitiveShape::Cube;
             mesh.color = glm::vec3(0.30f, 0.32f, 0.35f); // Gunmetal Pillar
             scene.AddComponent(mountStandEntity, mesh);
 
             RigidBodyComponent rb;
             rb.motionType = BodyMotionType::Static;
+            rb.isSensor = true; // Disable self-collision with articulated wrist links
             scene.AddComponent(mountStandEntity, rb);
 
             ColliderComponent col;
@@ -136,8 +135,8 @@ namespace FRCBananaSim::Playground
             glm::vec3 yokeDims(0.24f, 0.08f, 0.12f);
             AttachTransforms(scene, pitchYokeEntity, yokePos, yokeDims);
 
-            MeshComponent mesh;
-            mesh.shape = PrimitiveShape::Cube;
+            Renderer::Components::MeshComponent mesh;
+            mesh.shape = Renderer::Components::PrimitiveShape::Cube;
             mesh.color = glm::vec3(0.10f, 0.65f, 0.95f); // Vibrant Electric Cyan Yoke
             scene.AddComponent(pitchYokeEntity, mesh);
 
@@ -147,6 +146,8 @@ namespace FRCBananaSim::Playground
             rb.gravityFactor = 0.0f; // Controlled by analytic gravity solver
             rb.linearDamping = 0.05f;
             rb.angularDamping = 0.05f;
+            rb.allowSleeping = false;
+            rb.isSensor = true; // Prevent self-collision with stand and tool
             scene.AddComponent(pitchYokeEntity, rb);
 
             ColliderComponent col;
@@ -167,7 +168,7 @@ namespace FRCBananaSim::Playground
             jc.hasLimits = true;
             jc.minLimit = glm::radians(-85.0f);
             jc.maxLimit = glm::radians(+85.0f);
-            jc.limitSpringFrequency = 40.0f;
+            jc.limitSpringFrequency = 25.0f;
             jc.limitSpringDamping = 1.0f;
             scene.AddComponent(pitchJointEntity, jc);
         }
@@ -179,8 +180,8 @@ namespace FRCBananaSim::Playground
             glm::vec3 toolDims(0.14f, 0.06f, 0.18f);
             AttachTransforms(scene, rollToolEntity, toolPos, toolDims);
 
-            MeshComponent mesh;
-            mesh.shape = PrimitiveShape::Cube;
+            Renderer::Components::MeshComponent mesh;
+            mesh.shape = Renderer::Components::PrimitiveShape::Cube;
             mesh.color = glm::vec3(1.00f, 0.45f, 0.10f); // Bright Safety Orange Tool
             scene.AddComponent(rollToolEntity, mesh);
 
@@ -190,6 +191,8 @@ namespace FRCBananaSim::Playground
             rb.gravityFactor = 0.0f;
             rb.linearDamping = 0.05f;
             rb.angularDamping = 0.05f;
+            rb.allowSleeping = false;
+            rb.isSensor = true; // Prevent self-collision with yoke
             scene.AddComponent(rollToolEntity, rb);
 
             ColliderComponent col;
@@ -207,11 +210,7 @@ namespace FRCBananaSim::Playground
             jc.childEntity = rollToolEntity;
             jc.SetWorldSpace(glm::vec3(0.0f, 1.00f, 0.11f), glm::vec3(0.0f, 0.0f, 1.0f)); // Hinge around +Z
 
-            jc.hasLimits = true;
-            jc.minLimit = glm::radians(-175.0f);
-            jc.maxLimit = glm::radians(+175.0f);
-            jc.limitSpringFrequency = 40.0f;
-            jc.limitSpringDamping = 1.0f;
+            jc.hasLimits = false; // Continuous 360-degree wrist roll rotation
             scene.AddComponent(rollJointEntity, jc);
         }
 
@@ -332,9 +331,36 @@ namespace FRCBananaSim::Playground
             return;
         }
 
+        JPH::BodyInterface& bodyInterface = activeJolt->GetBodyInterface();
+
+        // Reset Physical Jolt Body for Pitch Yoke
+        if (auto* rbYoke = activeScene->GetComponent<RigidBodyComponent>(pitchYokeEntity))
+        {
+            if (rbYoke->isCreated && !rbYoke->bodyID.IsInvalid())
+            {
+                bodyInterface.SetPositionAndRotation(rbYoke->bodyID,
+                    JPH::RVec3(0.0f, 1.00f, 0.05f), JPH::Quat::sIdentity(), JPH::EActivation::Activate);
+                bodyInterface.SetLinearVelocity(rbYoke->bodyID, JPH::Vec3::sZero());
+                bodyInterface.SetAngularVelocity(rbYoke->bodyID, JPH::Vec3::sZero());
+            }
+        }
+
+        // Reset Physical Jolt Body for Roll Tool
+        if (auto* rbTool = activeScene->GetComponent<RigidBodyComponent>(rollToolEntity))
+        {
+            if (rbTool->isCreated && !rbTool->bodyID.IsInvalid())
+            {
+                bodyInterface.SetPositionAndRotation(rbTool->bodyID,
+                    JPH::RVec3(0.0f, 1.00f, 0.20f), JPH::Quat::sIdentity(), JPH::EActivation::Activate);
+                bodyInterface.SetLinearVelocity(rbTool->bodyID, JPH::Vec3::sZero());
+                bodyInterface.SetAngularVelocity(rbTool->bodyID, JPH::Vec3::sZero());
+            }
+        }
+
         // Reset Joint target velocities and applied torques
         if (auto* pj = activeScene->GetComponent<JointComponent>(pitchJointEntity))
         {
+            pj->targetVelocity = 0.0f;
             pj->appliedTorque = 0.0f;
             pj->currentAngle = 0.0f;
             pj->currentVelocity = 0.0f;
@@ -342,12 +368,25 @@ namespace FRCBananaSim::Playground
 
         if (auto* rj = activeScene->GetComponent<JointComponent>(rollJointEntity))
         {
+            rj->targetVelocity = 0.0f;
             rj->appliedTorque = 0.0f;
             rj->currentAngle = 0.0f;
             rj->currentVelocity = 0.0f;
         }
 
-        // Reset physical Jolt body transforms
+        if (auto* diff = activeScene->GetComponent<DifferentialComponent>(diffMechanismEntity))
+        {
+            diff->commandedVoltageA = 0.0;
+            diff->commandedVoltageB = 0.0;
+            diff->jointPositionsRad = { 0.0, 0.0 };
+            diff->jointVelocitiesRadS = { 0.0, 0.0 };
+            diff->deliveredJointTorquesNm = { 0.0, 0.0 };
+            diff->motorRotorAnglesRad = { 0.0, 0.0 };
+            diff->motorRotorSpeedsRadS = { 0.0, 0.0 };
+            diff->motorStatorCurrentsA = { 0.0, 0.0 };
+        }
+
+        // Sync ECS transforms
         if (auto* tYoke = activeScene->GetComponent<TransformComponent>(pitchYokeEntity))
         {
             tYoke->position = glm::vec3(0.0f, 1.00f, 0.05f);
@@ -461,5 +500,14 @@ namespace FRCBananaSim::Playground
             }
         }
         ImGui::End();
+    }
+
+    void PlaygroundScene::Shutdown()
+    {
+        diffSystem.reset();
+        jointSystem.reset();
+        physicsSystem.reset();
+        activeScene = nullptr;
+        activeJolt = nullptr;
     }
 }

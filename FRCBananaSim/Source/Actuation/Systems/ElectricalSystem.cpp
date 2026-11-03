@@ -7,6 +7,7 @@
 #include "Robot/Mechanisms/Components/ElevatorComponent.h"
 #include "Robot/Mechanisms/Components/ArmComponent.h"
 #include "Robot/Mechanisms/Components/FlywheelComponent.h"
+#include "Robot/Mechanisms/Components/DifferentialComponent.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
 
 #include <algorithm>
@@ -132,6 +133,39 @@ namespace FRCBananaSim::Actuation::Systems
                 double supply = std::min(flywheel->statorCurrentLimitA, duty * statorI);
                 totalAmps += supply;
             }
+        }
+
+        // 4b. Differential Mechanisms Supply Current Aggregation (2 Motors per Mechanism)
+        auto diffEntities = scene.Query<Robot::Mechanisms::Components::DifferentialComponent>();
+        for (auto entity : diffEntities)
+        {
+            auto* diff = scene.GetComponent<Robot::Mechanisms::Components::DifferentialComponent>(entity);
+            if (!diff)
+            {
+                continue;
+            }
+
+            double vBus = std::max(1.0, currentTerminalVoltage);
+
+            // Motor A (Left)
+            Actuation::DCMotorModel motorA = diff->motorModelA.WithMotorCount(diff->motorCountA);
+            double omegaA = diff->motorRotorSpeedsRadS.x;
+            double statorIA = std::abs(diff->motorStatorCurrentsA.x);
+            double vWindingA = std::min(std::abs(diff->commandedVoltageA),
+                (statorIA * motorA.GetResistance()) + std::abs(motorA.GetBackEmfConstantKe() * omegaA));
+            double dutyA = std::clamp(vWindingA / vBus, 0.0, 1.0);
+            double supplyA = std::min(diff->supplyCurrentLimitA, dutyA * statorIA);
+            totalAmps += supplyA;
+
+            // Motor B (Right)
+            Actuation::DCMotorModel motorB = diff->motorModelB.WithMotorCount(diff->motorCountB);
+            double omegaB = diff->motorRotorSpeedsRadS.y;
+            double statorIB = std::abs(diff->motorStatorCurrentsA.y);
+            double vWindingB = std::min(std::abs(diff->commandedVoltageB),
+                (statorIB * motorB.GetResistance()) + std::abs(motorB.GetBackEmfConstantKe() * omegaB));
+            double dutyB = std::clamp(vWindingB / vBus, 0.0, 1.0);
+            double supplyB = std::min(diff->supplyCurrentLimitB, dutyB * statorIB);
+            totalAmps += supplyB;
         }
 
         // 5. Battery Model Calculation & Brownout Tripping

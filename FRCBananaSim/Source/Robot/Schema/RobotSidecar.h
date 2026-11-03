@@ -90,6 +90,13 @@ namespace FRCBananaSim::Robot::Schema
      */
     struct MechanismConfig
     {
+        std::vector<std::string> targetJoints; ///< Array of 2 joint names (e.g. [pitch_joint, roll_joint]).
+        std::string differentialType = "symmetric_bevel"; ///< "symmetric_bevel", "core_xy", "coupled_arm", "custom_matrix".
+        std::vector<double> gearRatios;        ///< [Gp, Gr] for symmetric bevel.
+        std::vector<std::vector<double>> couplingMatrix; ///< 2x2 matrix for custom_matrix.
+        std::vector<double> coulombFrictions;  ///< [frictionJointA, frictionJointB].
+        std::vector<double> viscousDampings;   ///< [dampingJointA, dampingJointB].
+
         std::string name;
         std::string role; ///< "elevator", "arm", "wrist", "four_bar", "flywheel", "intake"
         std::string targetJoint;

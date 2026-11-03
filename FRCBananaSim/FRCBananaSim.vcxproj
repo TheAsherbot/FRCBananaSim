@@ -195,6 +195,8 @@
     <ClCompile Include="Source\Core\Engine.cpp" />
     <ClCompile Include="Source\Core\Parameters\ParameterStore.cpp" />
     <ClCompile Include="Source\Core\Units\Units.cpp" />
+    <ClCompile Include="Source\Playground\PlaygroundMain.cpp" />
+    <ClCompile Include="Source\Playground\PlaygroundScene.cpp" />
     <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveChassisSolver.cpp" />
     <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveDrivetrainModel.cpp" />
     <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveModuleModel.cpp" />
@@ -212,6 +214,7 @@
     <ClCompile Include="Source\Renderer\Systems\RenderSystem.cpp" />
     <ClCompile Include="Source\Robot\Drivetrain\Systems\SwerveTerrainProbe.cpp" />
     <ClCompile Include="Source\Robot\Mechanisms\Systems\CompositeMassSystem.cpp" />
+    <ClCompile Include="Source\Robot\Mechanisms\Systems\DifferentialMechanismSystem.cpp" />
     <ClCompile Include="Source\Robot\Mechanisms\Systems\ElevatorSystem.cpp" />
     <ClCompile Include="Source\Robot\Mechanisms\Systems\FlywheelSystem.cpp" />
     <ClCompile Include="Source\Robot\Mechanisms\Systems\MechanismSystem.cpp" />
@@ -263,13 +266,16 @@
     <ClInclude Include="Source\Core\Parameters\ParameterStore.h" />
     <ClInclude Include="Source\Core\Parameters\ParameterValue.h" />
     <ClInclude Include="Source\Core\Units\Units.h" />
+    <ClInclude Include="Source\Playground\PlaygroundScene.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\ArmComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\CompositeMassComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\CouplingComponent.h" />
+    <ClInclude Include="Source\Robot\Mechanisms\Components\DifferentialComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\ElevatorComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\FlywheelComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\FourBarComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Systems\CompositeMassSystem.h" />
+    <ClInclude Include="Source\Robot\Mechanisms\Systems\DifferentialMechanismSystem.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Systems\ElevatorSystem.h" />
     <ClInclude Include="Source\Robot\Drivetrain\Components\SwerveChassisComponent.h" />
     <ClInclude Include="Source\Robot\Drivetrain\Components\SwerveModuleComponent.h" />

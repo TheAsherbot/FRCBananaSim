@@ -7,6 +7,7 @@
 #include "Robot/Mechanisms/Components/ElevatorComponent.h"
 #include "Robot/Mechanisms/Components/ArmComponent.h"
 #include "Robot/Mechanisms/Components/FlywheelComponent.h"
+#include "Robot/Mechanisms/Components/DifferentialComponent.h" 
 #include "Physics/Components/JointComponent.h"
 #include "Physics/Components/RigidBodyComponent.h"
 #include "Robot/Schema/RobotSchemaLoader.h"
@@ -135,6 +136,36 @@ namespace FRCBananaSim::Robot::Sensors::Systems
                     out.rotorVelocitiesRps[slot] = rotorRps;
                     out.motorCurrents[slot] = perMotorCurrent;
                 }
+            }
+        }
+
+        // 3b. Process Differential Mechanism Rotors & Joint Coordinates
+        auto diffEntities = scene.Query<Robot::Mechanisms::Components::DifferentialComponent>();
+        for (auto entity : diffEntities)
+        {
+            auto* diff = scene.GetComponent<Robot::Mechanisms::Components::DifferentialComponent>(entity);
+            if (!diff) { continue; }
+
+            constexpr double invTwoPi = 1.0 / (2.0 * std::numbers::pi);
+
+            // Motor A (Pitch Joint Angle & Motor A Rotor)
+            if (diff->motorSlotA < Control::MAX_MOTOR_SLOTS)
+            {
+                out.encoderPositions[diff->motorSlotA] = diff->jointPositionsRad.x;
+                out.encoderVelocities[diff->motorSlotA] = diff->jointVelocitiesRadS.x;
+                out.rotorPositionsRot[diff->motorSlotA] = diff->motorRotorAnglesRad.x * invTwoPi;
+                out.rotorVelocitiesRps[diff->motorSlotA] = diff->motorRotorSpeedsRadS.x * invTwoPi;
+                out.motorCurrents[diff->motorSlotA] = diff->motorStatorCurrentsA.x;
+            }
+
+            // Motor B (Roll Joint Angle & Motor B Rotor)
+            if (diff->motorSlotB < Control::MAX_MOTOR_SLOTS)
+            {
+                out.encoderPositions[diff->motorSlotB] = diff->jointPositionsRad.y;
+                out.encoderVelocities[diff->motorSlotB] = diff->jointVelocitiesRadS.y;
+                out.rotorPositionsRot[diff->motorSlotB] = diff->motorRotorAnglesRad.y * invTwoPi;
+                out.rotorVelocitiesRps[diff->motorSlotB] = diff->motorRotorSpeedsRadS.y * invTwoPi;
+                out.motorCurrents[diff->motorSlotB] = diff->motorStatorCurrentsA.y;
             }
         }
 

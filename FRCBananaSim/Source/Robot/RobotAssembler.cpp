@@ -15,6 +15,7 @@
 #include "Robot/Mechanisms/Components/FlywheelComponent.h"
 #include "Robot/Mechanisms/Components/CouplingComponent.h"
 #include "Robot/Mechanisms/Components/CompositeMassComponent.h"
+#include "Robot/Mechanisms/Components/DifferentialComponent.h"
 #include "Robot/Sensors/Components/IMUComponent.h"
 #include "Robot/Sensors/Components/EncoderComponent.h"
 #include "Robot/Sensors/Components/LimitSwitchComponent.h"
@@ -503,6 +504,91 @@ namespace FRCBananaSim::Robot
 
                 scene.AddComponent(mechEntity, fw);
             }
+            else if (mech.role == "differential")
+            {
+                Mechanisms::Components::DifferentialComponent diff;
+                diff.name = mech.name;
+
+                // Allocate 2 distinct motor slots: Motor A (slotA) and Motor B (slotB)
+                uint32_t slotA = nextMechanismSlot;
+                if (nextMechanismSlot < Control::MAX_MOTOR_SLOTS) { ++nextMechanismSlot; }
+                uint32_t slotB = nextMechanismSlot;
+                if (nextMechanismSlot < Control::MAX_MOTOR_SLOTS) { ++nextMechanismSlot; }
+
+                diff.motorSlotA = slotA;
+                diff.motorSlotB = slotB;
+
+                diff.efficiency = mech.efficiency;
+                diff.statorCurrentLimitA = mech.statorCurrentLimitA;
+                diff.statorCurrentLimitB = mech.statorCurrentLimitA;
+                diff.supplyCurrentLimitA = mech.supplyCurrentLimitA;
+                diff.supplyCurrentLimitB = mech.supplyCurrentLimitA;
+
+                if (!mech.coulombFrictions.empty())
+                {
+                    diff.coulombFrictionNm.x = mech.coulombFrictions[0];
+                    diff.coulombFrictionNm.y = (mech.coulombFrictions.size() > 1) ? mech.coulombFrictions[1] : mech.coulombFrictions[0];
+                }
+                else
+                {
+                    diff.coulombFrictionNm = { mech.coulombFriction, mech.coulombFriction };
+                }
+
+                if (!mech.viscousDampings.empty())
+                {
+                    diff.viscousDampingNms.x = mech.viscousDampings[0];
+                    diff.viscousDampingNms.y = (mech.viscousDampings.size() > 1) ? mech.viscousDampings[1] : mech.viscousDampings[0];
+                }
+                else
+                {
+                    diff.viscousDampingNms = { mech.viscousDamping, mech.viscousDamping };
+                }
+
+                diff.motorModelA = CreateMotorFromPreset(mech.motorPreset, 1.0, 1.0);
+                diff.motorModelB = CreateMotorFromPreset(mech.motorPreset, 1.0, 1.0);
+
+                // Configure Kinematics (Symmetric Bevel vs Custom Matrix)
+                if (mech.differentialType == "custom_matrix" && mech.couplingMatrix.size() >= 2 && mech.couplingMatrix[0].size() >= 2)
+                {
+                    glm::dmat2 matMq(
+                        mech.couplingMatrix[0][0], mech.couplingMatrix[1][0],
+                        mech.couplingMatrix[0][1], mech.couplingMatrix[1][1]
+                    );
+                    Mechanisms::Systems::DifferentialMechanismSystem::ConfigureCustomMatrix(diff, matMq);
+                }
+                else
+                {
+                    double gp = (!mech.gearRatios.empty()) ? mech.gearRatios[0] : mech.gearRatio;
+                    double gr = (mech.gearRatios.size() > 1) ? mech.gearRatios[1] : mech.gearRatio;
+                    Mechanisms::Systems::DifferentialMechanismSystem::ConfigureSymmetricBevel(diff, gp, gr, false);
+                }
+
+                // Resolve Target Joints and Child Links
+                if (mech.targetJoints.size() >= 2)
+                {
+                    auto jItA = result.jointEntities.find(mech.targetJoints[0]);
+                    if (jItA != result.jointEntities.end()) { diff.jointEntityA = jItA->second; }
+
+                    auto jItB = result.jointEntities.find(mech.targetJoints[1]);
+                    if (jItB != result.jointEntities.end()) { diff.jointEntityB = jItB->second; }
+
+                    const auto* jDefA = manifest.FindJoint(mech.targetJoints[0]);
+                    if (jDefA)
+                    {
+                        auto lItA = result.linkEntities.find(jDefA->childLink);
+                        if (lItA != result.linkEntities.end()) { diff.linkEntityA = lItA->second; }
+                    }
+
+                    const auto* jDefB = manifest.FindJoint(mech.targetJoints[1]);
+                    if (jDefB)
+                    {
+                        auto lItB = result.linkEntities.find(jDefB->childLink);
+                        if (lItB != result.linkEntities.end()) { diff.linkEntityB = lItB->second; }
+                    }
+                }
+
+                scene.AddComponent(mechEntity, diff);
+            }
         }
 
         // 7. Spawn Couplings (PowerCoupling, FourBarLoop)
@@ -761,6 +847,7 @@ namespace FRCBananaSim::Robot
         result.electricalSystem = std::make_shared<Actuation::Systems::ElectricalSystem>(scene, result.swerveSystem.get());
         result.elevatorSystem = std::make_shared<Mechanisms::Systems::ElevatorSystem>(scene, joltContext);
         result.mechanismSystem = std::make_shared<Mechanisms::Systems::MechanismSystem>(scene, joltContext);
+        result.differentialSystem = std::make_shared<Mechanisms::Systems::DifferentialMechanismSystem>(scene, joltContext);
         result.flywheelSystem = std::make_shared<Mechanisms::Systems::FlywheelSystem>(scene, joltContext);
         result.compositeMassSystem = std::make_shared<Mechanisms::Systems::CompositeMassSystem>(
             scene, result.swerveSystem ? result.swerveSystem->GetModel() : nullptr, joltContext);
@@ -815,6 +902,12 @@ namespace FRCBananaSim::Robot
         if (robot.mechanismSystem)
         {
             robot.mechanismSystem->FixedUpdate(dt);
+        }
+
+        // Stage 3b: DifferentialMechanismSystem (Coupled 2-DOF semi-implicit differential drives)
+        if (robot.differentialSystem)
+        {
+            robot.differentialSystem->FixedUpdate(dt);
         }
 
         // Stage 4: FlywheelSystem (Sub-stepped 1D rotational ODEs and body reaction recoil)

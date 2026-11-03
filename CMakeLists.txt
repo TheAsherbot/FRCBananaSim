@@ -56,6 +56,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/Mechanisms/Systems/CompositeMassSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/FlywheelSystem.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/DifferentialMechanismSystem.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
@@ -145,6 +146,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/Mechanisms/Systems/CompositeMassSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/FlywheelSystem.cpp
+    FRCBananaSim/Source/Robot/Mechanisms/Systems/DifferentialMechanismSystem.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
@@ -184,6 +186,7 @@ set(TEST_SOURCES
     Tests/Robot/RobotSchemaTest.cpp
     Tests/Robot/ElevatorMechanismTest.cpp
     Tests/Robot/ArmFourBarFlywheelTest.cpp
+    Tests/Robot/DifferentialMechanismTest.cpp
     Tests/Robot/SensorSuiteTest.cpp
     Tests/Bridge/SimDeviceLockstepTest.cpp
     Tests/Robot/RobotAssemblerTest.cpp
@@ -219,6 +222,7 @@ add_test(NAME DrivetrainLoggerTest COMMAND FRCBananaSim_Tests --drivetrain-logge
 add_test(NAME RobotSchemaTest COMMAND FRCBananaSim_Tests --schema)
 add_test(NAME ElevatorMechanismTest COMMAND FRCBananaSim_Tests --elevator-mechanism)
 add_test(NAME ArmFourBarFlywheelTest COMMAND FRCBananaSim_Tests --arm-fourbar-flywheel)
+add_test(NAME DifferentialMechanismTest COMMAND FRCBananaSim_Tests --differential-mechanism)
 add_test(NAME SensorSuiteTest COMMAND FRCBananaSim_Tests --sensors)
 add_test(NAME SimDeviceLockstepTest COMMAND FRCBananaSim_Tests --simdevice-lockstep)
 add_test(NAME RobotAssemblerTest COMMAND FRCBananaSim_Tests --robot-assembler)

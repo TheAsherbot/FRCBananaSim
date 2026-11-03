@@ -4,5 +4,8 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="FRCBananaSim/FRCBananaSim.vcxproj" Id="a3d82426-f999-4a1d-a46d-8f14f2b5139c" />
+  <Project Path="FRCBananaSim/Playground.vcxproj" Id="c8f33195-6b23-4e6a-8b9d-3f5e7e2c9d1b">
+    <Platform Project="x64" />
+  </Project>
   <Project Path="FRCBananaSim/ProfilerViewer.vcxproj" Id="b7e21894-3d12-4f5a-9a8c-2f4e6d1b8c0a" />
 </Solution>
