@@ -1,20 +1,21 @@
 # FRCBananaSim Robot Configuration & Calibration Guide
 
 > [!NOTE]
-> **Status:** Block 2 & Block 3 Verified — 6-DOF Analytic Swerve Dynamics, Jolt Rigid Body Chassis, Tire Contact Model, Battery Electromechanics, Robot Data Schema v1.0.0 (`manifest.json`, `sidecar.json`, `materials.json`), Multi-Stage Elevators, Rotational Arms & Wrists, Closed-Loop Four-Bar Linkages, High-RPM Flywheels, Full Sensor Suite (`CANcoder`, 6-Axis `Pigeon 2` IMU, Limit Switches, Beam Breaks, Analog Inputs), and CTRE Phoenix 6 / REVLib HALSim WebSocket Lockstep Bridge.
-> This document is the living reference guide for modeling, measuring, and configuring robots in **FRCBananaSim**. It strictly documents features and parameters that are **currently implemented and parsed** by the simulation engine, covering both **Block 2 Standalone Swerve (`robot_swerve.json`)** and **Block 3 Full-Robot Schema v1 (`manifest.json`, `sidecar.json`, `materials.json`)**.
+> **Status:** Block 2 & Block 3 Verified — 6-DOF Analytic Swerve Dynamics, Jolt Rigid Body Chassis, Tire Contact Model, Battery Electromechanics, Robot Data Schema v1.0.0 (`manifest.json`, `sidecar.json`, `materials.json`), Multi-Stage Elevators, Rotational Arms & Wrists, Closed-Loop Four-Bar Linkages, High-RPM Flywheels, Full Sensor Suite (`CANcoder`, 6-Axis `Pigeon 2` IMU, Limit Switches, Beam Breaks, Analog Inputs), CTRE Phoenix 6 / REVLib HALSim WebSocket Lockstep Bridge, and Fusion 360 Exporter Standards.
+>
+> This document is the living reference guide for modeling, measuring, configuring, and calibrating robots in **FRCBananaSim**. It covers the complete modeling pipeline from **Fusion 360 CAD authoring**, to physical workbench measurements, to configuration file dictionaries for **Block 2 Standalone Swerve (`robot_swerve.json`)** and **Block 3 Full-Robot Schema v1 (`manifest.json`, `sidecar.json`, `materials.json`)**.
 
 ---
 
-## 1. System Overview & The Configuration Files
+## 1. System Overview & Configuration Architecture
 
-**FRCBananaSim** supports two configuration workflows:
+**FRCBananaSim** supports two configuration and simulation tiers:
 
 ### A. Block 2 Standalone Swerve Configuration (`robot_swerve.json`)
-All standalone swerve drivetrain configuration data resides in:
+All standalone swerve drivetrain configuration data resides in:  
 📁 [`FRCBananaSim/Resources/Robots/robot_swerve.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/robot_swerve.json)
 
-When launched in standalone swerve mode, [`RobotSpawner::SpawnFromJsonFile`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/RobotSpawner.cpp) and [`SwerveDrivetrainConfig::LoadFromJsonString`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveParams.cpp) parse this JSON file into physical entities:
+When launched in standalone swerve mode, `RobotSpawner::SpawnFromJsonFile` and `SwerveDrivetrainConfig::LoadFromJsonString` parse this JSON file into physical entities:
 1. **Chassis Rigid Body**: A single dynamic Jolt physics body with 6 degrees of freedom (surge, sway, heave, roll, pitch, yaw), custom mass, and custom $3 \times 3$ inertia tensor.
 2. **Analytic Swerve Drivetrain**: 4 module contact points evaluating tire brush friction, Stribeck transitions, and normal force load transfers.
 3. **Electromechanical Actuation**: DC motor torque curves, gear ratios, drivetrain friction, and buck-converter battery sag models.
@@ -42,11 +43,11 @@ When launched in standalone swerve mode, [`RobotSpawner::SpawnFromJsonFile`](fil
 ```
 
 ### B. Block 3 Full-Robot Schema v1.0.0 (`manifest.json`, `sidecar.json`, `materials.json`)
-For complete multi-mechanism robots, configuration data is partitioned into three modular JSON files loaded by [`RobotSchemaLoader`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp) and assembled by [`RobotAssembler::AssembleFromFiles`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/RobotAssembler.cpp):
+For complete multi-mechanism robots, configuration data is partitioned into three modular JSON files loaded by `RobotSchemaLoader` and assembled by `RobotAssembler::AssembleFromFiles`:
 * 📁 [`FRCBananaSim/Resources/Robots/Reference2026/manifest.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/Reference2026/manifest.json) — Physical CAD hierarchy (links, masses, CoMs, full $3 \times 3$ inertia tensors, colliders, joints, and sensor contact zones).
 * 📁 [`FRCBananaSim/Resources/Robots/Reference2026/sidecar.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/Reference2026/sidecar.json) — Electromechanical actuation, swerve parameters, mechanism controllers, kinematic couplings, and hardware sensors.
 * 📁 [`FRCBananaSim/Resources/Config/materials.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Config/materials.json) — Surface friction, restitution, density, and pairwise contact overrides.
-* 📁 [`FRCBananaSim/Resources/Config/simdevice_keymap.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Config/simdevice_keymap.json) — Configurable vendor property key aliases for [`SimDeviceDispatcher`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Bridge/SimDeviceDispatcher.cpp).
+* 📁 [`FRCBananaSim/Resources/Config/simdevice_keymap.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Config/simdevice_keymap.json) — Configurable vendor property key aliases for `SimDeviceDispatcher`.
 
 ```
 ┌───────────────────────────┐   ┌───────────────────────────┐   ┌───────────────────────────┐
@@ -73,16 +74,197 @@ For complete multi-mechanism robots, configuration data is partitioned into thre
   8. SensorSystem         (Encoders, 6-axis IMU, DIO limits & beams)
 ```
 
-### Coordinate System & Unit Conventions
-All JSON files (`robot_swerve.json`, `manifest.json`, `sidecar.json`) use **SI Units** ($\text{m}$, $\text{kg}$, $\text{s}$, $\text{rad}$, $\text{V}$, $\text{A}$) and the **WPILib NWU (North-West-Up)** right-handed coordinate frame ($+X$ Forward, $+Y$ Left, $+Z$ Up, CCW-positive yaw). At load time, [`RobotSchemaLoader`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp#L24-L60) and [`SwerveDriveSystem`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/Drivetrain/Systems/SwerveDriveSystem.cpp#L68-L115) apply a proper right-handed orthogonal rotation ($\det = +1$) into the internal **Engine / OpenGL Y-Up Frame** ($+X$ Left, $+Y$ Up, $+Z$ Forward):
-$$\mathbf{v}_{\text{engine}} = \begin{pmatrix} +v_{y, \text{NWU}} \\ v_{z, \text{NWU}} \\ v_{x, \text{NWU}} \end{pmatrix}, \qquad \mathbf{v}_{\text{NWU}} = \begin{pmatrix} v_{z, \text{engine}} \\ +v_{x, \text{engine}} \\ v_{y, \text{engine}} \end{pmatrix}$$
-For revolute joints pitching around the lateral axis (NWU `[0, 1, 0]`), [`RobotAssembler`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/RobotAssembler.cpp#L252-L261) negates `axisEngine.x` so positive joint angles pitch the mechanism **upward** ($+X_{\text{NWU}} \to +Z_{\text{NWU}}$).
+---
+
+## 2. CAD Authoring & Fusion 360 Standards (The CADder's Guide)
+
+> [!IMPORTANT]
+> **Why CAD accuracy matters:**  
+> BananaSim does not guess mass or balance. It calculates total weight, center of gravity ($X, Y, Z$), and tip resistance directly from Fusion 360. If parts are left on default materials, your aluminum robot will weigh 350 lbs in the sim. If joints have no limits, your elevator will shoot through the ceiling. Follow this contract strictly during CAD authoring.
+
+### A. The 3 Golden Rules for CADders
+1. **Always assign Physical Materials, not just Appearances.** (Appearances are only paint; Physical Materials give parts real weight).
+2. **Use real Joints with Limits for moving mechanisms.** (Elevators need Slider joints with max travel; arms need Revolute joints with min/max angles).
+3. **Names in CAD must match `sidecar.json`.** (If you name an arm joint `arm_shoulder_hinge` in Fusion, use the exact same name in your config).
 
 ---
 
-## 2. Parameter Extraction from CAD (Block 2 Swerve & Chassis)
+### B. Our Team's Coordinate System in Fusion 360
 
-Extract these values directly from your robot CAD assembly (Onshape, SolidWorks, Fusion 360, or Inventor). Every value listed here maps directly into [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/robot_swerve.json) (and into `"base_link"` / `"swerve"` in Schema v1).
+Our team models robots using this exact orientation in Fusion 360:
+
+| Direction | Fusion 360 Axis | Robot Meaning |
+| :--- | :--- | :--- |
+| **Front / Intake** | **$+Z$** | Front of the robot (intake side) |
+| **Left Side** | **$+X$** | Left side of the robot (Fusion's "Right" ViewCube face) |
+| **Top / Up** | **$+Y$** | Top of the robot (pointing up to the ceiling) |
+
+```
+               +Y (Up / Ceiling)
+               ▲
+               │
+               │   ▲ +Z (Forward / Intake)
+               │  /
+               │ /
+               └────────► +X (Robot Left Side)
+```
+
+```mermaid
+flowchart LR
+    CAD["Fusion 360 CAD<br>+Z = Fwd, +X = Left, +Y = Up"] -->|"Fusion Exporter<br>(x_N = z_F, y_N = x_F, z_N = y_F)"| NWU["Schema v1 manifest.json<br>WPILib NWU Standard<br>+X = Fwd, +Y = Left, +Z = Up"]
+    NWU -->|"RobotSchemaLoader<br>(x_E = y_N, y_E = z_N, z_E = x_N)"| Engine["BananaSim Engine & GLB<br>OpenGL Frame<br>+X = Left, +Y = Up, +Z = Fwd"]
+```
+
+> [!TIP]
+> **The Free Alignment:**  
+> Notice that our team's Fusion coordinate frame ($+X$ Left, $+Y$ Up, $+Z$ Forward) is **identical to BananaSim's Engine OpenGL coordinate frame**! The exporter maps Fusion into standard WPILib NWU for `manifest.json`, and the engine converts NWU back to Engine space, preserving 100% orientation fidelity without any axis inversion.
+
+---
+
+### C. Setting Up the Robot Origin & Grounding
+1. **Floor Origin:**
+   * Model your robot so that the CAD origin `(0, 0, 0)` is located at the **geometric center of your drivetrain frame rails, on the carpet floor plane ($Y = 0$)**.
+   * **If your origin is somewhere else:** Create a Construction Point in your top-level assembly at frame center on the floor and name it **`ROBOT_ORIGIN`**. The exporter will detect this point and offset all coordinates automatically.
+2. **Ground the Chassis Base:**
+   * Right-click your main drivetrain / bellypan component in the browser tree $\to$ **Ground**.
+   * Exactly **one** component must be grounded. This marks the root chassis (`base_link`) in the simulation kinematic tree.
+
+---
+
+### D. Assigning Physical Materials (Don't Make a 350 lb Robot!)
+
+> [!WARNING]
+> In Fusion 360, **Appearance** (`A`) is only visual color. A part painted with "Anodized Blue Aluminum" that has no physical material defaults to **Structural Steel**, making your robot nearly three times heavier than reality!
+
+#### How to Assign Physical Materials:
+1. In Fusion 360, go to **Modify $\to$ Physical Material** (or right-click any body/component in the browser $\to$ **Physical Material**).
+2. Drag and drop the physical material onto your parts:
+   * **Aluminum 6061:** Box tubing, gussets, plate brackets, standoffs, planetary gearboxes.
+   * **Polycarbonate:** Lexan panels, intake guide plates, bellypan covers.
+   * **HDPE / Delrin:** Slide bearing blocks, wear pads.
+   * **Steel 4140:** Hex shafts, sprockets, steel gears, large hardware.
+3. **What to Assign to Motors:**
+   * Real motors (Kraken X60, Falcon 500, NEO) are dense assemblies of copper windings, steel rotors, neodymium magnets, and aluminum casings.
+   * Assign motor bodies **Steel 4140** (or create a custom material with density $\approx 4800\ \text{kg/m}^3$).
+   * *Rule of thumb check:* A Kraken X60 or Falcon 500 should weigh about **$1.1\ \text{lbs}$ ($0.50\ \text{kg}$)** in Fusion, and a NEO should weigh about **$0.9\ \text{lbs}$ ($0.41\ \text{kg}$)**.
+4. **Custom FRC Materials (Treads, Bumpers, Foam):**
+   * If you need custom densities, duplicate any material in Fusion and name it:
+     * `colson_performa` $\to 1100\ \text{kg/m}^3$ (Tread rubber)
+     * `bumper_fabric` $\to 500\ \text{kg/m}^3$ (Bumper wood + foam + Cordura fabric)
+     * `game_piece_foam` $\to 80\ \text{kg/m}^3$ (Foam notes/balls)
+
+---
+
+### E. Assembling Moving Mechanisms & Rigid Groups
+
+`FRCBananaSim` combines parts bolted together into single moving links.
+
+1. **Moving Joints (Must Have Limits):**
+   * **Revolute Joint (`Hinge`):** For arms, wrists, four-bar links, and intake pivots.
+   * **Slider Joint (`Prismatic`):** For elevator stages and linear climbers.
+   * **Always check "Edit Joint Limits":** Set the real physical stops (e.g. Min: $0.0\text{ m}$, Max: $0.65\text{ m}$ for an elevator carriage; Min: $-10^\circ$, Max: $+95^\circ$ for an arm).
+2. **Bolted / Fastened Parts (Rigid Groups):**
+   * Do not put joints on parts that don't move relative to each other (motor brackets, gearbox plates, cross-braces).
+   * Group them using **Assemble $\to$ Rigid Group** (or rigid joints). The exporter will merge them into one solid link with combined weight and inertia.
+
+---
+
+### F. Joint & Link Naming: How to Match `sidecar.json`
+
+You do **not** have to memorize hardcoded names. You can name your joints anything descriptive, as long as the name in Fusion matches `sidecar.json`:
+
+```
+Fusion 360 Joint Name                       sidecar.json Field
+─────────────────────────────────────────────────────────────────────────────
+"arm_shoulder_hinge"         ◄──────────►   "targetJoint": "arm_shoulder_hinge"
+"elevator_stage1_slider"     ◄──────────►   "targetJoint": "elevator_stage1_slider"
+"intake_fourbar_crank"       ◄──────────►   "crankJoint":  "intake_fourbar_crank"
+"intake_fourbar_coupler"     ◄──────────►   "couplerJoint":"intake_fourbar_coupler"
+```
+
+* **Best Practice:** Use lower `snake_case` without spaces (`subsystem_part_type`).
+* **Swerve Modules:** Name the 4 module component instances in your CAD tree `fl`, `fr`, `bl`, `br`. The exporter automatically folds their steer/drive joints into the chassis so our high-speed analytic swerve solver can run them.
+
+---
+
+### G. Custom Colliders (`COL_*`) & Curved Ramps / Half-Pipes
+
+By default, the exporter creates a simple bounding box around each moving link. If a link has a complex shape (like a bumper frame, curved intake plate, or shooter ramp):
+
+1. Inside that component, model a simplified solid body for collisions.
+2. Name the body starting with **`COL_`** (e.g. `COL_bumper_box`, `COL_intake_guard`).
+3. The exporter will use this shape for physics, and **automatically exclude it from the robot's mass and visual rendering** so it won't double-count weight.
+4. **How to handle curved ramps and half-pipes:**
+   * In 3D physics engines, moving collision bodies must be **convex** (no hollow bowls or indented curves in a single piece).
+   * To model a curved ramp or half-pipe: create **2 to 4 flat tangent boxes** along the curve (like facets of an arc) named `COL_ramp_seg1`, `COL_ramp_seg2`, `COL_ramp_seg3`.
+   * Game pieces will roll smoothly along the faceted boxes without physics lag or glitches.
+
+```
+       Curved Intake / Shooter Ramp:
+       
+             Segment 3 ┌──────┐
+                      /      /
+          Segment 2  ┌──────┐
+                    /      /
+        Segment 1  ┌──────┐
+                   │      │
+       ────────────┴──────┴──────────── Floor
+       (Approximated with 3 simple convex boxes)
+```
+
+---
+
+### H. Sensor & Trigger Zones (`ZONE_<role>_*`)
+
+To define where a game piece gets detected or grabbed:
+
+1. In the component that holds the sensor (e.g. intake roller plate or shooter tunnel), create a simple box covering the trigger area.
+2. Name the solid body starting with **`ZONE_<role>_<name>`**:
+   * `ZONE_intake_capture_zone`: Area where rollers grab a game piece.
+   * `ZONE_shooter_engagement_zone`: Tunnel where flywheel compresses the piece.
+   * `ZONE_indexer_beam_break`: Optical beam-break laser path.
+3. The exporter turns these into non-colliding trigger zones (`ObjectLayers::SENSOR`). They do not add any mass or visual clutter.
+
+---
+
+### I. Fast Flywheels & Shooter Rollers (Why They Are Special)
+
+* **Why we don't simulate 6,000 RPM wheels as raw physics bodies:**  
+  A shooter wheel turns 100 times every second. In a 200 Hz physics simulation ($5\text{ ms}$ steps), the wheel jumps 180 degrees between two frames. If standard physics tries to bounce a ball off something jumping 180° instantaneously, the ball violently glitches through the wheel or gets launched at infinite speed.
+* **How BananaSim handles it:**  
+  BananaSim uses continuous mathematical differential equations (running at 800 Hz) to calculate motor torque, RPM sag, and compression grip smoothly.
+* **What the CADder does:**  
+  Model the flywheel on its axle joint normally! The exporter extracts its 3D visual mesh so you can see it spin on screen, while leaving the high-speed physics to the specialized math solver.
+
+---
+
+### J. Closed-Loop Mechanisms (Four-Bar Intakes)
+
+When modeling a four-bar linkage:
+1. Model all 4 joints in CAD:
+   * Crank ground pivot on chassis (e.g. `intake_crank_pivot`)
+   * Follower ground pivot on chassis (e.g. `intake_follower_pivot`)
+   * Coupler joint between crank and intake plate (e.g. `intake_coupler_joint`)
+   * Loop closure joint between follower and intake plate
+2. **Avoid Flat Singularity at Stow:**  
+   Do not align all 4 pivots in a dead-straight flat line at $0^\circ$ stow. Keep a slight vertical or horizontal offset (e.g. $1\text{--}2\text{ cm}$) between the crank and follower pivot heights so the linkage never gets stuck in a geometric dead-center lock.
+
+---
+
+### K. Pre-Export CAD Checklist
+
+Before exporting your assembly for simulation:
+- [ ] **Timeline Clean:** No red or yellow warning markers in the Fusion 360 timeline.
+- [ ] **Home / Zero Position:** Mechanism joints set to their resting/stowed position (Elevator down at $0.0\text{ m}$, Arm at $0^\circ$).
+- [ ] **No Pending Movement:** Click **Capture Position** or **Revert** in Fusion so no floating parts are active.
+- [ ] **Hardware Suppressed / Hidden:** Hide or suppress small screws, nuts, washers, and zip ties (they bloat 3D mesh polygon counts without helping physics).
+- [ ] **Total Mass Sanity Check:** Check assembly **Properties $\to$ Mass**. If a 125 lb robot shows 300+ lbs, find which parts were left on default Steel and change them to Aluminum!
+
+---
+
+## 3. Parameter Extraction from CAD (Block 2 Swerve & Chassis)
+
+Extract these values directly from your robot CAD assembly. Every value listed here maps directly into [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/robot_swerve.json) (and into `"base_link"` / `"swerve"` in Schema v1).
 
 ### A. Chassis Frame Geometry
 * **Where to find it in CAD:** Measure the outer frame perimeter and module centers with the CAD tape/measure tool.
@@ -121,7 +303,6 @@ Extract these values directly from your robot CAD assembly (Onshape, SolidWorks,
     ]
   }
   ```
-  *(Note: BananaSim automatically converts standard NWU CAD inertia coordinates to the engine coordinate system in `ChassisParams::GetJoltInertiaTensor()` and `RobotSchemaLoader::NWUToEngineInertiaTensor()`.)*
 
 ### C. Swerve Module Locations
 * **Where to find it in CAD:** Measure the $(X, Y)$ coordinates of the steering axis of each module relative to the robot's center origin.
@@ -165,7 +346,7 @@ Extract these values directly from your robot CAD assembly (Onshape, SolidWorks,
 
 ---
 
-## 3. Physical Hardware Measurements & Calibration
+## 4. Physical Hardware Measurements & Calibration
 
 Perform these physical checks on the real robot to calibrate parameters that differ from pure theoretical CAD.
 
@@ -201,9 +382,9 @@ Perform these physical checks on the real robot to calibrate parameters that dif
 
 ---
 
-## 4. Electronics, CAN Bus & Sensor Configuration
+## 5. Electronics, CAN Bus & Sensor Configuration
 
-FRCBananaSim's network bridge communicates directly with CTRE Phoenix 6 and REVLib devices over the WPILib HALSim WebSocket protocol.
+BananaSim's network bridge communicates directly with CTRE Phoenix 6 and REVLib devices over the WPILib HALSim WebSocket protocol.
 
 ### A. Swerve & Reference 2026 CAN Bus ID Mapping
 Verify that the CAN IDs in [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/robot_swerve.json) or [`sidecar.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/Reference2026/sidecar.json) match your physical robot:
@@ -229,13 +410,13 @@ Verify that the CAN IDs in [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Proje
 
 ### B. Current Limits & Buck-Converter Supply Current
 * **Where to find it:** Check your robot code's `CurrentLimitsConfigs` on the Talons and SPARKs.
-* **How BananaSim models it:** Both [`ElectricalSystem`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Actuation/Systems/ElectricalSystem.cpp) and [`SwerveDrivetrainModel`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveDrivetrainModel.cpp) model motor controllers as PWM buck converters where battery supply current scales with duty cycle ($I_{\text{supply}} = \min(I_{\text{supply\_limit}}, |V_{\text{applied}} / V_{\text{bus}}| \cdot I_{\text{stator}})$) filtered through a $5\text{ ms}$ low-pass filter.
+* **How BananaSim models it:** Both `ElectricalSystem` and `SwerveDrivetrainModel` model motor controllers as PWM buck converters where battery supply current scales with duty cycle ($I_{\text{supply}} = \min(I_{\text{supply\_limit}}, |V_{\text{applied}} / V_{\text{bus}}| \cdot I_{\text{stator}})$) filtered through a $5\text{ ms}$ low-pass filter.
 * **JSON Fields:**
   * `motors.drive.statorCurrentLimit_A`, `motors.steer.statorCurrentLimit_A`, `battery.statorCurrentLimit_A`, `battery.supplyCurrentLimit_A` (in `robot_swerve.json`)
   * `swerve.driveStatorLimit_A`, `swerve.driveSupplyLimit_A`, `swerve.steerStatorLimit_A`, `swerve.steerSupplyLimit_A`, `mechanisms[i].statorCurrentLimit_A`, `mechanisms[i].supplyCurrentLimit_A` (in `sidecar.json`)
 
 ### C. Vendor `SimDevice` Mapping Table (`SimDeviceDispatcher`)
-[`SimDeviceDispatcher`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Bridge/SimDeviceDispatcher.cpp) translates WPILib HALSim WebSocket `SimDevice` frames using [`simdevice_keymap.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Config/simdevice_keymap.json):
+`SimDeviceDispatcher` translates WPILib HALSim WebSocket `SimDevice` frames using [`simdevice_keymap.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Config/simdevice_keymap.json):
 
 | Vendor Device | `SimDevice` Pattern | Robot $\to$ Sim Keys (`>`) | Sim $\to$ Robot Keys (`<`) |
 | :--- | :--- | :--- | :--- |
@@ -247,11 +428,11 @@ Verify that the CAN IDs in [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Proje
 
 ---
 
-## 5. Configuring Block 3 Mechanisms & Couplings (`manifest.json` & `sidecar.json`)
+## 6. Configuring Block 3 Mechanisms & Couplings (`manifest.json` & `sidecar.json`)
 
 ### A. Links, Colliders & Visual Mesh Generation
-* **Procedural Visual Meshes from Colliders:** When a link in `manifest.json` does not load an external `.glb` mesh, [`RobotAssembler`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/RobotAssembler.cpp#L200-L239) generates procedural visual box/sphere/cylinder meshes from `colliders[0].origin_m` and `colliders[0].dimensions_m`. Always define a collider on every visible link (including four-bar crank and follower links).
-* **Center-of-Mass Offset Alignment:** When `centerOfMass_m` is non-zero, [`PhysicsSystem`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Physics/Systems/PhysicsSystem.cpp#L485-L505) automatically converts Jolt's CoM world position back to the link origin (`comPos - rot * localOffset`) so visual meshes and collider wireframes remain 100% aligned.
+* **Procedural Visual Meshes from Colliders:** When a link in `manifest.json` does not load an external `.glb` mesh, `RobotAssembler` generates procedural visual box/sphere/cylinder meshes from `colliders[0].origin_m` and `colliders[0].dimensions_m`. Always define a collider on every visible link (including four-bar crank and follower links).
+* **Center-of-Mass Offset Alignment:** When `centerOfMass_m` is non-zero, `PhysicsSystem` automatically converts Jolt's CoM world position back to the link origin (`comPos - rot * localOffset`) so visual meshes and collider wireframes remain 100% aligned.
 
 ### B. Elevators (`SingleStage`, `Cascade`, `Continuous`)
 * Configured via `"role": "elevator"` in `sidecar.json` (`"drumRadius_m"` converts motor torque into linear force and computes reflected linear rotor mass $m_{\text{reflected}} = N J_{\text{rotor}}(G/r_{\text{drum}})^2$).
@@ -259,20 +440,20 @@ Verify that the CAN IDs in [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Proje
 
 ### C. Arms, Wrists & Power Couplings
 * Configured via `"role": "arm"` or `"role": "wrist"` in `sidecar.json`.
-* **Active Motor Priority over Passive Coupling:** If a slave joint in a `"power_coupling"` entry (such as `shoulder_to_wrist_coupling`) also has its own motorized mechanism entry (such as `arm_wrist`), [`MechanismSystem::UpdateCoupling`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp#L357-L380) automatically yields to the independent motor controller so the wrist can articulate freely at any shoulder angle.
+* **Active Motor Priority over Passive Coupling:** If a slave joint in a `"power_coupling"` entry (such as `shoulder_to_wrist_coupling`) also has its own motorized mechanism entry (such as `arm_wrist`), `MechanismSystem::UpdateCoupling` automatically yields to the independent motor controller so the wrist can articulate freely at any shoulder angle.
 
 ### D. Closed-Loop Four-Bar Linkages
 * **Avoid Collinear Singularity:** Place the ground pivots (`fourbar_crank_hinge` and `fourbar_follower_hinge`) with both a longitudinal ($X$) and vertical ($Z$) offset above the bumper (e.g., crank at `[0.40, 0.0, 0.19]` and follower at `[0.28, 0.0, 0.25]`, delta `[-0.12, 0.0, +0.06]`), matching `"closureParentAnchor_m": [0.24, 0.0, 0.0]` and `"closureChildAnchor_m": [-0.12, 0.0, 0.06]`.
-* **Follower Synchronization:** [`MechanismSystem::UpdateFourBar`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp#L218-L355) applies feed-forward + PD tracking torque to the follower bar during motion and locks both hinges in Jolt `Position` mode when stopped so the back bar never lags during folding.
+* **Follower Synchronization:** `MechanismSystem::UpdateFourBar` applies feed-forward + PD tracking torque to the follower bar during motion and locks both hinges in Jolt `Position` mode when stopped so the back bar never lags during folding.
 
 ### E. High-RPM Flywheels
-* Configured via `"role": "flywheel"` in `sidecar.json`. Sub-stepped at $800\text{ Hz}$ ($\Delta t = 1.25\text{ ms}$) with equal-and-opposite Newton's 3rd Law recoil torque applied to `"parentLink"`, and rendered at `mountOffset` (`(0.0f, 0.06f, 0.06f)` on the wrist) via [`FlywheelSystem::RenderUpdate`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/Mechanisms/Systems/FlywheelSystem.cpp#L118-L148).
+* Configured via `"role": "flywheel"` in `sidecar.json`. Sub-stepped at $800\text{ Hz}$ ($\Delta t = 1.25\text{ ms}$) with equal-and-opposite Newton's 3rd Law recoil torque applied to `"parentLink"`, and rendered at `mountOffset` (`(0.0f, 0.06f, 0.06f)` on the wrist) via `FlywheelSystem::RenderUpdate`.
 
 ---
 
-## 6. Master Configuration Dictionary for [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/robot_swerve.json) (Block 2)
+## 7. Master Configuration Dictionary for `robot_swerve.json` (Block 2)
 
-This table lists every single property read by [`RobotSpawner`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/RobotSpawner.cpp) and [`SwerveDrivetrainConfig`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Robot/Drivetrain/Model/SwerveParams.cpp):
+This table lists every single property read by `RobotSpawner` and `SwerveDrivetrainConfig`:
 
 | JSON Key | C++ Struct Target | Unit | Description & Calibration Source |
 | :--- | :--- | :--- | :--- |
@@ -326,7 +507,7 @@ This table lists every single property read by [`RobotSpawner`](file:///C:/Game%
 
 ---
 
-## 7. Master Configuration Dictionary for Schema v1 (`manifest.json` & `sidecar.json`) (Block 3)
+## 8. Master Configuration Dictionary for Schema v1 (`manifest.json` & `sidecar.json`) (Block 3)
 
 ### A. [`manifest.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/Reference2026/manifest.json) Keys
 
