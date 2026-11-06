@@ -138,8 +138,8 @@ flowchart TD
 
 | Need | Fusion API | Units | Gotchas / Verification |
 |---|---|---|---|
-| Walk the assembly | `design.rootComponent.allOccurrences` (assembly-context proxies) | — | Read `occ.fullPathName` for stable naming. Skip `occ.isSuppressed`. Hidden handling is configurable. |
-| Bodies | `occ.bRepBodies` (proxies) | — | Skip bodies with `isLightBulbOn == False` unless `includeHidden`. Skip `COL_*` / `ZONE_*` proxies from mass and mesh. |
+| Walk the assembly | Hierarchical recursive traversal from `design.rootComponent.occurrences` (assembly-context proxies) | — | **Branch pruning:** If `occ.isLightBulbOn == False` or `occ.isVisible == False`, skip the occurrence entirely and do NOT inspect its children or bodies (§6.2). Read `occ.fullPathName` for stable naming. Skip `occ.isSuppressed`. |
+| Bodies | `occ.bRepBodies` (proxies) within visible occurrences | — | Only process if parent occurrence is visible. Skip bodies with `isLightBulbOn == False` or `isVisible == False` (unless `includeHidden`). Skip `COL_*` / `ZONE_*` proxies from mass and mesh. |
 | Mass properties | `body.getPhysicalProperties(adsk.fusion.CalculationAccuracy.HighCalculationAccuracy)` → `.mass`, `.centerOfMass`, `.getXYZMomentsOfInertia()` | kg, cm, kg·cm² | XYZ moments are **about the world origin**, not the CoM. **Sign of the products is unverified**: probe **P3**. |
 | Occurrence transform | `occ.transform2` (Matrix3D) | cm | For proxies from `allOccurrences` this should be the full transform to root. Verify with probe **P2**. Needed for per-component caching. |
 | Joints | `rootComponent.joints` + for each occurrence: `occ.component.joints` → `joint.createForAssemblyContext(occ)` | — | **A joint inside a reused component exists once natively but stands for N physical joints** (4 swerve modules = 4 steer joints). Always proxy per occurrence. |
@@ -249,7 +249,47 @@ Fusion limits are relative to each joint's zero, but geometry is read at the **c
 > [!CAUTION]
 > Driving joints modifies the open design (it adds an undo entry). The guard always restores the values, and the command tells the user not to save during an export. If the design has **Capture Position** pending or timeline errors, abort with `E111 DESIGN_NOT_CLEAN` instead of guessing.
 
-### 6.2 Link grouping (union-find)
+### 6.2 Hierarchical Assembly Traversal & Branch-Pruning Visibility Rule
+
+The exporter walks the assembly tree **hierarchically and recursively**, starting from `design.rootComponent.occurrences`. It strictly adheres to **branch-level visibility pruning**:
+
+> [!IMPORTANT]
+> **Visibility Branch-Pruning Rule:**
+> If an occurrence has its visibility toggled off in Fusion (`occ.isLightBulbOn == False` or `occ.isVisible == False`), the exporter **immediately skips that entire occurrence branch**. It does **not** evaluate any bodies inside it, and it does **not** recurse into or inspect any of its child occurrences. Hiding an assembly or subassembly in Fusion completely prunes it and its entire child tree from the simulation export.
+
+```python
+def traverse_assembly_branch(occurrences, parent_visible=True):
+    """
+    Recursively traverses visible occurrences with branch-level pruning.
+    """
+    for occ in occurrences:
+        # 1. Skip suppressed occurrences
+        if occ.isSuppressed:
+            continue
+            
+        # 2. Branch pruning: if hidden, skip this entire branch and do not inspect children
+        if not occ.isLightBulbOn or not occ.isVisible:
+            continue  # Prunes this component AND all child occurrences underneath it!
+            
+        # 3. Process visible bodies inside this visible occurrence
+        for body in occ.bRepBodies:
+            if not body.isLightBulbOn or not body.isVisible:
+                continue
+            # Categorize: COL_*, ZONE_*, or mass-bearing structural body
+            process_body(body, occ)
+            
+        # 4. Recursively traverse child occurrences within this visible branch
+        if occ.childOccurrences and occ.childOccurrences.count > 0:
+            traverse_assembly_branch(occ.childOccurrences)
+```
+
+**Why hierarchical traversal over flat `allOccurrences`:**
+Fusion's flat `rootComponent.allOccurrences` collection contains proxy references to every nested occurrence regardless of parent visibility. Using a flat loop would require manually checking every ancestor's lightbulb state or risk leaking children of hidden subassemblies into the export. Recursive traversal is $O(N)$, guarantees branch pruning at the exact parent node, and avoids reading mass properties or tessellations on hidden geometry.
+
+**Joint Handling on Pruned Branches:**
+Joints whose `occurrenceOne` or `occurrenceTwo` belongs to a pruned (hidden) occurrence are ignored. They do not enter the kinematic graph or `manifest.joints`.
+
+### 6.3 Link grouping (union-find)
 
 Nodes are the leaf-level occurrences that own bodies. Union rules, in order:
 
@@ -262,7 +302,7 @@ Nodes are the leaf-level occurrences that own bodies. Union rules, in order:
 
 **Link naming:** use the config `linkNames` override first. Otherwise take the sanitized name of the top-most occurrence in the group, with the `:1` suffix stripped, lower snake_case, `[a-z0-9_]`. The root link is always `base_link`, or `swerve.chassisLink` from the sidecar. Name collisions get a `_2` suffix plus `W220 LINK_NAME_COLLISION`.
 
-### 6.3 Kinematic tree and joint dispositions
+### 6.4 Kinematic tree and joint dispositions
 
 1. Build a multigraph: nodes are links, edges are the movable (non-folded) joints.
 2. Root = the link containing grounded occurrences. Error `E230` if there are none or several.
@@ -281,7 +321,7 @@ Nodes are the leaf-level occurrences that own bodies. Union rules, in order:
 
 **Joint type mapping:** revolute → `revolute`. Slider → `prismatic`. Cylindrical → `revolute` + `W251 CYLINDRICAL_TRANSLATION_DROPPED`. Forced split → `fixed`.
 
-### 6.4 Colliders
+### 6.5 Colliders
 
 Link frames are robot-aligned, so world AABBs (`body.boundingBox`) give exact axis-aligned boxes in the link frame:
 
@@ -290,18 +330,18 @@ Link frames are robot-aligned, so world AABBs (`body.boundingBox`) give exact ax
 - **No collider:** links listed in `noCollider` (such as the flywheel visual, which matches the Reference2026 empty `colliders`).
 - Per link, report `‖colliderCenter − CoM‖`. Q2 makes this a real CoM error in today's assembler.
 
-### 6.5 Contact zones
+### 6.6 Contact zones
 
 Bodies named `ZONE_<role>_<name>` (role ∈ `intake`, `shooter`, `indexer`) become `contactZones` entries: `parentLink` is the link containing the body, `shape: box`, origin and dimensions come from the AABB, rotation is identity. `tangentAxis`, `compressionAxis`, and `nominalGap_m` can't be derived from geometry. They come from config `contactZones.<name>`, and if missing: `W260 ZONE_METADATA_MISSING` with defaults `[1,0,0]`, `[0,0,1]`, and the smallest AABB extent.
 
-### 6.6 Materials
+### 6.7 Materials
 
 - `body.material.name` is mapped through `material_map.json` (e.g. `"Aluminum 6061" → "aluminum_6061"`, `"Polycarbonate" → "polycarbonate"`, `"Steel" → "steel_4140"`).
 - Link `material` = the material of the **heaviest** body in the link.
 - Unmapped Fusion material: `W270 MATERIAL_UNMAPPED`, falling back to the snake_case name. The C++ loader will also warn that the material is unknown.
 - The report includes a **mass by Fusion material** table. If something like "Steel 62% of robot mass" shows up, a part was left on Fusion's default material, and that is the biggest real-world mass error in FRC CAD.
 
-### 6.7 Visual meshes (GLB writer)
+### 6.8 Visual meshes (GLB writer)
 
 1. Per link, tessellate every mass-bearing body that is visible (or included by config).
 2. Transform each vertex: $\mathbf{v}_N = R_{F\to N}(s\mathbf{v}_F - \mathbf{o}_F) - \mathbf{p}_L$, then to glTF / engine axes $(y_N, z_N, x_N)$. Normals use only the rotations.
@@ -312,19 +352,23 @@ Bodies named `ZONE_<role>_<name>` (role ∈ `intake`, `shooter`, `indexer`) beco
    - One mesh per link and one primitive per Fusion appearance, using `baseColorFactor` (stretch: read the appearance albedo).
 4. Budgets: warn `W280` above 150k triangles per link or 500k per robot. Config `meshQuality` (`low` / `normal` / `high`) and `meshExclude` globs (e.g. `*Screw*`, `*Nut*`, `*Rivet*`) keep FRC hardware from blowing the budget.
 
-### 6.8 Sidecar cross-check
+### 6.9 Sidecar cross-check
 
 Every reference in the sidecar is checked against what the exporter produced:
 
 | Sidecar field | Must exist in |
 |---|---|
 | `swerve.chassisLink` | links (must be the root) |
+| `swerve.modules[].steerJoint` / `.driveJoint` | tree joints |
+| `swerve.steerActuatorType` / `.driveActuatorType` | `"dc_motor"` or `"servo"`. If `"servo"`, verifies `steerServoPreset` / `driveServoPreset` is valid and each module has `steerPwmChannel` / `drivePwmChannel` $\in [0, 15]$. |
 | `mechanisms[].targetJoint` | tree joints (single-DOF mechanisms) |
 | `mechanisms[].targetJoints` | tree joints (array of exactly 2 joints for differential mechanisms) |
+| `mechanisms[].actuatorType` | `"dc_motor"` or `"servo"`. If `"servo"`, verifies `servo.pwmChannel` $\in [0, 15]$ (or dual `servoA.pwmChannel` / `servoB.pwmChannel` $\in [0, 15]$ for differential mechanisms) and preset is valid (`GoBildaTorque`, `GoBildaSpeed`, `GenericStandard`, `Custom`). |
 | `mechanisms[].parentLink`, `.visualLink` | links |
 | `couplings[].stages[].joint`, `.crankJoint`, `.couplerJoint`, `.followerJoint`, `.powerCoupling.masterJoint` / `.slaveJoint` | tree joints |
 | `couplings[].closureParentLink`, `.closureChildLink` | links |
 | `sensors[].parentLink` / `.targetJoint` / `.contactZone` | links / tree joints / zones |
+| `electrical.servoRailVoltage_V` / `.servoRailCurrentLimit_A` | valid positive numbers when servos are configured. |
 
 Misses are reported as `W501 SIDECAR_UNMATCHED` with `difflib.get_close_matches` suggestions (e.g. *"`arm_shoulder_hinge` not found — did you mean `arm_shoulder_revolute`?"*). In the other direction, any tree joint that no mechanism or coupling references gets `I502 PASSIVE_JOINT` (info).
 
@@ -361,13 +405,15 @@ The export **still writes files when there are warnings**. It writes a manifest 
 
 1. **Robot origin:** the design origin sits at the **frame center on the floor**. Otherwise, place a construction point named `ROBOT_ORIGIN` and the exporter uses it as $\mathbf{o}_F$.
 2. **Orientation:** declare `fusionUp` / `fusionForward` once in `exporter_config.json`. The robot front is the intake side, matching the WPILib convention.
-3. **Differential Mechanism CAD Hierarchy:** For 2-DOF differential mechanisms (e.g. bevel wrists), author two separate revolute joints in CAD (Pitch hinge connecting base link to yoke link, and Roll hinge connecting yoke link to distal tool). Ground both motor bodies to the parent structure rigid group—do not attach motor bodies to the moving distal wrist links.
 3. **Real joints** with motion limits on every mechanism: revolute for arms and four-bars, slider for elevators. Rigid joints or rigid groups for everything structural.
 4. **Ground** the chassis (one grounded occurrence).
 5. **Joint names = sidecar names** (`elevator_stage1_slider`, `arm_shoulder_hinge`, `fourbar_crank_hinge`, …). Joints inside a reused component export as `<occurrence>_<joint>`, so name the swerve module occurrences `fl`, `fr`, `bl`, `br`.
 6. **Physical materials** on every body. Custom materials for polycarbonate, HDPE, foam, belts, and Colson wheels.
-7. Proxy bodies: `COL_*` for collider overrides and `ZONE_<role>_*` for contact zones. Both may be hidden: the exporter reads them regardless of visibility.
-8. Mechanisms at **zero pose** when saved is preferred, but `ZeroPoseGuard` handles it either way.
+7. **Proxy bodies:** `COL_*` for collider overrides and `ZONE_<role>_*` for contact zones inside visible components. They are excluded from mass and visual mesh.
+8. **Mechanisms at zero pose** when saved is preferred, but `ZeroPoseGuard` handles it either way.
+9. **Branch Visibility & Pruning (Hiding Components):** The exporter strictly operates on visible objects. If a component or subassembly is hidden (eye/lightbulb toggled off in Fusion's browser tree), the exporter skips that entire branch and does not inspect its child components, bodies, or joints (§6.2). Use this to keep test fixtures, field obstacles, alternate intakes, or unused parts in your CAD file without having them leak into the robot simulation.
+10. **Differential Mechanism CAD Hierarchy:** For 2-DOF differential mechanisms (e.g. bevel wrists), author two separate revolute joints in CAD (Pitch hinge connecting base link to yoke link, and Roll hinge connecting yoke link to distal tool). Ground both motor bodies to the parent structure rigid group—do not attach motor bodies to the moving distal wrist links.
+11. **Servo-Driven Mechanisms & Swerve (FTC / Miniature):** Servo-actuated joints (e.g. steer azimuths, continuous drive wheels, miniature arms, differential wrists) follow standard revolute or slider joint authoring in Fusion with accurate limits. Actuator type (`"actuatorType": "servo"`), servo preset, and PWM channel assignments are declared in `sidecar.json` without altering the physical kinematic joint representation in CAD.
 
 ---
 
@@ -413,6 +459,8 @@ The export **still writes files when there are warnings**. It writes a manifest 
   "floatSignificantDigits": 9
 }
 ```
+
+* `"includeHidden": false`: When `false` (default), the recursive tree traversal strictly prunes any occurrence where `isLightBulbOn == False` or `isVisible == False`, skipping the component and all of its children (§6.2).
 
 ### 9.2 Example output entry (one exported link + joint)
 
@@ -468,21 +516,21 @@ flowchart LR
 3. `banana_core/linalg.py` (3×3 multiply, transpose, symmetric eigenvalues), `frames.py` (§5.1), and `inertia.py` (§5.2–5.4), each with `unittest` suites (`tests/test_inertia.py`, etc.) that run under plain `python -m unittest`.
 
 ### Day 2 (Nov 7): Assembly reader, zero pose, and the graph
-1. `fusion_reader.py`: occurrences → `BodyRecord` (mass props, material, bbox, visibility, proxy role) and joints / as-built joints / rigid groups → `JointRecord` (proxied per occurrence, §4).
+1. `fusion_reader.py`: recursive hierarchical occurrence traversal with branch pruning for hidden occurrences (§6.2); occurrences → `BodyRecord` (mass props, material, bbox, visibility, proxy role) and joints / as-built joints / rigid groups → `JointRecord` (proxied per occurrence, §4).
 2. `zero_pose.py`: `ZeroPoseGuard` context manager (§6.1).
-3. `graph.py`: union-find (§6.2), link naming, BFS tree, loop detection, dispositions (§6.3).
+3. `graph.py`: union-find (§6.3), link naming, BFS tree, loop detection, dispositions (§6.4).
 4. Unit tests on synthetic graphs: a four-bar loop (exactly one closure edge), a 4× reused swerve module (4 distinct steer joints, all folded), a disconnected link (`E241`), and two roots (`E230`).
 5. In Fusion: dump the link/joint table for the test assembly to the console and eyeball it.
 
 ### Day 3 (Nov 8): Manifest building and writing
-1. `manifest_builder.py`: link frames $\mathbf{p}_L$, aggregated mass/CoM/inertia (§5.3), joints with origin, axis direction rule, sign shim, and limits (§5.5), colliders (§6.4), zones (§6.5), materials (§6.6), and `massSummary`.
+1. `manifest_builder.py`: link frames $\mathbf{p}_L$, aggregated mass/CoM/inertia (§5.3), joints with origin, axis direction rule, sign shim, and limits (§5.5), colliders (§6.5), zones (§6.6), materials (§6.7), and `massSummary`.
 2. `manifest_writer.py`: stable ordering and rounding (§9).
 3. A Python mirror of `RobotSchemaLoader::Validate()` (version, positive mass, positive-definite inertia, reference integrity) so failures show up inside Fusion before the C++ loader ever sees the file.
 4. **Checkpoint:** export the test assembly with no meshes yet, load it through the C++ `RobotSchemaLoader` (Day 5 test stub run early), and confirm zero errors.
 
 ### Day 4 (Nov 9): Meshes, sidecar join, report, and UI
-1. `mesh_reader.py` + `glb_writer.py` (§6.7). Validate one GLB in Blender or the Windows 3D Viewer: it should be upright, facing +Z, and centered on the link origin.
-2. `sidecar_check.py` (§6.8), including the swerve-module, four-bar closure, and flywheel mount cross-checks.
+1. `mesh_reader.py` + `glb_writer.py` (§6.8). Validate one GLB in Blender or the Windows 3D Viewer: it should be upright, facing +Z, and centered on the link origin.
+2. `sidecar_check.py` (§6.9), including the swerve-module, four-bar closure, and flywheel mount cross-checks.
 3. `report_writer.py`: per-link table (mass, CoM, $\|\text{collider} - \text{CoM}\|$, triangle count, material), mass-by-material table, diagnostics, validation block, and timings.
 4. Command dialog: config file picker, output directory, a "Dry run (no meshes)" toggle, and a progress dialog with cancel.
 
@@ -558,7 +606,8 @@ FRCBananaSim/                                   (repo root)
 | `test_graph` | CPython | Four-bar loop → 1 closure; 4× reused module → 4 joints; folded swerve; disconnected link; two roots | Exact topology; correct diagnostic codes |
 | `test_manifest_builder` | CPython | Synthetic 3-link arm: link-local CoM, origins, axis reversal when parent = One, sign shim, limits table | Matches hand-computed JSON |
 | `test_glb_writer` | CPython | Single triangle and a 70k-vertex mesh (uint32 path); header and chunk alignment; min/max present | Re-parse own output; 4-byte alignment; lengths consistent |
-| `test_sidecar_check` | CPython | Reference2026 sidecar vs. a synthetic manifest with one typo | Exactly one `W501` with the correct suggestion |
+| `test_sidecar_check` | CPython | Reference2026 sidecar vs. a synthetic manifest with one typo; servo sidecar validation (PWM channel bounds, preset enum, actuator types) | Exactly one `W501` with the correct suggestion; correct warnings on invalid PWM or presets |
+| Visibility pruning | CPython & Fusion | Hidden parent occurrence with child subassemblies and bodies | Subtree completely omitted; zero bodies, joints, or child links exported from that branch |
 | Probes P1–P5 | Fusion | §10 Day 1 table | All PASS. `FUSION_PRODUCT_SIGN` recorded. |
 | Composite validation | Fusion | §5.4 | Mass ≤ 0.1%, CoM ≤ 0.5 mm, inertia ≤ 0.5% |
 | Principal moments | Fusion | Single-occurrence links | ≤ 0.5% |

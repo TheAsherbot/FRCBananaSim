@@ -122,6 +122,7 @@
 
     <!-- Actuation Motor Models -->
     <ClCompile Include="Source\Actuation\DCMotorModel.cpp" />
+    <ClCompile Include="Source\Actuation\ServoModel.cpp" />
 
     <!-- Telemetry & Utils -->
     <ClCompile Include="Source\Telemetry\TelemeteryViewer\TelemetryManager.cpp" />
@@ -137,6 +138,8 @@
     <ClCompile Include="Source\Playground\PlaygroundMain.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\Actuation\DCMotorModel.h" />
+    <ClInclude Include="Source\Actuation\ServoModel.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\DifferentialComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Systems\DifferentialMechanismSystem.h" />
     <ClInclude Include="Source\Playground\PlaygroundScene.h" />

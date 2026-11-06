@@ -89,6 +89,25 @@ namespace FRCBananaSim::Actuation
         return ServoModel(6.0_V, 10.2_kgcm, 0.110, 2.0_A, 150_mA, 300.0_deg, mode);
     }
 
+    ServoModel ServoModel::FromPreset(const std::string& presetName, ServoMode mode)
+    {
+        std::string lower = presetName;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        lower.erase(std::remove_if(lower.begin(), lower.end(), [](char c) {
+            return c == '_' || c == '-' || c == ' ';
+        }), lower.end());
+
+        if (lower == "gobildaspeed") return GoBildaSpeed(mode);
+        if (lower == "gobildasuperspeed") return GoBildaSuperSpeed(mode);
+        if (lower == "swyftspeed") return SwyftSpeed(mode);
+        if (lower == "swyfttorque") return SwyftTorque(mode);
+        if (lower == "swyftbalanced") return SwyftBalanced(mode);
+        if (lower == "swyftslim") return SwyftSlim(mode);
+        if (lower == "swyftnano") return SwyftNano(mode);
+
+        return GoBildaTorque(mode);
+    }
+
     void ServoModel::SetSupplyVoltage(double voltage)
     {
         supplyVoltage = std::max(0.0_V, voltage);

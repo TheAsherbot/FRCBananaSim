@@ -64,6 +64,15 @@ namespace FRCBananaSim::Actuation
         static ServoModel SwyftNano(ServoMode mode = ServoMode::Positional);
 
         /**
+         * @brief Instantiates a ServoModel from a preset name string (case-insensitive, ignoring underscores).
+         * Defaults to GoBildaTorque if unrecogized.
+         * @param presetName e.g. "GoBildaTorque", "GoBildaSpeed", "SwyftSpeed", etc.
+         * @param mode Operating mode (Positional or Continuous).
+         * @return Configured ServoModel.
+         */
+        static ServoModel FromPreset(const std::string& presetName, ServoMode mode = ServoMode::Positional);
+
+        /**
          * @brief Sets the actual supply voltage powering the servo rail (e.g. 4.8_V, 5.0_V, or 6.0_V).
          * When lower than rated voltage, stall torque and speed automatically scale down physically.
          * @param voltage Current rail voltage (V).

@@ -195,8 +195,8 @@
     <ClCompile Include="Source\Core\Engine.cpp" />
     <ClCompile Include="Source\Core\Parameters\ParameterStore.cpp" />
     <ClCompile Include="Source\Core\Units\Units.cpp" />
-    <ClCompile Include="Source\Playground\PlaygroundMain.cpp" />
-    <ClCompile Include="Source\Playground\PlaygroundScene.cpp" />
+
+
     <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveChassisSolver.cpp" />
     <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveDrivetrainModel.cpp" />
     <ClCompile Include="Source\Robot\Drivetrain\Model\SwerveModuleModel.cpp" />

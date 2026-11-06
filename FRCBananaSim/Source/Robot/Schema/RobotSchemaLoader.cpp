@@ -84,6 +84,7 @@ namespace FRCBananaSim::Robot::Schema
         ClearDiagnostics();
 
         if (!LoadManifestFromFile(manifestPath))
+   
         {
             return false;
         }
@@ -310,6 +311,9 @@ namespace FRCBananaSim::Robot::Schema
             sidecar.electrical.brownoutWarningV = el.value("brownoutWarning_V", 6.8);
             sidecar.electrical.brownoutShutoffV = el.value("brownoutShutoff_V", 6.3);
             sidecar.electrical.brownoutRecoveryV = el.value("brownoutRecovery_V", 7.5);
+            sidecar.electrical.regulatedRailVoltageV = el.value("regulatedRailVoltage_V", 6.0);
+            sidecar.electrical.regulatedRailCurrentLimitA = el.value("regulatedRailCurrentLimit_A", 2.2);
+            sidecar.electrical.regulatedRailEfficiency = el.value("regulatedRailEfficiency", 0.88);
         }
 
         // Swerve
@@ -328,6 +332,10 @@ namespace FRCBananaSim::Robot::Schema
             sidecar.swerve.driveSupplyLimitA = sw.value("driveSupplyLimit_A", 40.0);
             sidecar.swerve.steerStatorLimitA = sw.value("steerStatorLimit_A", 40.0);
             sidecar.swerve.steerSupplyLimitA = sw.value("steerSupplyLimit_A", 30.0);
+            sidecar.swerve.driveActuatorType = sw.value("driveActuatorType", "motor");
+            sidecar.swerve.steerActuatorType = sw.value("steerActuatorType", "motor");
+            sidecar.swerve.driveServoPreset = sw.value("driveServoPreset", "GoBildaSpeed");
+            sidecar.swerve.steerServoPreset = sw.value("steerServoPreset", "GoBildaTorque");
 
             if (sw.contains("modules") && sw["modules"].is_array())
             {
@@ -340,6 +348,8 @@ namespace FRCBananaSim::Robot::Schema
                     mod.steerCanId = mNode.value("steerCanId", 0);
                     mod.cancoderId = mNode.value("cancoderId", 0);
                     mod.canBus = mNode.value("canBus", "rio");
+                    mod.drivePwmChannel = mNode.value("drivePwmChannel", 0);
+                    mod.steerPwmChannel = mNode.value("steerPwmChannel", 0);
                     sidecar.swerve.modules.push_back(mod);
                 }
             }
@@ -369,6 +379,36 @@ namespace FRCBananaSim::Robot::Schema
                 mech.supplyCurrentLimitA = mNode.value("supplyCurrentLimit_A", 40.0);
                 mech.coulombFriction = mNode.value("coulombFriction", 0.0);
                 mech.viscousDamping = mNode.value("viscousDamping", 0.0);
+                mech.actuatorType = mNode.value("actuatorType", "motor");
+                if (mNode.contains("servo") && mNode["servo"].is_object())
+                {
+                    const auto& sNode = mNode["servo"];
+                    mech.servo.preset = sNode.value("preset", "GoBildaTorque");
+                    mech.servo.mode = sNode.value("mode", "positional");
+                    mech.servo.pwmChannel = sNode.value("pwmChannel", 0);
+                    mech.servo.supplyVoltageV = sNode.value("supplyVoltage_V", 6.0);
+                    mech.servo.travelRangeDeg = sNode.value("travelRange_deg", 300.0);
+                }
+                else if (mNode.contains("servoPreset"))
+                {
+                    mech.servo.preset = mNode.value("servoPreset", "GoBildaTorque");
+                    mech.servo.mode = mNode.value("servoMode", "positional");
+                    mech.servo.pwmChannel = mNode.value("pwmChannel", 0);
+                    mech.servo.supplyVoltageV = mNode.value("supplyVoltage_V", 6.0);
+                }
+                if (mNode.contains("servos") && mNode["servos"].is_array())
+                {
+                    for (const auto& sNode : mNode["servos"])
+                    {
+                        ServoConfig sc;
+                        sc.preset = sNode.value("preset", "GoBildaTorque");
+                        sc.mode = sNode.value("mode", "positional");
+                        sc.pwmChannel = sNode.value("pwmChannel", 0);
+                        sc.supplyVoltageV = sNode.value("supplyVoltage_V", 6.0);
+                        sc.travelRangeDeg = sNode.value("travelRange_deg", 300.0);
+                        mech.servos.push_back(sc);
+                    }
+                }
 
                 // ==================== [START NEW DIFFERENTIAL PARSING] ====================
                 if (mNode.contains("targetJoints") && mNode["targetJoints"].is_array())
@@ -839,3 +879,4 @@ namespace FRCBananaSim::Robot::Schema
         return glm::normalize(glm::quat_cast(rNWU));
     }
 }
+

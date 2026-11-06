@@ -15,6 +15,7 @@ namespace FRCBananaSim::Control
     constexpr size_t MAX_MOTOR_SLOTS = 24;   ///< [0..3] Steer, [4..7] Drive, [8..23] Mechanisms
     constexpr size_t MAX_CANCODER_SLOTS = 12;
     constexpr size_t MAX_ANALOG_INPUTS = 8;  ///< Standard RoboRIO Analog In channels [0..7] (0.0V to 5.0V)
+    constexpr size_t MAX_PWM_CHANNELS = 16;  ///< Standard RoboRIO (10) and FTC Control Hub (6..16) PWM channels
 
     /**
      * @enum MotorControlMode
@@ -69,6 +70,30 @@ namespace FRCBananaSim::Control
     };
 
     /**
+     * @struct PwmCommand
+     * @brief Normalized demand or pulse timing sent to an individual PWM servo or ESC channel.
+     */
+    struct PwmCommand
+    {
+        double position = 0.5;        ///< Normalized 0.0 to 1.0 (for positional servos).
+        double speed = 0.0;           ///< Normalized -1.0 to +1.0 (for continuous servos / PWM ESCs).
+        double pulseWidthUs = 1500.0; ///< Raw pulse duration in microseconds (typically 500 to 2500 us).
+        bool isServo = true;          ///< True if channel operates in closed-loop servo mode.
+    };
+
+    /**
+     * @struct PwmFeedback
+     * @brief Telemetry feedback from an individual servo / PWM actuated joint.
+     */
+    struct PwmFeedback
+    {
+        double physicalAngleRad = 0.0;     ///< Current physical joint angle (rad).
+        double angularVelocityRadS = 0.0;  ///< Current physical joint angular velocity (rad/s).
+        double currentDrawA = 0.0;         ///< Instantaneous current drawn from the regulated rail (A).
+        double deliveredTorqueNm = 0.0;    ///< Torque delivered to joint (N*m).
+    };
+
+    /**
      * @struct SimInputs
      * @brief Control demands sent to the simulation core.
      * Injected by either HALSim WebSocket Server (live robot code)
@@ -78,10 +103,11 @@ namespace FRCBananaSim::Control
     {
         // 24 motors: [0..3] = Steer (FL, FR, BL, BR), [4..7] = Drive (FL, FR, BL, BR), [8..23] = Mechanisms
         std::array<MotorCommand, MAX_MOTOR_SLOTS> motorCommands;
-        uint32_t digitalOutputs = 0; ///< Solenoids / pneumatic bitfield.
-        bool robotEnabled = false;   ///< DriverStation enable state.
-        bool isAutonomous = false;  ///< Autonomous vs Teleop mode.
-        double matchTime = 0.0;      ///< Elapsed match time (s).
+        std::array<PwmCommand, MAX_PWM_CHANNELS> pwmCommands; ///< 16 PWM / Servo channels.
+        uint32_t digitalOutputs = 0;                          ///< Solenoids / pneumatic bitfield.
+        bool robotEnabled = false;                            ///< DriverStation enable state.
+        bool isAutonomous = false;                           ///< Autonomous vs Teleop mode.
+        double matchTime = 0.0;                               ///< Elapsed match time (s).
     };
 
     /**
@@ -105,6 +131,9 @@ namespace FRCBananaSim::Control
         std::array<double, MAX_CANCODER_SLOTS> cancoderPositionsRot = { 0.0 };  ///< CANcoder raw position (rotations).
         std::array<double, MAX_CANCODER_SLOTS> cancoderVelocitiesRps = { 0.0 }; ///< CANcoder velocity (RPS).
 
+        // PWM / Servo Feedback per PWM Channel [0..15]
+        std::array<PwmFeedback, MAX_PWM_CHANNELS> pwmFeedbacks = {};
+
         // CTRE Pigeon 2 / navX IMU (WPILib NWU Standard)
         double gyroYaw = 0.0;                                                ///< Continuous CCW-positive yaw (rad).
         double gyroPitch = 0.0;                                              ///< Pitch (rad).
@@ -117,6 +146,9 @@ namespace FRCBananaSim::Control
         // Electrical & Digital/Analog I/O
         double batteryTerminalVoltage = 12.60;                         ///< Terminal voltage post-sag (V).
         double totalBusCurrent = 1.5;                                  ///< Instantaneous bus current draw (A).
+        double regulatedRailVoltageV = 6.0;                            ///< 6V regulated servo rail voltage (V).
+        double regulatedRailCurrentA = 0.0;                            ///< Regulated servo rail current draw (A).
+        bool isRegulatedRailBrownedOut = false;                        ///< Regulated rail current overload active.
         uint32_t digitalInputs = 0;                                    ///< Bit i = DIO channel i (beam breaks, limit switches).
         std::array<double, MAX_ANALOG_INPUTS> analogInputs = { 0.0 };  ///< Analog input voltages (0.0V to 5.0V).
         bool isBrownedOut = false;                                     ///< Brownout stage active.

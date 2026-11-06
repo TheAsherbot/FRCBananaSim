@@ -7,12 +7,24 @@
 
 #include "Core/ECS/Core/Entity.h"
 #include "Actuation/DCMotorModel.h"
+#include "Actuation/ServoModel.h"
 #include <string>
+#include <vector>
 #include <cstdint>
 #include <glm/vec3.hpp>
 
 namespace FRCBananaSim::Robot::Mechanisms::Components
 {
+    /**
+     * @enum ActuatorType
+     * @brief Driving actuation source: standard CAN DC motor or PWM servo.
+     */
+    enum class ActuatorType : uint8_t
+    {
+        DCMotor = 0, ///< High-power 12V brushless/brushed DC motor (Kraken, Falcon, NEO, etc.)
+        Servo = 1    ///< 5V/6V PWM smart servo or continuous gearmotor (goBILDA, Swyft, Axon, REV)
+    };
+
     /**
      * @enum ArmSpringType
      * @brief Mechanical counterbalance assist mechanism topology.
@@ -32,16 +44,21 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
     struct ArmComponent
     {
         std::string name;
+        ActuatorType actuatorType = ActuatorType::DCMotor;
 
         // Kinematic Hierarchy Links
         Core::ECS::Core::Entity jointEntity = Core::ECS::Core::invalidEntity;  ///< JointComponent entity (HingeConstraint).
         Core::ECS::Core::Entity linkEntity = Core::ECS::Core::invalidEntity;   ///< Dynamic link rigid body entity.
 
-        // Actuation & Transmission
+        // Actuation & Transmission (DC Motor)
         Actuation::DCMotorModel motorModel;
         uint32_t motorCount = 1;
         double gearRatio = 1.0;                 ///< Overall reduction ratio G = omega_motor / omega_joint.
         double efficiency = 0.95;               ///< Transmission efficiency (0.0 to 1.0).
+
+        // Actuation & Transmission (Servo)
+        Actuation::ServoModel servoModel;
+        uint32_t pwmChannel = 0;                ///< Associated PWM channel index [0..15]
 
         // Counterbalance & Friction
         ArmSpringType springType = ArmSpringType::None;

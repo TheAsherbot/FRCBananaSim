@@ -7,6 +7,8 @@
 
 #include "Core/ECS/Core/Entity.h"
 #include "Actuation/DCMotorModel.h"
+#include "Actuation/ServoModel.h"
+#include "Robot/Mechanisms/Components/ArmComponent.h"
 #include <vector>
 #include <string>
 #include <glm/vec3.hpp>
@@ -46,13 +48,18 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
     {
         std::string name;
         ElevatorRiggingMode riggingMode = ElevatorRiggingMode::Cascade;
+        ActuatorType actuatorType = ActuatorType::DCMotor;
 
-        // Drive Actuation & Transmission
+        // Drive Actuation & Transmission (DC Motor)
         Actuation::DCMotorModel motorModel;
         uint32_t motorCount = 1;
         double gearRatio = 1.0;                  ///< Gearbox reduction ratio G (motor revs per drum rev).
         double efficiency = 0.95;                ///< Gearbox and pulley transmission efficiency (0.0 to 1.0).
         double drumRadiusM = 0.01905;            ///< Drum/sprocket pitch radius r_drum (m).
+
+        // Drive Actuation & Transmission (Servo)
+        Actuation::ServoModel servoModel;
+        uint32_t pwmChannel = 0;                 ///< Associated PWM channel index [0..15]
 
         // Counterbalance & Friction
         double springPreloadForceN = 0.0;        ///< Constant-force counterbalance spring force (N).

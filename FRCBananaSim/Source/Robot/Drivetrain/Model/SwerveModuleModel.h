@@ -110,6 +110,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
          * @return Const reference to ModulePlacement.
          */
         const ModulePlacement& GetPlacement() const;
+        ModulePlacement& GetPlacement();
 
         /**
          * @brief Retrieves drive motor model.
@@ -122,6 +123,11 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
          * @return Const reference to DCMotorModel.
          */
         const Actuation::DCMotorModel& GetSteerMotor() const;
+
+        const SteerModuleParams& GetSteerParams() const { return steerParams; }
+        SteerModuleParams& GetSteerParams() { return steerParams; }
+        const DriveModuleParams& GetDriveParams() const { return driveParams; }
+        DriveModuleParams& GetDriveParams() { return driveParams; }
 
     private:
         ModulePlacement placement;

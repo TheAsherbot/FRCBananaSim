@@ -7,6 +7,8 @@
 
 #include "Core/ECS/Core/Entity.h"
 #include "Actuation/DCMotorModel.h"
+#include "Actuation/ServoModel.h"
+#include "Robot/Mechanisms/Components/ArmComponent.h"
 #include <string>
 #include <vector>
 #include <glm/mat2x2.hpp>
@@ -34,6 +36,7 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
     {
         std::string name;
         DifferentialType differentialType = DifferentialType::SymmetricBevel;
+        ActuatorType actuatorType = ActuatorType::DCMotor;
 
         // Kinematic Hierarchy Joint Entities
         Core::ECS::Core::Entity jointEntityA = Core::ECS::Core::invalidEntity; ///< Joint 1 (e.g. Pitch hinge).
@@ -43,11 +46,17 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
         Core::ECS::Core::Entity linkEntityA = Core::ECS::Core::invalidEntity;  ///< Link 1 rigid body.
         Core::ECS::Core::Entity linkEntityB = Core::ECS::Core::invalidEntity;  ///< Link 2 rigid body.
 
-        // Actuation Motor Models
+        // Actuation Motor Models (DC Motors)
         Actuation::DCMotorModel motorModelA;
         Actuation::DCMotorModel motorModelB;
         uint32_t motorCountA = 1;
         uint32_t motorCountB = 1;
+
+        // Actuation Servo Models (Servos)
+        Actuation::ServoModel servoModelA;
+        Actuation::ServoModel servoModelB;
+        uint32_t pwmChannelA = 0;
+        uint32_t pwmChannelB = 1;
 
         // Kinematic Transformation Matrices
         glm::dmat2 t_mq = glm::dmat2(1.0); ///< Maps joint velocity [dq1, dq2] -> motor velocity [w_mA, w_mB].

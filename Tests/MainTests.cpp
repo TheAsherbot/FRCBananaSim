@@ -22,6 +22,7 @@
 #include "Robot/RobotAssemblerTest.h"
 #include "Integration/FullRobotEnduranceTest.h"
 #include "Robot/DifferentialMechanismTest.h"
+#include "Robot/ServoMechanismTest.h"
 
 #include <iostream>
 #include <string>
@@ -45,6 +46,7 @@ using FRCBananaSim::Tests::RunSimDeviceLockstepTest;
 using FRCBananaSim::Tests::RunRobotAssemblerTest;
 using FRCBananaSim::Tests::RunFullRobotEnduranceTest;
 using FRCBananaSim::Tests::RunDifferentialMechanismTest;
+using FRCBananaSim::Tests::RunServoMechanismTest;
 
 int main(int argc, char* argv[])
 {
@@ -148,6 +150,11 @@ int main(int argc, char* argv[])
             runAll = false;
             RunDifferentialMechanismTest(ctx);
         }
+        else if (arg == "--servo-mechanism")
+        {
+            runAll = false;
+            RunServoMechanismTest(ctx);
+        }
     }
 
     if (runAll)
@@ -170,6 +177,7 @@ int main(int argc, char* argv[])
         RunRobotAssemblerTest(ctx);
         RunFullRobotEnduranceTest(ctx);
         RunDifferentialMechanismTest(ctx);
+        RunServoMechanismTest(ctx);
     }
 
     std::cout << "======================================\n";

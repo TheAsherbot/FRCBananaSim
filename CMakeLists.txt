@@ -191,6 +191,7 @@ set(TEST_SOURCES
     Tests/Bridge/SimDeviceLockstepTest.cpp
     Tests/Robot/RobotAssemblerTest.cpp
     Tests/Integration/FullRobotEnduranceTest.cpp
+    Tests/Robot/ServoMechanismTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -227,4 +228,5 @@ add_test(NAME SensorSuiteTest COMMAND FRCBananaSim_Tests --sensors)
 add_test(NAME SimDeviceLockstepTest COMMAND FRCBananaSim_Tests --simdevice-lockstep)
 add_test(NAME RobotAssemblerTest COMMAND FRCBananaSim_Tests --robot-assembler)
 add_test(NAME FullRobotEnduranceTest COMMAND FRCBananaSim_Tests --full-robot-endurance)
+add_test(NAME ServoMechanismTest COMMAND FRCBananaSim_Tests --servo-mechanism)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

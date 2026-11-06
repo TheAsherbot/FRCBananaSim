@@ -7,7 +7,10 @@
     "quiescentCurrent_A": 1.5,
     "brownoutWarning_V": 6.8,
     "brownoutShutoff_V": 6.3,
-    "brownoutRecovery_V": 7.5
+    "brownoutRecovery_V": 7.5,
+    "servoRailVoltage_V": 6.0,
+    "servoRailCurrentLimit_A": 2.2,
+    "servoRailBuckEfficiency": 0.88
   },
   "swerve": {
     "chassisLink": "base_link",

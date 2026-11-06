@@ -75,6 +75,32 @@ namespace FRCBananaSim::Actuation::Systems
          */
         void SetIdleCurrent(double idleCurrentA);
 
+        /**
+         * @brief Configures the regulated power rail (e.g. RoboRIO 6V, REV SPM 6V, or FTC Hub).
+         * @param nominalVolts Desired output voltage (typically 5.0V or 6.0V, default: 6.0V).
+         * @param currentLimitA Maximum continuous current before voltage droop (RoboRIO default: 2.2A).
+         * @param efficiency DC-DC buck converter efficiency (default: 0.88).
+         */
+        void SetRegulatedRail(double nominalVolts, double currentLimitA, double efficiency = 0.88);
+
+        /**
+         * @brief Gets instantaneous regulated rail voltage in Volts.
+         * @return Regulated voltage post-droop.
+         */
+        double GetRegulatedRailVoltage() const;
+
+        /**
+         * @brief Gets instantaneous total current drawn by all connected servos on the regulated rail in Amperes.
+         * @return Total servo rail current.
+         */
+        double GetRegulatedRailCurrent() const;
+
+        /**
+         * @brief Checks if the regulated rail current limit has been exceeded, inducing voltage droop.
+         * @return True if regulated rail is overloaded.
+         */
+        bool IsRegulatedRailBrownedOut() const;
+
     private:
         FRCBananaSim::Robot::Drivetrain::Systems::SwerveDriveSystem* swerveSystem = nullptr;
         Control::SimOutputs* externalOutputs = nullptr;
@@ -83,5 +109,13 @@ namespace FRCBananaSim::Actuation::Systems
         double currentTerminalVoltage = 12.60;
         double currentTotalCurrent = 1.5;
         bool isBrownedOutState = false;
+
+        // Regulated 6V / 5V power rail properties
+        double regulatedRailNominalVoltage = 6.0;
+        double regulatedRailCurrentLimit = 2.2; // Default FRC RoboRIO 6V rail limit
+        double regulatedRailEfficiency = 0.88;  // Buck regulator efficiency
+        double currentRegulatedRailVoltage = 6.0;
+        double currentRegulatedRailCurrent = 0.0;
+        bool isRegulatedRailBrownedOutState = false;
     };
 }

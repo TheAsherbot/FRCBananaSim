@@ -44,7 +44,7 @@
 Release bake-off numbers for Jolt: 51 us for the 100-body scene, 42 us for the swerve scene, 16 us for the four-bar scene.
 - **Measured Block 2/3 Benchmarks:**
   - **Analytic Swerve + Jolt Terrain Probes (`SwerveAdapterTest` T13):** `20.4 us/tick` in Release (`245 ms` for 12,000 ticks / 60 simulated seconds, querying Jolt `CollideShape` once per wheel at `step == 0` and propagating penetration analytically across sub-steps `1..3`).
-  - **Full Reference 2026 Robot (`Main.cpp` — All 8 Systems + Jolt + OpenGL + ImGui):** `~1.0–1.4 ms/tick` physics + `~0.8 ms` rendering = `~1.9–2.7 ms` total frame time in Debug builds (well under the `20 ms` real-time frame budget), with zero-I/O in-memory telemetry ring buffering (`32,768` samples flushed on `Shutdown()`).
+  - **Full Reference 2026 Robot (`Main.cpp` — All 9 Systems + Jolt + OpenGL + ImGui):** `~1.0–1.4 ms/tick` physics + `~0.8 ms` rendering = `~1.9–2.7 ms` total frame time in Debug builds (well under the `20 ms` real-time frame budget), with zero-I/O in-memory telemetry ring buffering (`32,768` samples flushed on `Shutdown()`).
 
 ## 2. Architecture & Data Flow
 
@@ -236,7 +236,8 @@ Your **C++ Robot Code** (WPILib GradleRIO) runs unmodified as a native desktop p
   - Unified `PowerCoupling` transmission between joints (gears, timing belts, roller chains, cables) with velocity ratio, inversion, efficiency, and backlash.
   - A flywheel as a motor-driven joint, with no piece interaction yet.
   - **Generic 2-DOF Differential Mechanisms:** Dedicated `DifferentialMechanismSystem` handling coupled dual-motor transmissions (symmetric bevel wrists [pitch/roll], CoreXY/H-Bot gantries, base-driven coupled arms) using pure ECS data components (`DifferentialComponent`), $2\times 2$ semi-implicit velocity-targeted integration with back-EMF damping, dual reflected rotor inertia tensors, dual-motor slot allocation, and isolated visual playground scene.
-- **Robot data schema v1:** Links with mass, center of mass and full inertia tensor about the center of mass (kg and m). Joints with type, axis, origin and limits. Gear ratios. Motor presets keyed by name (Kraken X60, Falcon 500, NEO, NEO Vortex), with constants taken from WPILib's `DCMotor` (verify the values). Intake and shooter contact zones. Material names. The **sidecar format** for what CAD can't hold (motors, CAN IDs, gear ratios, roles, differential coupling matrices).
+  - **Universal Servo Actuation System (FTC & FRC hybrid):** Dedicated `ServoModel` supporting both positional (`ServoControlMode::Positional`) and continuous rotation (`ServoControlMode::Continuous`) with standard presets (`GoBildaTorque`, `GoBildaSpeed`, `GenericStandard`, `Custom`). Extends all mechanisms (swerve steer/drive, linear elevators, rotational arms/wrists, and 2-DOF differential wrists) to support servos seamlessly with dedicated 6V regulated power rail, current limiting, voltage sag droop, and HALSim WebSocket PWM 0..15 channel integration while preserving 100% default FRC DC motor operation.
+- **Robot data schema v1:** Links with mass, center of mass and full inertia tensor about the center of mass (kg and m). Joints with type, axis, origin and limits. Gear ratios. Motor presets keyed by name (Kraken X60, Falcon 500, NEO, NEO Vortex), with constants taken from WPILib's `DCMotor` (verify the values). Intake and shooter contact zones. Material names. The **sidecar format** for what CAD can't hold (motors, CAN IDs, gear ratios, roles, differential coupling matrices, servo actuation types, presets, and PWM channels).
 - **Sensors:** encoders (gear scaling, quantization), 6-axis IMU with bias and noise, limit switches, beam breaks, 8-channel Analog inputs ($0\text{--}5\text{ V}$), and custom I²C/SPI/CAN sensors via generic parameter dictionaries.
 - **HALSim `SimDevice` Dispatcher & Lockstep Hook:**
   - Maps CTRE Phoenix 6 (`TalonFXSimState`) and REVLib (`SparkMaxSim`) `SimDevice` messages to the CAN IDs in `sidecar.json` (including dual-controller differential mechanisms).
@@ -246,10 +247,10 @@ Your **C++ Robot Code** (WPILib GradleRIO) runs unmodified as a native desktop p
 - **Gate:** if the schema isn't frozen by Nov 5, the exporter starts on a versioned v0.9 and the importer absorbs the changes.
 
 ### Block 4 (Nov 6-10): Fusion exporter (Python add-in)
-- Read the Synthesis exporter (Apache-2.0) for how it walks the joint hierarchy. Do **not** use Mirabuf as the output format, because it has no inertia tensor.
+- Walk the assembly hierarchy using **recursive hierarchical traversal with branch pruning**: if an occurrence or subassembly is hidden in Fusion (`isLightBulbOn == False` or `isVisible == False`), prune the entire branch and skip all child occurrences, bodies, and joints (§6.2).
 - Group components joined by rigid joints into one link. Export mass, center of mass, inertia tensor (converted from cm to m), material name and a collider proxy.
 - Export per joint: type, axis, origin, limits (no limit means continuous), name.
-- Join the sidecar by joint and component name, and warn on unmatched names.
+- Join the sidecar by joint and component name, validate servo metadata (actuator types, valid PWM channels 0..15, valid presets), and warn on unmatched names with 'did-you-mean' suggestions.
 - Warn on missing materials, joints without limits, and zero-mass bodies.
 - Tessellate visual meshes per link. I haven't verified which API call does this.
 - **Done when:** the test assembly exports a manifest and meshes matching the schema v1, with mass, center of mass and inertia agreeing with Fusion's own values.
@@ -341,5 +342,7 @@ Your **C++ Robot Code** (WPILib GradleRIO) runs unmodified as a native desktop p
 - **CTRE Phoenix 6 closed-loop lockstep (Verified in Block 3):** `OnControllerPIDModel` provides deterministic 1 kHz closed-loop control across 4 sub-steps (`1x` and `10x` bitwise identical in `SimDeviceLockstepTest`).
 - **Elevator cascades & Four-Bar linkages (Verified in Block 3):** `SolverMode::AnalyticCoupled` cascade rigging and non-collinear parallelogram four-bar linkages with feed-forward + PD follower synchronization are verified with `< 0.5 mm` tracking error and zero snap-back.
 - **WPILib motor constants (Verified in Block 2/3):** All 11 motor presets in `DCMotorModel` and multi-motor scaling via `WithMotorCount(n)` are verified.
+- **Generic 2-DOF Differential Mechanisms (Verified in Block 3):** `DifferentialMechanismSystem` and `DifferentialComponent` provide $2\times 2$ semi-implicit velocity-targeted integration with back-EMF damping, dual reflected rotor inertia tensors, dual-motor slot allocation, and isolated visual playground scene (`Playground.vcxproj`).
+- **Universal Servo Actuation System (Verified in Block 3 / Addon):** `ServoModel` supporting both positional and continuous rotation across swerve steer/drive, linear elevators, rotational arms/wrists, and 2-DOF differential wrists; dedicated 6V regulated power rail on `ElectricalSystem` with current limiting and voltage droop; HALSim WebSocket PWM 0..15 channel integration; 19 passing tests in `ServoMechanismTest`.
 - **Full-robot step cost (Verified in Block 3):** `20.4 us/tick` for the analytic swerve + Jolt terrain probe, and `~1.0–1.4 ms/tick` (`~1.9–2.7 ms` full frame with rendering) in Debug builds for the complete Reference 2026 robot.
 - The exporter, importer and calibrator 2-day cuts are estimates; the Fusion API call for visual-mesh tessellation will be verified in Block 4.

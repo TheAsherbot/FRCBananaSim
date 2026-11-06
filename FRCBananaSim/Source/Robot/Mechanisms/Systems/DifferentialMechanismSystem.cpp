@@ -151,23 +151,43 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
             diff.effectiveInertia[1][1] += linkInertiaB;
         }
 
-        // 4. Evaluate Motor Commanded Torques, Stator Limits & Electrical Damping
-        auto affineA = diff.motorModelA.CalculateAffineTorqueTerms(diff.commandedVoltageA);
-        auto affineB = diff.motorModelB.CalculateAffineTorqueTerms(diff.commandedVoltageB);
+        // 4. Evaluate Motor / Servo Commanded Torques & Damping
+        glm::dvec2 tauCmdMotor = { 0.0, 0.0 };
+        glm::dmat2 dMotorMat = glm::dmat2(0.0);
+        double maxStatorTorqueA = 0.0;
+        double maxStatorTorqueB = 0.0;
 
-        double maxStatorTorqueA = diff.motorModelA.CalculateStatorTorqueLimit(diff.statorCurrentLimitA) * diff.motorCountA;
-        double maxStatorTorqueB = diff.motorModelB.CalculateStatorTorqueLimit(diff.statorCurrentLimitB) * diff.motorCountB;
+        if (diff.actuatorType == ActuatorType::Servo)
+        {
+            double tauA = diff.servoModelA.CalculateTorque(diff.motorRotorAnglesRad.x, diff.motorRotorSpeedsRadS.x,
+                diff.effectiveInertia[0][0], dt);
+            double tauB = diff.servoModelB.CalculateTorque(diff.motorRotorAnglesRad.y, diff.motorRotorSpeedsRadS.y,
+                diff.effectiveInertia[1][1], dt);
+            tauCmdMotor = { tauA, tauB };
+            diff.motorStatorCurrentsA.x = diff.servoModelA.CalculateCurrent(diff.motorRotorSpeedsRadS.x);
+            diff.motorStatorCurrentsA.y = diff.servoModelB.CalculateCurrent(diff.motorRotorSpeedsRadS.y);
+            maxStatorTorqueA = diff.servoModelA.GetStallTorque();
+            maxStatorTorqueB = diff.servoModelB.GetStallTorque();
+        }
+        else
+        {
+            auto affineA = diff.motorModelA.CalculateAffineTorqueTerms(diff.commandedVoltageA);
+            auto affineB = diff.motorModelB.CalculateAffineTorqueTerms(diff.commandedVoltageB);
 
-        glm::dvec2 tauCmdMotor = {
-            std::clamp(affineA.stallTorqueCommanded * diff.motorCountA, -maxStatorTorqueA, maxStatorTorqueA),
-            std::clamp(affineB.stallTorqueCommanded * diff.motorCountB, -maxStatorTorqueB, maxStatorTorqueB)
-        };
+            maxStatorTorqueA = diff.motorModelA.CalculateStatorTorqueLimit(diff.statorCurrentLimitA) * diff.motorCountA;
+            maxStatorTorqueB = diff.motorModelB.CalculateStatorTorqueLimit(diff.statorCurrentLimitB) * diff.motorCountB;
 
-        glm::dvec2 dMotor = {
-            (diff.brakeModeA ? affineA.electricalDamping : 0.0) * diff.motorCountA,
-            (diff.brakeModeB ? affineB.electricalDamping : 0.0) * diff.motorCountB
-        };
-        glm::dmat2 dMotorMat = glm::dmat2(dMotor.x, 0.0, 0.0, dMotor.y);
+            tauCmdMotor = {
+                std::clamp(affineA.stallTorqueCommanded * diff.motorCountA, -maxStatorTorqueA, maxStatorTorqueA),
+                std::clamp(affineB.stallTorqueCommanded * diff.motorCountB, -maxStatorTorqueB, maxStatorTorqueB)
+            };
+
+            glm::dvec2 dMotor = {
+                (diff.brakeModeA ? affineA.electricalDamping : 0.0) * diff.motorCountA,
+                (diff.brakeModeB ? affineB.electricalDamping : 0.0) * diff.motorCountB
+            };
+            dMotorMat = glm::dmat2(dMotor.x, 0.0, 0.0, dMotor.y);
+        }
 
         // 5. Project Damping & Commanded Torques to Joint Space: D_q = T_mq^T * D_m * T_mq
         glm::dmat2 dJoint = glm::transpose(diff.t_mq) * dMotorMat * diff.t_mq;

@@ -11,6 +11,7 @@
 #include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
 #include "Robot/Mechanisms/Components/ElevatorComponent.h"
 #include "Robot/Mechanisms/Components/ArmComponent.h"
+#include "Actuation/Components/ServoComponent.h"
 #include "Robot/Mechanisms/Components/FourBarComponent.h"
 #include "Robot/Mechanisms/Components/FlywheelComponent.h"
 #include "Robot/Mechanisms/Components/CouplingComponent.h"
@@ -363,6 +364,19 @@ namespace FRCBananaSim::Robot
                 //elev.motorModel = CreateMotorFromPreset(mech.motorPreset, elev.gearRatio, elev.efficiency).WithMotorCount(elev.motorCount);
                 elev.motorModel = CreateMotorFromPreset(mech.motorPreset, elev.gearRatio, elev.efficiency);
 
+                if (mech.actuatorType == "servo")
+                {
+                    elev.actuatorType = Mechanisms::Components::ActuatorType::Servo;
+                    elev.pwmChannel = mech.servo.pwmChannel;
+                    Actuation::ServoMode sMode = (mech.servo.mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                    elev.servoModel = Actuation::ServoModel::FromPreset(mech.servo.preset, sMode);
+
+                    Actuation::Components::ServoComponent sc;
+                                        sc.pwmChannel = elev.pwmChannel;
+                    sc.servoModel = elev.servoModel;
+                    scene.AddComponent(mechEntity, sc);
+                }
+
                 auto jIt = result.jointEntities.find(mech.targetJoint);
                 if (jIt != result.jointEntities.end())
                 {
@@ -417,6 +431,19 @@ namespace FRCBananaSim::Robot
                 arm.motorSlots = { mechSlot };
                 //arm.motorModel = CreateMotorFromPreset(mech.motorPreset, arm.gearRatio, arm.efficiency).WithMotorCount(arm.motorCount);
                 arm.motorModel = CreateMotorFromPreset(mech.motorPreset, arm.gearRatio, arm.efficiency);
+
+                if (mech.actuatorType == "servo")
+                {
+                    arm.actuatorType = Mechanisms::Components::ActuatorType::Servo;
+                    arm.pwmChannel = mech.servo.pwmChannel;
+                    Actuation::ServoMode sMode = (mech.servo.mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                    arm.servoModel = Actuation::ServoModel::FromPreset(mech.servo.preset, sMode);
+
+                    Actuation::Components::ServoComponent sc;
+                                        sc.pwmChannel = arm.pwmChannel;
+                    sc.servoModel = arm.servoModel;
+                    scene.AddComponent(mechEntity, sc);
+                }
 
                 auto jIt = result.jointEntities.find(mech.targetJoint);
                 if (jIt != result.jointEntities.end())
@@ -546,6 +573,33 @@ namespace FRCBananaSim::Robot
 
                 diff.motorModelA = CreateMotorFromPreset(mech.motorPreset, 1.0, 1.0);
                 diff.motorModelB = CreateMotorFromPreset(mech.motorPreset, 1.0, 1.0);
+
+                if (mech.actuatorType == "servo")
+                {
+                    diff.actuatorType = Mechanisms::Components::ActuatorType::Servo;
+                    if (mech.servos.size() >= 2)
+                    {
+                        diff.pwmChannelA = mech.servos[0].pwmChannel;
+                        diff.pwmChannelB = mech.servos[1].pwmChannel;
+                        Actuation::ServoMode sModeA = (mech.servos[0].mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                        Actuation::ServoMode sModeB = (mech.servos[1].mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                        diff.servoModelA = Actuation::ServoModel::FromPreset(mech.servos[0].preset, sModeA);
+                        diff.servoModelB = Actuation::ServoModel::FromPreset(mech.servos[1].preset, sModeB);
+                    }
+                    else
+                    {
+                        diff.pwmChannelA = mech.servo.pwmChannel;
+                        diff.pwmChannelB = mech.servo.pwmChannel + 1;
+                        Actuation::ServoMode sMode = (mech.servo.mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                        diff.servoModelA = Actuation::ServoModel::FromPreset(mech.servo.preset, sMode);
+                        diff.servoModelB = Actuation::ServoModel::FromPreset(mech.servo.preset, sMode);
+                    }
+
+                    Actuation::Components::ServoComponent scA;
+                                        scA.pwmChannel = diff.pwmChannelA;
+                    scA.servoModel = diff.servoModelA;
+                    scene.AddComponent(mechEntity, scA);
+                }
 
                 // Configure Kinematics (Symmetric Bevel vs Custom Matrix)
                 if (mech.differentialType == "custom_matrix" && mech.couplingMatrix.size() >= 2 && mech.couplingMatrix[0].size() >= 2)
@@ -836,6 +890,37 @@ namespace FRCBananaSim::Robot
             Drivetrain::Components::SwerveChassisComponent chassisComp;
             chassisComp.batteryEntity = result.batteryEntity;
             chassisComp.chassisMass = manifest.massSummary.totalMassKg > 0.0 ? manifest.massSummary.totalMassKg : 54.0;
+
+            Drivetrain::Model::SwerveDrivetrainConfig swerveCfg = Drivetrain::Model::SwerveDrivetrainConfig::CreateMK5nR3Reference();
+            swerveCfg.chassis.mass = chassisComp.chassisMass;
+
+            if (sidecar.swerve.steerActuatorType == "servo")
+            {
+                swerveCfg.steer.actuatorType = Drivetrain::Model::ModuleActuatorType::Servo;
+                swerveCfg.steer.servo = Actuation::ServoModel::FromPreset(sidecar.swerve.steerServoPreset, Actuation::ServoMode::Positional);
+            }
+            if (sidecar.swerve.driveActuatorType == "servo")
+            {
+                swerveCfg.drive.actuatorType = Drivetrain::Model::ModuleActuatorType::Servo;
+                swerveCfg.drive.servo = Actuation::ServoModel::FromPreset(sidecar.swerve.driveServoPreset, Actuation::ServoMode::Continuous);
+            }
+
+            for (uint32_t i = 0; i < 4; ++i)
+            {
+                swerveCfg.modules[i].drivePwmChannel = sidecar.swerve.modules[i].drivePwmChannel;
+                swerveCfg.modules[i].steerPwmChannel = sidecar.swerve.modules[i].steerPwmChannel;
+                swerveCfg.modules[i].driveCANId = sidecar.swerve.modules[i].driveCanId;
+                swerveCfg.modules[i].steerCANId = sidecar.swerve.modules[i].steerCanId;
+            }
+
+            Actuation::BatteryModel bat = Actuation::BatteryModel::FRCStandard();
+            if (result.batteryEntity != Core::ECS::Core::invalidEntity)
+            {
+                auto* bComp = scene.GetComponent<Actuation::Components::BatteryComponent>(result.batteryEntity);
+                if (bComp) { bat = bComp->batteryModel; }
+            }
+
+            chassisComp.drivetrainModel = std::make_shared<Drivetrain::Model::SwerveDrivetrainModel>(swerveCfg, bat);
             scene.AddComponent(result.chassisEntity, chassisComp);
         }
 
@@ -845,6 +930,10 @@ namespace FRCBananaSim::Robot
 
         // 12. Instantiate Official 8-Stage Execution Pipeline Systems
         result.electricalSystem = std::make_shared<Actuation::Systems::ElectricalSystem>(scene, result.swerveSystem.get());
+        result.electricalSystem->SetRegulatedRail(
+            sidecar.electrical.regulatedRailVoltageV,
+            sidecar.electrical.regulatedRailCurrentLimitA,
+            sidecar.electrical.regulatedRailEfficiency);
         result.elevatorSystem = std::make_shared<Mechanisms::Systems::ElevatorSystem>(scene, joltContext);
         result.mechanismSystem = std::make_shared<Mechanisms::Systems::MechanismSystem>(scene, joltContext);
         result.differentialSystem = std::make_shared<Mechanisms::Systems::DifferentialMechanismSystem>(scene, joltContext);
@@ -938,6 +1027,146 @@ namespace FRCBananaSim::Robot
         if (robot.sensorSystem)
         {
             robot.sensorSystem->FixedUpdate(dt);
+        }
+    }
+
+    void RobotAssembler::ApplyInputs(AssembledRobot& robot, const Control::SimInputs& inputs, Core::ECS::Core::Scene& scene)
+    {
+        SIM_PROFILE_SCOPE("RobotAssembler::ApplyInputs");
+
+        // 1. Forward to Swerve Drivetrain System
+        if (robot.swerveSystem)
+        {
+            robot.swerveSystem->SetInputs(inputs);
+        }
+
+        // 2. Elevators
+        auto elevatorEntities = scene.Query<Mechanisms::Components::ElevatorComponent>();
+        for (auto entity : elevatorEntities)
+        {
+            auto* elev = scene.GetComponent<Mechanisms::Components::ElevatorComponent>(entity);
+            if (!elev) continue;
+
+            if (elev->actuatorType == Mechanisms::Components::ActuatorType::Servo)
+            {
+                if (elev->pwmChannel < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[elev->pwmChannel].isServo)
+                {
+                    elev->servoModel.SetTargetNormalized(inputs.pwmCommands[elev->pwmChannel].position);
+                }
+                else
+                {
+                    uint32_t slot = elev->GetPrimaryMotorSlot();
+                    if (slot < Control::MAX_MOTOR_SLOTS && inputs.motorCommands[slot].mode != Control::MotorControlMode::Disabled)
+                    {
+                        elev->servoModel.SetTargetNormalized(0.5 + 0.5 * std::clamp(inputs.motorCommands[slot].demand / 12.0, -1.0, 1.0));
+                    }
+                }
+            }
+            else
+            {
+                uint32_t slot = elev->GetPrimaryMotorSlot();
+                if (slot < Control::MAX_MOTOR_SLOTS)
+                {
+                    elev->commandedVoltage = inputs.motorCommands[slot].demand;
+                }
+            }
+        }
+
+        // 3. Arms / Wrists
+        auto armEntities = scene.Query<Mechanisms::Components::ArmComponent>();
+        for (auto entity : armEntities)
+        {
+            auto* arm = scene.GetComponent<Mechanisms::Components::ArmComponent>(entity);
+            if (!arm) continue;
+
+            if (arm->actuatorType == Mechanisms::Components::ActuatorType::Servo)
+            {
+                if (arm->pwmChannel < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[arm->pwmChannel].isServo)
+                {
+                    arm->servoModel.SetTargetNormalized(inputs.pwmCommands[arm->pwmChannel].position);
+                }
+                else
+                {
+                    uint32_t slot = arm->GetPrimaryMotorSlot();
+                    if (slot < Control::MAX_MOTOR_SLOTS && inputs.motorCommands[slot].mode != Control::MotorControlMode::Disabled)
+                    {
+                        arm->servoModel.SetTargetAngle(inputs.motorCommands[slot].demand);
+                    }
+                }
+            }
+            else
+            {
+                uint32_t slot = arm->GetPrimaryMotorSlot();
+                if (slot < Control::MAX_MOTOR_SLOTS)
+                {
+                    arm->commandedVoltage = inputs.motorCommands[slot].demand;
+                }
+            }
+        }
+
+        // 4. Differential Mechanisms
+        auto diffEntities = scene.Query<Mechanisms::Components::DifferentialComponent>();
+        for (auto entity : diffEntities)
+        {
+            auto* diff = scene.GetComponent<Mechanisms::Components::DifferentialComponent>(entity);
+            if (!diff) continue;
+
+            if (diff->actuatorType == Mechanisms::Components::ActuatorType::Servo)
+            {
+                if (diff->pwmChannelA < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[diff->pwmChannelA].isServo)
+                {
+                    diff->servoModelA.SetTargetNormalized(inputs.pwmCommands[diff->pwmChannelA].position);
+                }
+                if (diff->pwmChannelB < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[diff->pwmChannelB].isServo)
+                {
+                    diff->servoModelB.SetTargetNormalized(inputs.pwmCommands[diff->pwmChannelB].position);
+                }
+            }
+            else
+            {
+                if (diff->motorSlotA < Control::MAX_MOTOR_SLOTS)
+                {
+                    diff->commandedVoltageA = inputs.motorCommands[diff->motorSlotA].demand;
+                }
+                if (diff->motorSlotB < Control::MAX_MOTOR_SLOTS)
+                {
+                    diff->commandedVoltageB = inputs.motorCommands[diff->motorSlotB].demand;
+                }
+            }
+        }
+
+        // 5. Standalone Servos
+        auto servoEntities = scene.Query<Actuation::Components::ServoComponent>();
+        for (auto entity : servoEntities)
+        {
+            auto* servo = scene.GetComponent<Actuation::Components::ServoComponent>(entity);
+            if (!servo) continue;
+
+            if (servo->pwmChannel < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[servo->pwmChannel].isServo)
+            {
+                if (servo->servoModel.GetMode() == Actuation::ServoMode::Continuous)
+                {
+                    servo->servoModel.SetSpeed(inputs.pwmCommands[servo->pwmChannel].speed);
+                }
+                else
+                {
+                    servo->servoModel.SetTargetNormalized(inputs.pwmCommands[servo->pwmChannel].position);
+                }
+            }
+        }
+
+        // 6. Flywheels / Intakes
+        auto flywheelEntities = scene.Query<Mechanisms::Components::FlywheelComponent>();
+        for (auto entity : flywheelEntities)
+        {
+            auto* fw = scene.GetComponent<Mechanisms::Components::FlywheelComponent>(entity);
+            if (!fw) continue;
+
+            uint32_t slot = fw->GetPrimaryMotorSlot();
+            if (slot < Control::MAX_MOTOR_SLOTS)
+            {
+                fw->commandedVoltage = inputs.motorCommands[slot].demand;
+            }
         }
     }
 }

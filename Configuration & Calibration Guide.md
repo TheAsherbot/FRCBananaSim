@@ -1,7 +1,7 @@
 # FRCBananaSim Robot Configuration & Calibration Guide
 
 > [!NOTE]
-> **Status:** Block 2 & Block 3 Verified — 6-DOF Analytic Swerve Dynamics, Jolt Rigid Body Chassis, Tire Contact Model, Battery Electromechanics, Robot Data Schema v1.0.0 (`manifest.json`, `sidecar.json`, `materials.json`), Multi-Stage Elevators, Rotational Arms & Wrists, Closed-Loop Four-Bar Linkages, High-RPM Flywheels, Full Sensor Suite (`CANcoder`, 6-Axis `Pigeon 2` IMU, Limit Switches, Beam Breaks, Analog Inputs), CTRE Phoenix 6 / REVLib HALSim WebSocket Lockstep Bridge, and Fusion 360 Exporter Standards.
+> **Status:** Block 2 & Block 3 Verified — 6-DOF Analytic Swerve Dynamics, Jolt Rigid Body Chassis, Tire Contact Model, Battery Electromechanics, Robot Data Schema v1.0.0 (`manifest.json`, `sidecar.json`, `materials.json`), Multi-Stage Elevators, Rotational Arms & Wrists, Closed-Loop Four-Bar Linkages, High-RPM Flywheels, Full Sensor Suite (`CANcoder`, 6-Axis `Pigeon 2` IMU, Limit Switches, Beam Breaks, Analog Inputs), CTRE Phoenix 6 / REVLib HALSim WebSocket Lockstep Bridge, Generic 2-DOF Differential Mechanisms (`"role": "differential"`), Universal Servo Actuation System (FTC & FRC hybrid, positional & continuous, 6V regulated bus droop, swerve steer/drive, arms, elevators, 2-DOF differential wrists), and Fusion 360 Exporter Standards.
 >
 > This document is the living reference guide for modeling, measuring, configuring, and calibrating robots in **FRCBananaSim**. It covers the complete modeling pipeline from **Fusion 360 CAD authoring**, to physical workbench measurements, to configuration file dictionaries for **Block 2 Standalone Swerve (`robot_swerve.json`)** and **Block 3 Full-Robot Schema v1 (`manifest.json`, `sidecar.json`, `materials.json`)**.
 
@@ -45,7 +45,7 @@ When launched in standalone swerve mode, `RobotSpawner::SpawnFromJsonFile` and `
 ### B. Block 3 Full-Robot Schema v1.0.0 (`manifest.json`, `sidecar.json`, `materials.json`)
 For complete multi-mechanism robots, configuration data is partitioned into three modular JSON files loaded by `RobotSchemaLoader` and assembled by `RobotAssembler::AssembleFromFiles`:
 * 📁 [`FRCBananaSim/Resources/Robots/Reference2026/manifest.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/Reference2026/manifest.json) — Physical CAD hierarchy (links, masses, CoMs, full $3 \times 3$ inertia tensors, colliders, joints, and sensor contact zones).
-* 📁 [`FRCBananaSim/Resources/Robots/Reference2026/sidecar.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/Reference2026/sidecar.json) — Electromechanical actuation, swerve parameters, mechanism controllers, kinematic couplings, and hardware sensors.
+* 📁 [`FRCBananaSim/Resources/Robots/Reference2026/sidecar.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots/Reference2026/sidecar.json) — Electromechanical actuation, swerve parameters, mechanism controllers, kinematic couplings, differential transmissions, and hardware sensors.
 * 📁 [`FRCBananaSim/Resources/Config/materials.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Config/materials.json) — Surface friction, restitution, density, and pairwise contact overrides.
 * 📁 [`FRCBananaSim/Resources/Config/simdevice_keymap.json`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Config/simdevice_keymap.json) — Configurable vendor property key aliases for `SimDeviceDispatcher`.
 
@@ -63,15 +63,16 @@ For complete multi-mechanism robots, configuration data is partitioned into thre
                                               │
        ┌──────────────────────────────────────┴──────────────────────────────────────┐
        ▼                                                                             ▼
-  [8-Stage 200 Hz FixedUpdate Pipeline]                                 [HALSim Bridge & Lockstep]
-  1. ElectricalSystem     (Buck-converter supply current & V_bus sag)   • HALSimWebSocketServer (:3300)
-  2. ElevatorSystem       (Slider forces, reflected mass, cascade)      • SimDeviceDispatcher
-  3. MechanismSystem      (Arms, wrists, 4-bar PD sync, couplings)      • LockstepCoordinator (20 ms)
-  4. FlywheelSystem       (800 Hz 1D ODE, parent recoil, wrist mount)   • OnControllerPIDModel (1 kHz)
-  5. CompositeMassSystem  (Dynamic CG & Parallel Axis inertia -> Swerve)
-  6. SwerveDriveSystem    (6-DOF analytic swerve + Jolt terrain probe)
-  7. PhysicsSystem        (Jolt 5 ms step + CoM-to-origin sync)
-  8. SensorSystem         (Encoders, 6-axis IMU, DIO limits & beams)
+  [9-Stage 200 Hz FixedUpdate Pipeline]                                 [HALSim Bridge & Lockstep]
+  1. ElectricalSystem              (Supply current & V_bus sag)         • HALSimWebSocketServer (:3300)
+  2. ElevatorSystem                (Slider forces, reflected mass)      • SimDeviceDispatcher
+  3. MechanismSystem               (Arms, wrists, 4-bars, couplings)    • LockstepCoordinator (20 ms)
+  4. DifferentialMechanismSystem   (Coupled 2x2 semi-implicit diffs)    • OnControllerPIDModel (1 kHz)
+  5. FlywheelSystem                (800 Hz 1D ODE, parent recoil)
+  6. CompositeMassSystem           (Dynamic CG/inertia -> Swerve)
+  7. SwerveDriveSystem             (6-DOF analytic swerve + Jolt)
+  8. PhysicsSystem                 (Jolt 5 ms step + CoM sync)
+  9. SensorSystem                  (Encoders, 6-axis IMU, DIOs)
 ```
 
 ---
@@ -187,7 +188,42 @@ Fusion 360 Joint Name                       sidecar.json Field
 
 ---
 
-### G. Custom Colliders (`COL_*`) & Curved Ramps / Half-Pipes
+### G. How to CAD Mechanically Linked Joints (1 Motor, 2 Pivots/Arms)
+
+When a single motor drives two parallel mechanisms (e.g., left and right intake arms connected by a cross-shaft, timing belt, or gear pair):
+1. **CAD Joints:** Model both joints as normal revolute hinges in CAD (e.g. `left_intake_pivot` and `right_intake_pivot`).
+2. **Motor Placement:** You only need motor clearance and gearboxes on the **primary** side. The secondary side only needs bearing mounts and cross-shaft pulleys/sprockets.
+3. **Simulation Link:** In `sidecar.json`, you tell the engine that the motor powers the primary joint, and link the secondary joint using `"power_coupling"`.
+
+---
+
+### H. CAD Modeling for 2-DOF Differential Wrists
+
+When designing a 2-DOF differential wrist (where two motors mounted back on the arm drive both Pitch and Roll via a bevel gear cluster):
+1. **Kinematic Chain in CAD:** Model the wrist as two distinct revolute joints in series:
+   $$\text{Parent Link (Arm Tube)} \xrightarrow{\text{Pitch Joint}} \text{Intermediate Yoke Link} \xrightarrow{\text{Roll Joint}} \text{Distal Tool / End-Effector}$$
+2. **Motor Placement & Grounding (Crucial for Realistic Mass):**
+   * Real competitive teams (e.g., FRC 971, 1678, 254) statically mount both heavy drive motors back on the arm tube or carriage, drastically reducing the moving moment of inertia at the end-effector.
+   * In Fusion 360, **both motor bodies must belong to the parent link rigid group** (arm tube or carriage). **Do NOT attach motor bodies to the moving yoke or distal tool**.
+3. **Never Model Physics Colliders for Bevel Gear Teeth:**
+   * In CAD, bevel gears mesh visually. However, in real-time physics engines, detailed gear tooth colliders cause severe geometry snagging, collision chatter, and numerical explosion.
+   * **Rule:** Do NOT create `COL_*` collision proxies for bevel gear teeth or transmission pinions. BananaSim's analytical differential engine couples joint velocities and torques mathematically in `sidecar.json`. Model moving links with clean, simplified collision boxes or capsules representing only the outer structural frame and gripper pads.
+4. **Joint Naming:** Name the two joints clearly (e.g. `arm_wrist_pitch_hinge` and `arm_wrist_roll_hinge`) to match `"targetJoints"` in `sidecar.json`.
+5. **Set Physical Joint Limits:**
+   * Always check **Edit Joint Limits** on both revolute joints in Fusion 360 (e.g., Pitch: $-90^\circ$ to $+90^\circ$, Roll: $-180^\circ$ to $+180^\circ$).
+6. **Collision Filtering:** In `manifest.json`, the intermediate yoke and distal gripper should have simple colliders (`COL_*`) with `isSensor = true` or use collision group filtering so they don't produce false self-collision forces against the arm tube structure.
+
+---
+
+### I. Documenting External Reductions in CAD
+
+Planetary gearboxes (e.g., MAXPlanetary, VersaPlanetary) are often followed by external sprockets, pulleys, or spur gears (e.g., 16T driving 32T).
+* **CADder Practice:** Clearly note or dimension the tooth counts ($N_{\text{driver}}$ and $N_{\text{driven}}$) on the CAD assembly or drawings.
+* The programming/sim team needs both the internal gearbox ratio ($G_{\text{box}}$) and external ratio ($G_{\text{ext}} = N_{\text{driven}} / N_{\text{driver}}$) to compute the true total reduction $G_{\text{total}} = G_{\text{box}} \times G_{\text{ext}}$ for `sidecar.json`.
+
+---
+
+### J. Custom Colliders (`COL_*`) & Curved Ramps / Half-Pipes
 
 By default, the exporter creates a simple bounding box around each moving link. If a link has a complex shape (like a bumper frame, curved intake plate, or shooter ramp):
 
@@ -214,7 +250,7 @@ By default, the exporter creates a simple bounding box around each moving link. 
 
 ---
 
-### H. Sensor & Trigger Zones (`ZONE_<role>_*`)
+### K. Sensor & Trigger Zones (`ZONE_<role>_*`)
 
 To define where a game piece gets detected or grabbed:
 
@@ -227,7 +263,7 @@ To define where a game piece gets detected or grabbed:
 
 ---
 
-### I. Fast Flywheels & Shooter Rollers (Why They Are Special)
+### L. Fast Flywheels & Shooter Rollers (Why They Are Special)
 
 * **Why we don't simulate 6,000 RPM wheels as raw physics bodies:**  
   A shooter wheel turns 100 times every second. In a 200 Hz physics simulation ($5\text{ ms}$ steps), the wheel jumps 180 degrees between two frames. If standard physics tries to bounce a ball off something jumping 180° instantaneously, the ball violently glitches through the wheel or gets launched at infinite speed.
@@ -238,7 +274,7 @@ To define where a game piece gets detected or grabbed:
 
 ---
 
-### J. Closed-Loop Mechanisms (Four-Bar Intakes)
+### M. Closed-Loop Mechanisms (Four-Bar Intakes)
 
 When modeling a four-bar linkage:
 1. Model all 4 joints in CAD:
@@ -251,12 +287,28 @@ When modeling a four-bar linkage:
 
 ---
 
-### K. Pre-Export CAD Checklist
+### N. Visibility & Branch Pruning (Excluding Test Rigs, Field Props & Prototypes)
+
+The Fusion exporter strictly respects CAD visibility and uses **hierarchical branch pruning**:
+
+> [!IMPORTANT]
+> **Branch Pruning Rule:**  
+> The exporter only looks at **visible** objects. If you hide a component or subassembly in Fusion 360 (click the eye or lightbulb icon off in the browser tree), the exporter **skips that entire component branch and will not even look at its children**.
+
+* **What this means for CADders:**
+  * You can keep prototype mechanisms, experimental intake arms, field game pieces, or test benches inside your CAD model!
+  * As long as you turn off the visibility eye icon on their parent component, they are 100% ignored by the exporter. None of their child components, sub-assemblies, bodies, colliders, or joints will leak into `manifest.json` or `Meshes/*.glb`.
+  * For visible components, individual hidden bodies are also ignored, allowing you to hide internal visual clutter without deleting geometry.
+
+---
+
+### O. Pre-Export CAD Checklist
 
 Before exporting your assembly for simulation:
 - [ ] **Timeline Clean:** No red or yellow warning markers in the Fusion 360 timeline.
 - [ ] **Home / Zero Position:** Mechanism joints set to their resting/stowed position (Elevator down at $0.0\text{ m}$, Arm at $0^\circ$).
 - [ ] **No Pending Movement:** Click **Capture Position** or **Revert** in Fusion so no floating parts are active.
+- [ ] **Hide Experimental / Unused Branches:** Turn off visibility (click eye off) on any test rigs, alternate mechanisms, or field obstacles.
 - [ ] **Hardware Suppressed / Hidden:** Hide or suppress small screws, nuts, washers, and zip ties (they bloat 3D mesh polygon counts without helping physics).
 - [ ] **Total Mass Sanity Check:** Check assembly **Properties $\to$ Mass**. If a 125 lb robot shows 300+ lbs, find which parts were left on default Steel and change them to Aluminum!
 
@@ -380,6 +432,96 @@ Perform these physical checks on the real robot to calibrate parameters that dif
   * `driveModule.coulombFriction_Nm` / `mechanisms[i].coulombFriction` (typically $1.5 - 2.0\text{ Nm}$ for drive, $0.3 - 0.8\text{ Nm}$ for arms, $10 - 15\text{ N}$ for elevators)
   * `mechanisms[i].springAssist.force_N`: Measure constant-force spring pull on the elevator carriage with a fish/luggage scale (e.g. $45.0\text{ N}$).
 
+## 4.2 Adding Game Elements
+
+### 1. Official FIRST Documentation & CAD Geometry (Kickoff Morning)
+
+Before conducting destructive or physical tests, extract the manufacturer baseline from official channels:
+
+1. **The Game Manual (Game Piece Section):**
+   * **Mass Specification & Tolerances:** Note the nominal mass and allowed variation (e.g., $235\text{ g} \pm 10\text{ g}$).
+   * **Nominal Geometry:** Note outer diameter, inner diameter, thickness, and cord dimensions.
+   * **Base Polymer Identification:** The manual defines the manufacturing classification (e.g., *"Integral-skin polyurethane foam"*, *"Inflatable vinyl playground ball"*, *"Rotomolded low-density polyethylene"*, or *"Extruded closed-cell EVA foam"*).
+2. **Official Field CAD (STEP / SolidWorks):**
+   * Download the official game piece CAD model from FIRST or AndyMark.
+   * Open the file in Fusion 360 $\to$ open **Inspect $\to$ Mass Properties** to record the exact geometric volume ($V$) in $\text{cm}^3$.
+3. **Supplier Product Page (AndyMark / WCP / REV):**
+   * Check replacement parts listings for durometer ratings (e.g., Shore 25A or Shore 45C) and pressure ratings for pneumatic balls.
+
+---
+
+### 2. Physical Workbench Measurement Protocol (~15 Minutes)
+
+Conduct these four workbench tests using standard team shop tools:
+
+```
+A. Density Scale          B. Drop Restitution          C. Incline Ramp Friction
+   ┌─────────┐                 ┌───┐ Drop h1                Game Piece
+   │ [235 g] │                 │ O │                        ┌──┐
+   └────┬────┘                 └───┘                        │  │
+   ─────┴───── Floor           ───┬─── Bounce h2            └──┴──────────
+                              ════╪═══ Floor              ▲ θ (Angle)   /
+                                                          └────────────/
+```
+
+#### A. Bulk Equivalent Density ($\rho$)
+Game pieces (especially cellular foam or rotomolded shapes) have internal voids or varied skin density. Always calculate equivalent bulk density directly from physical mass and CAD volume:
+1. Weigh 3–5 sample pieces on a digital gram scale and compute the average mass ($m_{\text{avg}}$).
+2. Read the CAD volume ($V$) in $\text{cm}^3$ from the official STEP file.
+3. Compute density:
+   $$\rho = \frac{m_{\text{avg}}}{V} \quad \left(\frac{\text{g}}{\text{cm}^3}\right), \qquad \rho_{\text{SI}} = \rho \times 1000.0 \quad \left(\frac{\text{kg}}{\text{m}^3}\right)$$
+
+#### B. Coefficient of Restitution ($e$ - Bounciness)
+1. Mount a tape measure vertically against a wall or pit display.
+2. Drop the game piece from a known release height $h_1$ ($1.00\text{ m}$ / $40\text{ in}$) onto the test surface (competition carpet or steel/polycarb plate).
+3. Record the impact with a smartphone camera set to **Slow Motion (120 or 240 fps)**.
+4. Read the peak rebound height of the first bounce ($h_2$).
+5. Compute the restitution coefficient:
+   $$e = \sqrt{\frac{h_2}{h_1}}$$
+   *(Example: A foam note dropped from $100\text{ cm}$ rebounding to $16\text{ cm}$ yields $e = \sqrt{0.16} = 0.40$).*
+
+#### C. Static Coefficient of Friction ($\mu_s$ - Incline Test)
+1. Place a flat test substrate (polycarbonate sheet, aluminum plate, or bilinear carpet) on a workbench.
+2. Rest the game piece on the substrate.
+3. Slowly tilt one end of the board upward until the game piece **just begins to slip or roll**.
+4. Measure the tilt angle $\theta$ using a digital angle gauge or smartphone level app.
+5. Compute static friction:
+   $$\mu_s = \tan(\theta)$$
+   *(Example: If slip initiates at $35^\circ$, $\mu_s = \tan(35^\circ) \approx 0.70$).*
+
+#### D. Dynamic Coefficient of Friction ($\mu_k$ - Sled Pull Test)
+1. Place the game piece on the horizontal substrate.
+2. Attach a digital hanging scale or spring gauge to the piece.
+3. Pull horizontally at a steady, slow velocity ($v \approx 0.1\text{ m/s}$).
+4. Record the sustained towing force ($F_{\text{pull}}$) during steady sliding.
+5. Compute dynamic friction ($W = m \cdot g$):
+   $$\mu_k = \frac{F_{\text{pull}}}{W}$$
+
+#### E. Compressive Stiffness & Elastic Modulus ($E$)
+1. For foam game pieces, place a flat plate of known area ($A$) on the piece.
+2. Apply a known test weight ($F = 20\text{ N}$ to $50\text{ N}$).
+3. Measure deflection $\Delta x$ relative to free thickness $x_0$.
+4. Compute engineering Young's modulus:
+   $$\sigma = \frac{F}{A}, \quad \epsilon = \frac{\Delta x}{x_0} \quad \implies \quad E = \frac{\sigma}{\epsilon}$$
+
+---
+
+### 3. Material Database Archetypes & Typical Parameters
+
+When detailed lab instruments are unavailable, use these verified baseline archetypes (sourced from MatWeb polymer indices and historical FRC game piece testing):
+
+| Property | Integral Skin PU Foam (e.g., 2024 Note) | Inflatable Vinyl (e.g., 2022 Cargo) | Rigid Polyethylene (e.g., 2023 Cone) | Closed-Cell EVA (e.g., 2023 Cube) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Bulk Density ($\rho$)** | $80 - 160\ \text{kg/m}^3$ | $20 - 45\ \text{kg/m}^3$ (effective) | $930 - 960\ \text{kg/m}^3$ | $45 - 80\ \text{kg/m}^3$ |
+| **Young's Modulus ($E$)**| $0.005 - 0.015\ \text{GPa}$ | $0.001 - 0.003\ \text{GPa}$ | $1.20 - 1.80\ \text{GPa}$ | $0.008 - 0.020\ \text{GPa}$ |
+| **Poisson's Ratio ($\nu$)**| $0.20 - 0.28$ | $0.45 - 0.49$ | $0.38 - 0.42$ | $0.25 - 0.32$ |
+| **Shear Modulus ($G$)** | $2.0 - 6.0\ \text{MPa}$ | $0.3 - 1.0\ \text{MPa}$ | $420 - 650\ \text{MPa}$ | $3.0 - 7.5\ \text{MPa}$ |
+| **Damping Coeff ($\eta$)** | $0.35 - 0.50$ | $0.25 - 0.35$ | $0.04 - 0.06$ | $0.30 - 0.45$ |
+| **Thermal Cond ($k$)** | $0.035\ \text{W}/(\text{m}\cdot\text{K})$ | $0.16\ \text{W}/(\text{m}\cdot\text{K})$ | $0.33\ \text{W}/(\text{m}\cdot\text{K})$ | $0.033\ \text{W}/(\text{m}\cdot\text{K})$ |
+| **Specific Heat ($c_p$)** | $1.80\ \text{J}/(\text{g}\cdot^\circ\text{C})$ | $1.50\ \text{J}/(\text{g}\cdot^\circ\text{C})$ | $1.90\ \text{J}/(\text{g}\cdot^\circ\text{C})$ | $2.10\ \text{J}/(\text{g}\cdot^\circ\text{C})$ |
+| **Thermal Exp ($\alpha$)** | $150\ \mu\text{m}/(\text{m}\cdot^\circ\text{C})$ | $180\ \mu\text{m}/(\text{m}\cdot^\circ\text{C})$ | $140\ \mu\text{m}/(\text{m}\cdot^\circ\text{C})$ | $160\ \mu\text{m}/(\text{m}\cdot^\circ\text{C})$ |
+| **Restitution ($e$)** | $0.15 - 0.25$ | $0.65 - 0.80$ | $0.30 - 0.45$ | $0.20 - 0.35$ |
+
 ---
 
 ## 5. Electronics, CAN Bus & Sensor Configuration
@@ -401,9 +543,10 @@ Verify that the CAN IDs in [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Proje
 | **Back Right Drive** | Talon FX (v6) | `modules[3].driveCAN` | `swerve.modules[3].driveCanId` | `6` | `7` |
 | **Elevator Leader / Follower**| Talon FX (v6) | — | `mechanisms[0].controllers` | `10`, `11` | `8` |
 | **Arm Shoulder** | Talon FX (v6) | — | `mechanisms[1].controllers` | `12` | `9` |
-| **Arm Wrist** | SPARK MAX | — | `mechanisms[2].controllers` | `13` | `10` |
-| **Intake Four-Bar Deploy** | Talon FX (v6) | — | `mechanisms[3].controllers` | `14` | `11` |
-| **Shooter Flywheel L / F** | Talon FX (v6) | — | `mechanisms[4].controllers` | `15`, `16` | `12` |
+| **Arm Wrist (or Diff Motor A)** | Talon FX / SPARK | — | `mechanisms[2].controllers[0]` | `13` (or `15`) | `10` |
+| **Diff Motor B** | Talon FX (v6) | — | `mechanisms[2].controllers[1]` | `16` | `11` |
+| **Intake Four-Bar Deploy** | Talon FX (v6) | — | `mechanisms[3].controllers` | `14` | `12` |
+| **Shooter Flywheel L / F** | Talon FX (v6) | — | `mechanisms[4].controllers` | `17`, `18` | `13` |
 | **Swerve Steer CANcoders** | CANcoder (v6) | `modules[0..3].canCoder` | `swerve.modules[0..3].cancoderId` | `20..23` | `CANcoder 0..3` |
 | **Shoulder CANcoder** | CANcoder (v6) | — | `sensors[1].canId` | `12` | `CANcoder 4` |
 | **IMU Gyro** | Pigeon 2 (v6) | Handled in Bridge | `sensors[0].canId` | `24` | IMU Output |
@@ -425,6 +568,24 @@ Verify that the CAN IDs in [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Proje
 | **CTRE `Pigeon2`** | `"Pigeon2[<id>]"`, `"Pigeon 2[<id>]"`, `"Pigeon2:<bus>[<id>]"` | *(none)* | `"<supplyVoltage"`, `"<rawYaw"` (deg), `"<pitch"` (deg), `"<roll"` (deg), `"<angularVelocityX/Y/Z"` (deg/s), `"<accelX/Y/Z"` ($g$) |
 | **REV `SparkMax` / `SparkFlex`** | `"SPARK MAX [<id>]"`, `"SPARK Flex [<id>]"` | `">Applied Output"` | `"<Bus Voltage"`, `"<Motor Current"`, `"<Position"` (rot), `"<Velocity"` (RPM) |
 | **Kauai Labs `navX`** | `"navX-Sensor[0]"` | *(none)* | `"<yaw"` (deg, CW+), `"<pitch"`, `"<roll"`, `"<LinearWorldAccelX/Y/Z"` |
+
+### D. PWM Servo Mapping & Regulated Power Rail (FRC / FTC)
+`FRCBananaSim` supports standard RC and smart servos across PWM channels `0` through `15` using the WPILib HALSim WebSocket `/wpilibws` protocol. Both FRC and FTC control topologies route through this unified bridge interface:
+
+| Field | HALSim Key | Range | Description |
+| :--- | :--- | :--- | :--- |
+| **Servo Position** | `">position"` | $[0.0, 1.0]$ | Normalized command mapped to target angle $[-\pi, +\pi]$ (or custom `rangeRad`). |
+| **Continuous Speed** | `">speed"` | $[-1.0, 1.0]$ | Normalized velocity demand for continuous rotation servos. |
+| **Raw Pulse Width** | `">raw"` or `">pulse"` | $[500, 2500]\ \mu\text{s}$ | Direct microsecond pulse width command. |
+| **PWM Channel Feedback** | `"<position"` / `"<speed"` | Float | Sim returns physical joint angle (rad) and angular velocity (rad/s). |
+
+#### Regulated 6.0V Power Rail Architecture:
+* **FRC Default Configuration:** The roboRIO internal buck regulator supplies nominal $6.0\text{ V}$ with a $2.2\text{ A}$ current limit and $\approx 88\%$ power efficiency.
+* **Overload Droop:** When aggregate servo stall currents exceed the trip limit ($I_{\text{total}} > I_{\text{limit}}$), the rail linearly droops:
+  $$V_{\text{rail}} = V_{\text{nominal}} \cdot \frac{I_{\text{limit}}}{I_{\text{total}}}$$
+* **Battery Bus Sag Reflection:** The power demanded from the regulated rail is converted to battery supply current via energy conservation:
+  $$P_{12\text{V}} = \frac{V_{\text{rail}} \cdot I_{\text{total}}}{\eta_{\text{buck}}} \implies I_{\text{supply, battery}} = \frac{P_{12\text{V}}}{V_{\text{battery}}}$$
+* **Sidecar Customization:** Custom servo power boards (e.g. REV Servo Power Module or FTC battery rails) can be configured via `electrical.servoRailVoltage_V`, `electrical.servoRailCurrentLimit_A`, and `electrical.servoRailBuckEfficiency` in `sidecar.json`.
 
 ---
 
@@ -450,32 +611,407 @@ Verify that the CAN IDs in [`robot_swerve.json`](file:///C:/Game%20Dev/C++/Proje
 * Configured via `"role": "flywheel"` in `sidecar.json`. Sub-stepped at $800\text{ Hz}$ ($\Delta t = 1.25\text{ ms}$) with equal-and-opposite Newton's 3rd Law recoil torque applied to `"parentLink"`, and rendered at `mountOffset` (`(0.0f, 0.06f, 0.06f)` on the wrist) via `FlywheelSystem::RenderUpdate`.
 
 ### F. Generic 2-DOF Differential Mechanisms (`"role": "differential"`)
+
 * **Kinematic Decoupling Architecture:**
   Differential transmissions mechanically couple two actuators ($A, B$) to two physical joints ($q_1, q_2$, typically Pitch and Roll in a wrist, or $X, Y$ in a CoreXY gantry). The kinematic mapping between motor rotor angular velocities and joint coordinates is:
   $$\begin{bmatrix} \dot{\theta}_A \\ \dot{\theta}_B \end{bmatrix} = \mathbf{T}_{mq} \begin{bmatrix} \dot{q}_1 \\ \dot{q}_2 \end{bmatrix} = \begin{bmatrix} G_p & G_r \\ G_p & -G_r \end{bmatrix} \begin{bmatrix} \dot{q}_1 \\ \dot{q}_2 \end{bmatrix}$$
   Inverting the coupling matrix yields the joint forward kinematics:
   $$\begin{bmatrix} \dot{q}_1 \\ \dot{q}_2 \end{bmatrix} = \mathbf{T}_{mq}^{-1} \begin{bmatrix} \dot{\theta}_A \\ \dot{\theta}_B \end{bmatrix} = \begin{bmatrix} \frac{1}{2 G_p} & \frac{1}{2 G_p} \\ \frac{1}{2 G_r} & -\frac{1}{2 G_r} \end{bmatrix} \begin{bmatrix} \dot{\theta}_A \\ \dot{\theta}_B \end{bmatrix}$$
+
 * **Torque Duality & Virtual Work:**
   By the principle of virtual work, motor output torques map to joint torques via the transpose $\boldsymbol{\tau}_q = \mathbf{T}_{mq}^T \boldsymbol{\tau}_m$:
   $$\begin{bmatrix} \tau_{q1} \\ \tau_{q2} \end{bmatrix} = \begin{bmatrix} G_p & G_p \\ G_r & -G_r \end{bmatrix} \begin{bmatrix} \tau_A \\ \tau_B \end{bmatrix} = \begin{bmatrix} G_p (\tau_A + \tau_B) \\ G_r (\tau_A - \tau_B) \end{bmatrix}$$
   Both motors combine their full stall torque into the primary axis (pure pitch: $V_A = V_B \implies \tau_1 = 2 G_p \tau_m$) while differentially sharing roll torque (pure roll: $V_A = -V_B \implies \tau_2 = 2 G_r \tau_m$).
+
 * **Effective Reflected Inertia Matrix:**
   Rotor inertias reflect through $\mathbf{T}_{mq}$ onto the joint space as a full $2\times 2$ inertia tensor:
   $$\mathbf{M}_{\text{eff}} = \mathbf{T}_{mq}^T \begin{bmatrix} J_A & 0 \\ 0 & J_B \end{bmatrix} \mathbf{T}_{mq} = \begin{bmatrix} G_p^2 (J_A + J_B) & G_p G_r (J_A - J_B) \\ G_p G_r (J_A - J_B) & G_r^2 (J_A + J_B) \end{bmatrix}$$
   For identical motors ($J_A = J_B = J_{\text{rotor}}$), the off-diagonal inertial cross-coupling vanishes ($\mathbf{M}_{\text{eff}} = \text{diag}(2 G_p^2 J_{\text{rotor}}, 2 G_r^2 J_{\text{rotor}})$), but the reflected rotor inertia dominates Jolt's geometric link inertia by $> 30\times$.
+
 * **Physics Integration & Velocity-Targeted Motor Mode:**
   Because the reflected inertia $M_{\text{eff}}$ vastly exceeds Jolt CAD link inertias ($I_{\text{CAD}} \approx 0.00125\text{ kg}\cdot\text{m}^2$ vs $M_{\text{eff}} \approx 0.042\text{ kg}\cdot\text{m}^2$), open-loop joint torque injection (`AddTorque`) leads to numerical divergence and high-frequency velocity explosion ($> 70,000^\circ/\text{s}$). `DifferentialMechanismSystem` solves this unconditionally by:
   1. Evaluating back-EMF damping: $D_{\text{bemf}} = \mathbf{T}_{mq}^T \text{diag}\left(\frac{k_t k_b}{R \eta}\right) \mathbf{T}_{mq}$.
   2. Inverting the semi-implicit system matrix: $\mathbf{A} = \frac{1}{\Delta t} \mathbf{M}_{\text{eff}} + D_{\text{bemf}} + \text{diag}(b_{\text{visc}})$.
   3. Computing stable target joint velocities: $\dot{\mathbf{q}}^{t+\Delta t} = \dot{\mathbf{q}}^t + \mathbf{A}^{-1} \boldsymbol{\tau}_{\text{net}}$.
   4. Driving both Jolt hinges using `JointMotorMode::Velocity` with maximum torque clamped to the stator current limit ($\tau_{\text{stator\_limit}}$).
+
 * **Friction & Backdrive Calibration:**
   * **Breakaway Voltage:** Measure the minimum breakaway voltage $V_{\text{break}}$ under pure pitch ($V_A = V_B$) and pure roll ($V_A = -V_B$):
     $$\tau_{c,\text{pitch}} \approx 2 G_p \eta \tau_{\text{stall}} \left(\frac{V_{\text{break, pitch}}}{12.0}\right), \quad \tau_{c,\text{roll}} \approx 2 G_r \eta \tau_{\text{stall}} \left(\frac{V_{\text{break, roll}}}{12.0}\right)$$
   * Configure `coulombFriction: [tau_pitch, tau_roll]` and `viscousDamping: [b_pitch, b_roll]` directly in `sidecar.json`.
-* **CAD Modeling Contract:**
-  * The CAD model must define two distinct revolute joints (`joints[0]` for Pitch and `joints[1]` for Roll) organized as a kinematic chain: Parent Link $\to$ Intermediate Yoke Link $\to$ Distal Tool/End-Effector Link.
-  * In `manifest.json`, both the pitch yoke link and distal link must have colliders with `isSensor = true` (or be placed in mutual collision group filters) to prevent overlapping geometric penetration forces against the mounting yoke.
+
+---
+
+#### 1. Step-by-Step `sidecar.json` Configuration Recipes
+
+##### Recipe A: 2-DOF Symmetric Bevel Wrist (`"differentialType": "symmetric_bevel"`)
+For differential wrists where two stationary motors drive pitch and roll through an epicyclic bevel cluster:
+
+```json
+{
+  "name": "wrist_differential",
+  "role": "differential",
+  "differentialType": "symmetric_bevel",
+  "targetJoints": [
+    "arm_wrist_pitch_hinge",
+    "arm_wrist_roll_hinge"
+  ],
+  "gearRatios": [ 45.0, 30.0 ],
+  "efficiency": 0.92,
+  "coulombFriction": [ 0.35, 0.20 ],
+  "viscousDamping": [ 0.05, 0.03 ],
+  "statorCurrentLimit_A": 60.0,
+  "supplyCurrentLimit_A": 40.0,
+  "motorPreset": "KrakenX44",
+  "controllers": [
+    {
+      "vendor": "CTRE_TalonFX",
+      "canId": 15,
+      "canBus": "canivore",
+      "inverted": false,
+      "role": "motor_a"
+    },
+    {
+      "vendor": "CTRE_TalonFX",
+      "canId": 16,
+      "canBus": "canivore",
+      "inverted": false,
+      "role": "motor_b"
+    }
+  ]
+}
+```
+
+* **`targetJoints`**: Must list exactly two revolute joints declared in `manifest.json`: `[pitchJoint, rollJoint]`.
+* **`gearRatios`**: Total reductions from motor rotors to physical joint output shafts: `[Gp, Gr]`. Includes both the internal bevel gear ratio and any external planetary or belt stages.
+* **`controllers`**: Exactly two controllers. Motor A drives Pitch ($+$) and Roll ($+$). Motor B drives Pitch ($+$) and Roll ($-$).
+
+##### Recipe B: Custom Coupling Matrix & CoreXY Gantry (`"differentialType": "custom_matrix"`)
+For CoreXY belt gantries, planar coupled arms, or asymmetric bevel differentials:
+
+```json
+{
+  "name": "gantry_corexy",
+  "role": "differential",
+  "differentialType": "custom_matrix",
+  "targetJoints": [
+    "gantry_x_slider",
+    "gantry_y_slider"
+  ],
+  "couplingMatrix": [
+    [  52.493,  52.493 ],
+    [  52.493, -52.493 ]
+  ],
+  "efficiency": 0.95,
+  "coulombFriction": [ 0.40, 0.40 ],
+  "viscousDamping": [ 0.08, 0.08 ],
+  "statorCurrentLimit_A": 50.0,
+  "supplyCurrentLimit_A": 35.0,
+  "motorPreset": "NEOVortex",
+  "controllers": [
+    {
+      "vendor": "REV_SparkMax",
+      "canId": 17,
+      "canBus": "rio",
+      "inverted": false,
+      "role": "motor_a"
+    },
+    {
+      "vendor": "REV_SparkMax",
+      "canId": 18,
+      "canBus": "rio",
+      "inverted": false,
+      "role": "motor_b"
+    }
+  ]
+}
+```
+
+* **`couplingMatrix`**: Explicit $2 \times 2$ transformation matrix $\mathbf{T}_{mq}$ where row 0 maps joint velocity to Motor A ($\omega_{mA} = T_{11}\dot{q}_1 + T_{12}\dot{q}_2$) and row 1 maps joint velocity to Motor B ($\omega_{mB} = T_{21}\dot{q}_1 + T_{22}\dot{q}_2$).
+* **Flexible Friction & Damping**: `coulombFriction` and `viscousDamping` accept either an array of two values `[joint1, joint2]` or a single scalar applied identically to both axes.
+
+---
+
+#### 2. Robot Code Control Architecture & Mixing Recipes (WPILib / Phoenix 6 / REVLib)
+
+In `FRCBananaSim`, differential mechanisms communicate seamlessly over the WPILib HALSim WebSocket protocol. Your robot code declares two normal motor controllers (e.g., `TalonFX` CAN 15 and CAN 16) and uses standard kinematics without any special simulation hooks:
+
+##### A. Open-Loop Voltage / Duty Cycle Control
+To control pitch and roll independently:
+* **Pitch Authority:** Apply equal voltage to both motors ($V_A = V_{\text{pitch}}, V_B = V_{\text{pitch}}$).
+* **Roll Authority:** Apply differential voltage to both motors ($V_A = V_{\text{roll}}, V_B = -V_{\text{roll}}$).
+* **Simultaneous Motion Mixing:**
+  $$V_A = V_{\text{pitch}} + V_{\text{roll}}, \qquad V_B = V_{\text{pitch}} - V_{\text{roll}}$$
+
+```cpp
+// C++ WPILib Subsystem Example (Phoenix 6)
+void WristSubsystem::SetPitchAndRollVoltage(units::volt_t pitchVolts, units::volt_t rollVolts)
+{
+    units::volt_t vA = pitchVolts + rollVolts;
+    units::volt_t vB = pitchVolts - rollVolts;
+
+    // Apply voltages directly to both differential actuators
+    m_motorA.SetControl(ctre::phoenix6::controls::VoltageOut{vA});
+    m_motorB.SetControl(ctre::phoenix6::controls::VoltageOut{vB});
+}
+```
+
+##### B. Closed-Loop Position & Motion Magic Control
+To drive the wrist to target joint angles $(\theta_p, \theta_r)$, map the desired joint coordinates to motor rotor targets using the forward kinematic matrix:
+$$\theta_{mA} = G_p \theta_p + G_r \theta_r, \qquad \theta_{mB} = G_p \theta_p - G_r \theta_r$$
+
+Command both motors using `PositionVoltage` or `MotionMagicVoltage`:
+```cpp
+void WristSubsystem::SetJointTargets(units::radian_t targetPitch, units::radian_t targetRoll)
+{
+    // Convert radians to motor rotor rotations
+    units::turn_t rotorTargetA = (kGearRatioPitch * targetPitch + kGearRatioRoll * targetRoll) / (2.0 * std::numbers::pi);
+    units::turn_t rotorTargetB = (kGearRatioPitch * targetPitch - kGearRatioRoll * targetRoll) / (2.0 * std::numbers::pi);
+
+    m_motorA.SetControl(ctre::phoenix6::controls::MotionMagicVoltage{rotorTargetA});
+    m_motorB.SetControl(ctre::phoenix6::controls::MotionMagicVoltage{rotorTargetB});
+}
+```
+
+##### C. Reading Joint Telemetry from Motor Telemetry
+To recover physical joint angles from the motor rotor feedback:
+$$\theta_p = \frac{\theta_{mA} + \theta_{mB}}{2 G_p}, \qquad \theta_r = \frac{\theta_{mA} - \theta_{mB}}{2 G_r}$$
+
+---
+
+#### 3. Absolute Encoder (`CANcoder`) Integration on Differential Joints
+
+Because motor rotors can exhibit mechanical backlash, belt stretch, or zero-position drift across boots, competitive robots mount external absolute encoders (`CANcoder`) directly on the physical Pitch and Roll output shafts.
+
+##### How to Configure in `sidecar.json`:
+Add entries in the `"sensors"` array targeting the physical joints:
+
+```json
+{
+  "name": "wrist_pitch_cancoder",
+  "type": "cancoder",
+  "canId": 15,
+  "canBus": "canivore",
+  "targetJoint": "arm_wrist_pitch_hinge",
+  "magnetOffset_rot": 0.125
+},
+{
+  "name": "wrist_roll_cancoder",
+  "type": "cancoder",
+  "canId": 16,
+  "canBus": "canivore",
+  "targetJoint": "arm_wrist_roll_hinge",
+  "magnetOffset_rot": 0.0
+}
+```
+
+* **Ground-Truth Tracking:** `SensorSystem` measures the physical Jolt joint angles directly, applies `magnetOffset_rot`, and dispatches `<rawPosition` and `<velocity` to CTRE `CANcoder` `SimDevice` frames.
+* **Robot Code Integration:** In robot code, read `wristPitchCANcoder.getAbsolutePosition()` and `wristRollCANcoder.getAbsolutePosition()` at startup to seed the motor rotor positions, or configure the `TalonFX` to use `FeedbackSensorSourceValue::RemoteCANcoder` for direct closed-loop joint tracking.
+
+---
+
+#### 4. Interactive Visual Testing in the Playground (`PlaygroundScene.cpp`)
+
+`FRCBananaSim` includes a dedicated interactive visual testbed for differential mechanisms in [`PlaygroundScene.cpp`](file:///C:/Game%20Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Source/Playground/PlaygroundScene.cpp). This lets you verify kinematic isolation, observe torque summation, and tune friction before connecting external robot code:
+
+1. **Launch Playground Scene:**
+   * Launch `FRCBananaSim` and select the **Playground** scene from the scene selector or startup configuration.
+2. **Test Manual Voltage Sliders:**
+   * Switch the control mode to **Manual Sliders**.
+   * Drag the **Motor A Voltage** and **Motor B Voltage** sliders ($-12\text{ V}$ to $+12\text{ V}$):
+     * **Pure Pitch Test:** Set Slider A = $+6.0\text{ V}$, Slider B = $+6.0\text{ V}$. The wrist should pitch up or down smoothly with zero roll angle deflection ($|\theta_{\text{roll}}| < 10^{-5}\text{ rad}$).
+     * **Pure Roll Test:** Set Slider A = $+6.0\text{ V}$, Slider B = $-6.0\text{ V}$. The wrist tool should roll with zero pitch axis movement.
+     * **Deceleration & Dynamic Braking:** Snap sliders to $0.0\text{ V}$ or reverse instantly from $+12\text{ V}$ to $-12\text{ V}$. Verify that velocity-targeted motor mode brings the wrist to a stable stop without numerical vibration or exploding velocities.
+3. **Automated Diagnostic Modes:**
+   * Select **Pure Pitch Sine Wave** or **Pure Roll Sine Wave** to drive the actuators with an automated oscillating waveform ($f = 0.75\text{ Hz}, V_{\text{mag}} = 6.0\text{ V}$).
+   * Use **Step Response** and **Frequency Sweep** to inspect mechanical response times and verify decoupling across operating frequencies.
+4. **Inspect Live Telemetry Readouts:**
+   * **Joint Coordinates:** Displays current physical Pitch and Roll angles in degrees and angular velocities in $\text{deg/s}$.
+   * **Delivered Tau:** Displays the net torque delivered to Jolt constraints ($\tau_{\text{pitch}}$ and $\tau_{\text{roll}}$), confirming constructive torque summation ($2 G_p \tau_m$).
+   * **Actuator Telemetry:** Displays uncoupled motor rotor speeds (RPM), stator currents ($I_{\text{stator}}$ in Amps), and terminal voltages ($V$).
+5. **Live Transmission & Friction Calibration:**
+   * Open the **Transmission & Friction Tuning** collapsing header in ImGui.
+   * Adjust **Gear Ratio Pitch**, **Gear Ratio Roll**, **Efficiency ($\eta$)**, **Coulomb Pitch [Nm]**, and **Coulomb Roll [Nm]** in real time until simulation behavior matches your bench measurements.
+   * Copy the finalized parameters directly into your robot's `sidecar.json`.
+
+### G. Total Gear Ratio Formula & Reflected Rotor Inertia
+Whenever configuring a mechanism, the `"gearRatio"` field must represent the **TOTAL overall mechanical reduction** from the motor rotor to the joint output shaft:
+
+$$G_{\text{total}} = G_{\text{gearbox}} \times G_{\text{external}} = G_{\text{gearbox}} \times \left(\frac{N_{\text{driven}}}{N_{\text{driver}}}\right)$$
+
+*Example:* A $10:1$ planetary gearbox driving a 16T to 32T chain reduction ($2:1$) has a total reduction of $G = 10 \times 2 = \mathbf{20.0}$.
+
+> [!WARNING]
+> **Why forgetting external sprockets/gears breaks simulation physics:**  
+> 1. **Output Torque:** Joint stall torque scales directly with reduction: $\tau_{\text{out}} = G \eta \tau_{\text{motor}}$. Omitting a 2:1 external reduction cuts your available joint torque in half, causing arms or elevators to stall.  
+> 2. **Reflected Rotor Inertia:** The rotational inertia of the motor rotor reflects onto the joint scaled by **$G^2$**: $J_{\text{reflected}} = J_{\text{rotor}} \cdot G^2$. If you enter 10 instead of 20, the simulator calculates **$4\times$ less inertia** than the real robot, causing violent numerical PID oscillations that do not exist on the real robot!
+
+### H. Multi-Joint Power Coupling Recipes & Dual-Motor Setup
+When a single motor drives multiple joints via chains, belts, cables, or cross-shafts, power the primary joint in `"mechanisms"` and define the transmission in `"couplings"`:
+
+#### Recipe 1: Parallel Intake / Cross-Shaft (1 Motor, 2 Arms)
+```json
+{
+  "name": "intake_cross_shaft",
+  "type": "power_coupling",
+  "powerCoupling": {
+    "transmissionType": "chain",
+    "masterJoint": "left_intake_pivot",
+    "slaveJoint": "right_intake_pivot",
+    "ratio": 1.0,
+    "inverted": false,
+    "efficiency": 0.95,
+    "backlashRad": 0.003
+  }
+}
+```
+
+#### Recipe 2: Horizon-Leveling Wrist Chain
+```json
+{
+  "name": "shoulder_to_wrist_leveling",
+  "type": "power_coupling",
+  "powerCoupling": {
+    "transmissionType": "chain",
+    "masterJoint": "arm_shoulder_hinge",
+    "slaveJoint": "arm_wrist_hinge",
+    "ratio": 1.0,
+    "inverted": true,
+    "efficiency": 0.92,
+    "backlashRad": 0.005
+  }
+}
+```
+
+#### Recipe 3: Dual-Motor Single-Joint Setup (Leader / Follower)
+When two motors power a single mechanism shaft (e.g. dual Krakens on an elevator or arm), define **one mechanism entry** targeting the shared joint and put both motors in `"controllers"`:
+```json
+{
+  "name": "elevator_drive",
+  "role": "elevator",
+  "targetJoint": "elevator_stage1_slider",
+  "motorPreset": "KrakenX60",
+  "gearRatio": 9.0,
+  "controllers": [
+    { "vendor": "CTRE_TalonFX", "canId": 10, "canBus": "canivore", "inverted": false, "role": "leader" },
+    { "vendor": "CTRE_TalonFX", "canId": 11, "canBus": "canivore", "inverted": true,  "role": "follower" }
+  ]
+}
+```
+
+### I. The Actuation & Coupling Decision Matrix
+Use this cheat sheet to choose how to configure any mechanism:
+
+| Physical Mechanism Reality | What to use in CAD & `sidecar.json` |
+| :--- | :--- |
+| **1 Motor $\to$ 1 Joint**<br>*(e.g., standard single-joint arm, turret)* | **Standard 1-DOF Mechanism**<br>• `"role": "arm"` in `"mechanisms"` with `"targetJoint"`.<br>• 1 controller in `"controllers"`. |
+| **2 Motors $\to$ 1 Joint**<br>*(e.g., dual Krakens on 1 elevator or arm shaft)* | **Standard 1-DOF Mechanism with 2 Controllers**<br>• `"targetJoint": "elevator_stage1_slider"`.<br>• 2 controllers in `"controllers"` (`leader` + `follower`). |
+| **1 Motor $\to$ Multiple Joints**<br>*(e.g., cross-shaft driving left/right intake arms, leveling chain)* | **1 Mechanism + Power Coupling**<br>• Power primary joint in `"mechanisms"`.<br>• Connect secondary joint in `"couplings"` (`"power_coupling"`). |
+| **2 Motors $\to$ 2 Coupled Joints**<br>*(e.g., differential wrist [pitch+roll], CoreXY gantry)* | **2-DOF Differential Mechanism**<br>• `"role": "differential"` in `"mechanisms"`.<br>• `"targetJoints": [joint1, joint2]`.<br>• `"controllers": [motorA, motorB]`. |
+| **2 Motors $\to$ 2 Independent Joints**<br>*(e.g., Shoulder motor + separate Wrist motor)* | **2 Independent Mechanisms**<br>• 2 separate blocks in `"mechanisms"`.<br>• Each has its own `"targetJoint"` and its own CAN ID. |
+| **Servo $\to$ Arm, Wrist, or Elevator**<br>*(e.g., camera pan/tilt, intake deploy, miniature lift)* | **Servo-Actuated Mechanism**<br>• `"actuatorType": "servo"` in mechanism definition.<br>• Target joint name in `"targetJoint"`.<br>• Servo specs & PWM channel in `"servo"`. |
+| **Dual Servos $\to$ Differential Wrist**<br>*(e.g., FTC pitch/roll wrist)* | **2-DOF Differential Dual-Servo Mechanism**<br>• `"role": "differential"`, `"actuatorType": "servo"`.<br>• `"targetJoints": [pitchJoint, rollJoint]`.<br>• Configured via `"servoA"` and `"servoB"` blocks. |
+| **Servos $\to$ Swerve Steer and/or Drive**<br>*(e.g., FTC miniature swerve drivetrain)* | **Servo-Actuated Swerve Drivetrain**<br>• `"steerActuatorType": "servo"`, `"driveActuatorType": "servo"`.<br>• Preset in `"steerServoPreset"` / `"driveServoPreset"`.<br>• PWM channels mapped per module. |
+
+---
+
+### J. Servo-Driven Mechanisms & Swerve Modules (FTC & FRC)
+
+`FRCBananaSim` supports using standard RC or smart servos instead of DC brushless motors for:
+1. **Arm & Wrist Pivots (`role: arm`, `role: wrist`)**: Rotational joints actuated by position-controlled or continuous servos.
+2. **2-DOF Differential Mechanisms (`role: differential`)**: Coupled pitch/roll wrists powered by two servos with forward kinematics and reflected inertia.
+3. **Linear Elevators (`role: elevator`)**: Rotary servo converted to linear motion via `drumRadius_m` and internal mechanical advantage.
+4. **Swerve Modules (`swerve.steerActuatorType: "servo"` / `swerve.driveActuatorType: "servo"`)**: Azimuth rotation and wheel drive using high-torque continuous or positional servos (widely used in FTC miniature swerve drivetrains).
+
+#### 1. Servo Configuration Recipes
+
+##### Recipe A: 1-DOF Servo-Driven Intake Wrist / Arm
+```json
+{
+  "name": "intake_deploy_servo",
+  "role": "arm",
+  "targetJoint": "intake_pivot_hinge",
+  "actuatorType": "servo",
+  "servo": {
+    "preset": "GoBildaTorque",
+    "pwmChannel": 0,
+    "mode": "positional",
+    "minPulseWidthUs": 500,
+    "maxPulseWidthUs": 2500
+  }
+}
+```
+
+##### Recipe B: 2-DOF Differential Dual-Servo Wrist
+```json
+{
+  "name": "wrist_differential_servo",
+  "role": "differential",
+  "differentialType": "symmetric_bevel",
+  "targetJoints": [
+    "arm_wrist_pitch_hinge",
+    "arm_wrist_roll_hinge"
+  ],
+  "gearRatios": [ 1.0, 1.0 ],
+  "actuatorType": "servo",
+  "servoA": {
+    "preset": "GoBildaTorque",
+    "pwmChannel": 1,
+    "mode": "positional"
+  },
+  "servoB": {
+    "preset": "GoBildaTorque",
+    "pwmChannel": 2,
+    "mode": "positional"
+  }
+}
+```
+
+##### Recipe C: FTC Servo Swerve Module Drivetrain
+```json
+"swerve": {
+  "steerActuatorType": "servo",
+  "driveActuatorType": "servo",
+  "steerServoPreset": "GoBildaTorque",
+  "driveServoPreset": "GoBildaSpeed",
+  "modules": [
+    {
+      "name": "FrontLeft",
+      "location_m": [ 0.18, 0.18 ],
+      "steerPwmChannel": 0,
+      "drivePwmChannel": 4
+    },
+    {
+      "name": "FrontRight",
+      "location_m": [ 0.18, -0.18 ],
+      "steerPwmChannel": 1,
+      "drivePwmChannel": 5
+    },
+    {
+      "name": "BackLeft",
+      "location_m": [ -0.18, 0.18 ],
+      "steerPwmChannel": 2,
+      "drivePwmChannel": 6
+    },
+    {
+      "name": "BackRight",
+      "location_m": [ -0.18, -0.18 ],
+      "steerPwmChannel": 3,
+      "drivePwmChannel": 7
+    }
+  ]
+}
+```
+
+#### 2. Supported Servo Presets
+
+| Preset Name | Stall Torque | Max Free Speed | Range | Voltage | Common Use Case |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `"GoBildaTorque"` | $2.82\ \text{N}\cdot\text{m}$ ($400\ \text{oz}\cdot\text{in}$) | $5.23\ \text{rad/s}$ ($300^\circ/\text{s}$) | $5.235\ \text{rad}$ ($300^\circ$) | $6.0\ \text{V}$ | FTC swerve azimuth steering, heavy arms |
+| `"GoBildaSpeed"` | $1.41\ \text{N}\cdot\text{m}$ ($200\ \text{oz}\cdot\text{in}$) | $10.47\ \text{rad/s}$ ($600^\circ/\text{s}$) | $5.235\ \text{rad}$ ($300^\circ$) | $6.0\ \text{V}$ | FTC swerve continuous drive wheels, intakes |
+| `"GenericStandard"` | $0.686\ \text{N}\cdot\text{m}$ ($97\ \text{oz}\cdot\text{in}$) | $6.98\ \text{rad/s}$ ($400^\circ/\text{s}$) | $3.1415\ \text{rad}$ ($180^\circ$) | $6.0\ \text{V}$ | Standard FRC latch releases, camera gimbals |
+| `"GenericMicro"` | $0.176\ \text{N}\cdot\text{m}$ ($25\ \text{oz}\cdot\text{in}$) | $10.47\ \text{rad/s}$ ($600^\circ/\text{s}$) | $3.1415\ \text{rad}$ ($180^\circ$) | $6.0\ \text{V}$ | Micro triggers, indicators |
+| `"GenericContinuous"`| $0.49\ \text{N}\cdot\text{m}$ ($69\ \text{oz}\cdot\text{in}$) | $5.23\ \text{rad/s}$ ($50\ \text{RPM}$) | Continuous | $6.0\ \text{V}$ | Continuous feeding indexers |
 
 ---
 
@@ -561,18 +1097,30 @@ This table lists every single property read by `RobotSpawner` and `SwerveDrivetr
 | :--- | :--- | :--- | :--- |
 | **`electrical.openCircuitVoltage_V`** | `ElectricalConfig::openCircuitVoltage_V` | $\text{V}$ | Nominal open-circuit battery voltage ($12.6\text{ V}$). |
 | **`electrical.internalResistance_Ohm`** | `ElectricalConfig::internalResistance_Ohm` | $\Omega$ | Battery + main harness resistance ($0.023\ \Omega$). |
+| **`electrical.servoRailVoltage_V`** | `ElectricalConfig::servoRailVoltage_V` | $\text{V}$ | Regulated servo bus voltage ($6.0\text{ V}$ default). |
+| **`electrical.servoRailCurrentLimit_A`** | `ElectricalConfig::servoRailCurrentLimit_A` | $\text{A}$ | Regulated servo rail trip limit ($2.2\text{ A}$ default). |
+| **`electrical.servoRailBuckEfficiency`** | `ElectricalConfig::servoRailBuckEfficiency` | ratio | Buck converter efficiency reflecting rail power to 12V bus ($0.88$ default). |
 | **`swerve.*`** | `SwerveSidecarConfig` | SI | Motor presets, gear ratios, efficiencies, wheel radius, current limits, and 4 module `[x, y, z]` locations & CAN IDs. |
+| **`swerve.steerActuatorType`** | `SwerveSidecarConfig::steerActuatorType` | string | `"dc_motor"` (default) or `"servo"`. |
+| **`swerve.driveActuatorType`** | `SwerveSidecarConfig::driveActuatorType` | string | `"dc_motor"` (default) or `"servo"`. |
+| **`swerve.steerServoPreset`** | `SwerveSidecarConfig::steerServoPreset` | string | Servo preset for steer azimuth (`"GoBildaTorque"`, `"GenericStandard"`). |
+| **`swerve.driveServoPreset`** | `SwerveSidecarConfig::driveServoPreset` | string | Servo preset for continuous drive wheel (`"GoBildaSpeed"`). |
+| **`swerve.modules[i].steerPwmChannel`** | `SwerveModuleConfig::steerPwmChannel` | int | PWM channel (0..15) when steer is servo-actuated. |
+| **`swerve.modules[i].drivePwmChannel`** | `SwerveModuleConfig::drivePwmChannel` | int | PWM channel (0..15) when drive is servo-actuated. |
 | **`mechanisms[i].role`** | `MechanismConfig::role` | string | `"elevator"`, `"arm"`, `"wrist"`, `"four_bar"`, `"flywheel"`, or `"differential"`. |
-| **`mechanisms[i].targetJoint`** | `MechanismConfig::targetJoint` | string | Target joint name in `manifest.json` (for 1-DOF mechanisms: elevators, arms, 4-bars; or `"parentLink"` for flywheels). |
-| **`mechanisms[i].targetJoints`** | `MechanismConfig::targetJoints` | array | Array of 2 target joint names in `manifest.json` for `"differential"` mechanisms (`[pitchJoint, rollJoint]`). |
-| **`mechanisms[i].differentialType`** | `MechanismConfig::differentialType` | string | Differential kinematic topology (`"bevel_symmetric"`, `"corexy"`, or `"custom"`). |
+| **`mechanisms[i].actuatorType`** | `MechanismConfig::actuatorType` | string | `"dc_motor"` (default) or `"servo"`. |
+| **`mechanisms[i].servo`** | `ServoConfig` | object | Preset, `pwmChannel` (0..15), `mode` (`"positional"` / `"continuous"`), and pulse limits. |
+| **`mechanisms[i].servoA` / `servoB`** | `ServoConfig` | object | Dual servo configurations for differential wrists/mechanisms. |
+| **`mechanisms[i].targetJoint`** | `MechanismConfig::targetJoint` | string | Target joint name in `manifest.json` (for 1-DOF mechanisms; or `"parentLink"` for flywheels). |
+| **`mechanisms[i].targetJoints`** | `MechanismConfig::targetJoints` | array | Array of 2 target joint names in `manifest.json` for `"differential"` mechanisms (`[joint1, joint2]`). |
+| **`mechanisms[i].differentialType`** | `MechanismConfig::differentialType` | string | Differential kinematic topology (`"symmetric_bevel"`, `"corexy"`, `"coupled_arm"`, or `"custom_matrix"`). |
 | **`mechanisms[i].motorPreset`** | `MechanismConfig::motorPreset` | string | Motor type preset (`"KrakenX60"`, `"KrakenX44"`, `"NEO"`, etc.). |
-| **`mechanisms[i].gearRatio`** | `MechanismConfig::gearRatio` | ratio | Single gearbox reduction $G$ for 1-DOF mechanisms. |
+| **`mechanisms[i].gearRatio`** | `MechanismConfig::gearRatio` | ratio | Single total gearbox reduction $G$ for 1-DOF mechanisms. |
 | **`mechanisms[i].gearRatios`** | `MechanismConfig::gearRatios` | array | Array of 2 gear reductions (`[gearRatioPitch, gearRatioRoll]`) for differential mechanisms. |
 | **`mechanisms[i].coulombFriction`** | `MechanismConfig::coulombFriction` | float/array | Single scalar Coulomb friction ($\text{N}\cdot\text{m}$ / $\text{N}$) for 1-DOF mechanisms, or array of 2 values `[pitch, roll]` for differential mechanisms. |
 | **`mechanisms[i].viscousDamping`** | `MechanismConfig::viscousDamping` | float/array | Single scalar viscous damping ($\text{N}\cdot\text{m}\cdot\text{s}$) for 1-DOF mechanisms, or array of 2 values `[pitch, roll]` for differential mechanisms. |
 | **`mechanisms[i].drumRadius_m`** | `MechanismConfig::drumRadius_m` | $\text{m}$ | Sprocket/drum pitch radius for linear elevators ($0.01905\text{ m}$). |
 | **`mechanisms[i].springAssist`** | `SpringAssistConfig` | $\text{N}$ or $\text{N}\cdot\text{m}$ | `"constant_force"` (`force_N`), `"torsion"`, or `"cosine_gas"`. |
-| **`mechanisms[i].controllers`** | `ControllerConfig` | — | Array of `vendor`, `canId`, `canBus`, `inverted`, and `role` (`"leader"` / `"follower"`). Number of controllers sets `motorCount` (length 2 for differential mechanisms: `[motorA, motorB]`). |
+| **`mechanisms[i].controllers`** | `ControllerConfig` | — | Array of `vendor`, `canId`, `canBus`, `inverted`, and `role`. Number of controllers sets `motorCount` (length 2 for differential mechanisms: `[motor_a, motor_b]`). |
 | **`couplings[i].type`** | `CouplingConfig::type` | string | `"elevator_cascade"`, `"elevator_continuous"`, `"four_bar_loop"`, or `"power_coupling"`. |
 | **`sensors[i].type`** | `SensorConfig::type` | string | `"imu_pigeon2"`, `"cancoder"`, `"limit_switch"`, `"beam_break"`, `"analog_input"`, or `"laser_can"`. |

@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -14,7 +15,7 @@ namespace FRCBananaSim::Robot::Schema
 {
     /**
      * @struct ElectricalConfig
-     * @brief Lumped battery, bus resistance, and brownout threshold parameters.
+     * @brief Lumped battery, bus resistance, brownout threshold, and regulated servo rail parameters.
      */
     struct ElectricalConfig
     {
@@ -24,11 +25,16 @@ namespace FRCBananaSim::Robot::Schema
         double brownoutWarningV = 6.8;
         double brownoutShutoffV = 6.3;
         double brownoutRecoveryV = 7.5;
+
+        // Regulated 6V / 5V Power Rail (RoboRIO 6V, REV SPM 6V, or FTC Hub)
+        double regulatedRailVoltageV = 6.0;      ///< Default 6.0V
+        double regulatedRailCurrentLimitA = 2.2;  ///< Default RoboRIO 2.2A limit
+        double regulatedRailEfficiency = 0.88;    ///< Buck regulator efficiency
     };
 
     /**
      * @struct SwerveModuleConfig
-     * @brief Electromechanical identification and CAN bus mapping for one swerve module.
+     * @brief Electromechanical identification and CAN/PWM mapping for one swerve module.
      */
     struct SwerveModuleConfig
     {
@@ -38,17 +44,23 @@ namespace FRCBananaSim::Robot::Schema
         uint32_t steerCanId = 0;
         uint32_t cancoderId = 0;
         std::string canBus = "rio";
+        uint32_t drivePwmChannel = 0; ///< For servo-driven drive wheel
+        uint32_t steerPwmChannel = 0; ///< For servo-driven steer azimuth
     };
 
     /**
      * @struct SwerveConfig
-     * @brief Drivetrain chassis link and swerve module layout parameters.
+     * @brief Drivetrain chassis link, swerve module layout, and actuator configurations.
      */
     struct SwerveConfig
     {
         std::string chassisLink = "base_link";
+        std::string driveActuatorType = "motor"; ///< "motor" or "servo"
+        std::string steerActuatorType = "motor"; ///< "motor" or "servo"
         std::string driveMotorPreset = "KrakenX60";
         std::string steerMotorPreset = "KrakenX44";
+        std::string driveServoPreset = "GoBildaSpeed";
+        std::string steerServoPreset = "GoBildaTorque";
         double driveGearRatio = 5.27;
         double steerGearRatio = 26.0909;
         double driveEfficiency = 0.96;
@@ -85,8 +97,21 @@ namespace FRCBananaSim::Robot::Schema
     };
 
     /**
+     * @struct ServoConfig
+     * @brief Electromechanical parameters and PWM channel mapping for smart/hobby servos.
+     */
+    struct ServoConfig
+    {
+        std::string preset = "GoBildaTorque"; ///< e.g. "GoBildaTorque", "GoBildaSpeed", "SwyftSpeed"
+        std::string mode = "positional";       ///< "positional" or "continuous"
+        uint32_t pwmChannel = 0;               ///< PWM channel [0..15]
+        double supplyVoltageV = 6.0;           ///< Regulated operating voltage (V)
+        double travelRangeDeg = 300.0;         ///< Total rotational travel range (deg)
+    };
+
+    /**
      * @struct MechanismConfig
-     * @brief High-level mechanism actuator parameters (elevators, arms, wrists, flywheels, intakes).
+     * @brief High-level mechanism actuator parameters (elevators, arms, wrists, flywheels, intakes, differentials).
      */
     struct MechanismConfig
     {
@@ -98,7 +123,11 @@ namespace FRCBananaSim::Robot::Schema
         std::vector<double> viscousDampings;   ///< [dampingJointA, dampingJointB].
 
         std::string name;
-        std::string role; ///< "elevator", "arm", "wrist", "four_bar", "flywheel", "intake"
+        std::string role; ///< "elevator", "arm", "wrist", "four_bar", "flywheel", "intake", "differential"
+        std::string actuatorType = "motor"; ///< "motor" (CAN motor) or "servo" (PWM servo)
+        ServoConfig servo;                  ///< Primary servo configuration (for arm, elevator, wrist)
+        std::vector<ServoConfig> servos;    ///< Multiple servo configs (for differential mechanisms)
+
         std::string targetJoint;
         std::string parentLink;
         std::string motorPreset = "KrakenX60";
