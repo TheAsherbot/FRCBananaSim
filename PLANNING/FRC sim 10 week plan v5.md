@@ -1,4 +1,4 @@
-# FRC Simulation: 10-Week Plan, Revision 5 (Oct 21 - Dec 27, 2026)
+# FRC Simulation: 10-Week Plan, Revision 5.1 (Oct 21 - Dec 27, 2026)
 
 ## What changed from v4
 
@@ -14,20 +14,21 @@
 > **Option A Fleet throughput caveat:** Running 15–20 separate WPILib OS processes plus 7 Jolt worker threads across 8 CPU cores over localhost JSON WebSockets will likely bottleneck on Windows context switches and JSON parsing before Jolt is even stressed. In Block 8 we will benchmark 4, 8, 12, and 16–20 parallel auto processes and set the Fleet worker count to whichever gives the highest completed autonomous routines per second.
 
 ## Day accounting
-
 | | Days |
 |---|---|
 | v4 baseline (Oct 21 - Dec 28) | 69 |
-| **Added in v5** | |
+| **Added in v5 / v5.1** | |
 | HALSim WebSocket server v0 + PWM/Encoder/Gyro bridge (Block 2) | +1 |
 | Vendor `SimDevice` parser (TalonFX / SparkMax) + lockstep hook (Block 3) | +1 |
+| **Sidecar Configurator C++ GUI Suite (Expanded Block 5)** | **+3** |
 | Multi-port Fleet process spawner + Mock DriverStation sequencer (Block 8) | +1 |
 | Embedded `ntcore` NT4 Limelight publisher (Block 10) | +0.5 |
 | **Freed in v5** | |
 | No standalone sim teleop/gamepad controller needed (real C++ code drives Block 2) | -1 |
 | Control API boundary moved out of Block 12 into Block 2 | -1 |
+| Block 4 Exporter tightened by using Python stdlib (no NumPy) | -1 |
 | ImGui tuning panel (Block 12) reduced to bare `ImGui::DragFloat` / `ImPlot` | -1 |
-| **v5 total (Oct 21 - Dec 28)** | **69.5** |
+| **v5.1 total (Oct 21 - Dec 28)** | **69.5** |
 
 - Available days from Oct 21 through Dec 27 are 68, so the plan runs **about 1.5 days over** into the Dec 28 - Jan 8 pre-kickoff buffer.
 - **There is no slack.** If a block slips, follow the cut order in Section 4 immediately rather than pushing downstream blocks past the Dec 27 AI cutoff.
@@ -204,15 +205,15 @@ Your **C++ Robot Code** (WPILib GradleRIO) runs unmodified as a native desktop p
 |---|---|---|
 | 1 | Oct 21-22 | Closeout |
 | 2 | Oct 23-29 | Motors, battery, swerve & WPILib HALSim WS Bridge v0 |
-| 3 | Oct 30-Nov 5 | **Mechanisms, schema, sensors & `SimDevice` Dispatch (restored v2 Week 4)** |
-| 4 | Nov 6-10 | Fusion exporter |
-| 5 | Nov 11-15 | Importer and mass reconciliation |
+| 3 | Oct 30-Nov 5 | Mechanisms, schema, sensors & `SimDevice` Dispatch |
+| 4 | Nov 6-7 | Fusion exporter (Python add-in) |
+| 5 | Nov 8-15 | Sidecar Configurator GUI, C++ Importer & Mass Reconciliation Suite (8 Days) |
 | 6 | Nov 16-22 | Interaction layer (shooter and intake math) |
 | 7 | Nov 23-27 | Parameter store and calibrator (Thanksgiving, full capacity) |
 | 8 | Nov 28-Dec 4 | Field, Match mode, Option A Fleet Runner & Mock DriverStation |
-| 9 | Dec 5-11 | **Rendering 1: assets, PBR, venue lighting (restored v2 Week 7)** |
+| 9 | Dec 5-11 | Rendering 1: assets, PBR, venue lighting |
 | 10 | Dec 12-18 | Rendering 2: camera optics & NT4 Limelight Server |
-| 11 | Dec 19-25 | Rendering 3: AprilTag validation & Live NT4 Feed (Christmas, full capacity) |
+| 11 | Dec 19-25 | Rendering 3: AprilTag validation & Live NT4 Feed |
 | 12 | Dec 26-28 | Freeze and handoff |
 
 ### Block 1 (Oct 21-22): Closeout
@@ -255,12 +256,15 @@ Your **C++ Robot Code** (WPILib GradleRIO) runs unmodified as a native desktop p
 - Tessellate visual meshes per link. I haven't verified which API call does this.
 - **Done when:** the test assembly exports a manifest and meshes matching the schema v1, with mass, center of mass and inertia agreeing with Fusion's own values.
 
-### Block 5 (Nov 11-15): Importer and mass reconciliation
-- C++ importer builds ECS entities, Jolt bodies, joints, colliders, motors and render meshes from the manifest and sidecar.
-- Material lookup in `materials.json` for friction and restitution.
-- Mass reconciliation tool: compares CAD mass, center of mass and per-subsystem mass to scale readings, and applies per-link scale or an "unmodeled mass" entry.
-- Round trip: export, import, drive from C++ robot code, and compare with the FTC robot if its CAD exists.
-- **Gate (Nov 15):** if the exporter and importer aren't reliable, use hand-authored JSON for this season. That fallback is cheap, because block 3 already produces working hand-written robots.
+### Block 5 (Nov 8-15): Sidecar Configurator GUI, Importer & Mass Reconciliation (8 Days)
+- Standalone Dear ImGui desktop app (`SidecarConfigurator`) with 3D CAD viewport and CAD joint dropdowns.
+- One-click "Auto-Generate Starter Sidecar" bootstrap tool for instant swerve, mechanism, and sensor setup.
+- Form editors for Swerve, 1-DOF Mechanisms, 2-DOF Differential Wrists (2x revolute), Couplings, and Sensors.
+- Live Schema Linter preventing duplicate CAN/PWM IDs and orphan CAD joint references in real time.
+- Importer upgrades: multi-collider compound Jolt shapes, decoupled link CoM, and dynamic flywheel offsets (Q4).
+- Standardizes revolute axis signs (D1) to strictly match our team's WPILib robot code direction conventions.
+- Non-destructive mass reconciliation: stores link scaling and non-colliding ballast in `sidecar.json`.
+- Gate (Nov 15): Configure, reconcile, and drive a raw CAD export via C++ code in under 15 min with zero JSON typing.
 
 ### Block 6 (Nov 16-22): Interaction layer
 - Piece state machine: `FREE -> INTAKING -> STORED -> ENGAGED -> LAUNCHED -> FREE`, with abort edges.
