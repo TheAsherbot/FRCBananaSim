@@ -140,4 +140,4 @@ def stop(context):
 
     except Exception:
         if ui:
-            ui.messageBox(f"Add-in cleanup failed:\n{traceback.format_exc()}")
+           ui.messageBox(f"Add-in cleanup failed:\n{traceback.format_exc()}")

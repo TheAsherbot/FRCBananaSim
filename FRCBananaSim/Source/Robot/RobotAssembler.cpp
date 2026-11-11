@@ -139,6 +139,10 @@ namespace FRCBananaSim::Robot
                 if (pIt != linkPoses.end() && linkPoses.find(mech.visualLink) == linkPoses.end())
                 {
                     glm::vec3 mountOffset(0.0f, 0.06f, 0.06f);
+                    if (glm::length(mech.mountOffsetM) > 1e-6)
+                    {
+                        mountOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(mech.mountOffsetM));
+                    }
                     linkPoses[mech.visualLink] = {
                         pIt->second.worldPos + (pIt->second.worldRot * mountOffset),
                         pIt->second.worldRot
@@ -188,7 +192,24 @@ namespace FRCBananaSim::Robot
             // Add Physical RigidBodyComponent
             Physics::Components::RigidBodyComponent rb;
             rb.motionType = Physics::Components::BodyMotionType::Dynamic;
-            rb.mass = static_cast<float>(link.massKg);
+
+            double effectiveMass = link.massKg;
+            bool hasCustomOverride = false;
+            if (sidecar.massReconciliation.enabled)
+            {
+                auto oIt = sidecar.massReconciliation.linkMassOverrides.find(link.name);
+                if (oIt != sidecar.massReconciliation.linkMassOverrides.end() && oIt->second > 0.0)
+                {
+                    effectiveMass = oIt->second;
+                    hasCustomOverride = true;
+                }
+                else if (sidecar.massReconciliation.linkMassMultiplier > 0.0)
+                {
+                    effectiveMass *= sidecar.massReconciliation.linkMassMultiplier;
+                }
+            }
+
+            rb.mass = static_cast<float>(effectiveMass);
             rb.collisionGroupID = 1; // Robot group: mutual self-collisions disabled via GroupFilterTable
             rb.collisionSubGroupID = linkSubGroupIndex++;
 
@@ -199,13 +220,78 @@ namespace FRCBananaSim::Robot
                 rb.isSensor = true; // Prevent child mechanism links from colliding with ground/chassis
             }
 
-            if (link.inertiaTensor.IsPositiveDefinite())
+            // Inertia tensor calculation
+            glm::dmat3 inertiaNWU(0.0);
+            bool hasInertia = link.inertiaTensor.IsPositiveDefinite();
+            if (hasInertia)
             {
-                glm::dmat3 inertiaNWU = link.inertiaTensor.ToMatrix();
+                inertiaNWU = link.inertiaTensor.ToMatrix();
+                if (hasCustomOverride && link.massKg > 0.0)
+                {
+                    inertiaNWU *= (effectiveMass / link.massKg);
+                }
+                else if (sidecar.massReconciliation.enabled && sidecar.massReconciliation.linkMassMultiplier > 0.0)
+                {
+                    inertiaNWU *= sidecar.massReconciliation.linkMassMultiplier;
+                }
+            }
+
+            glm::dvec3 linkComNWU = link.centerOfMassM;
+
+            // Check for unmodeled ballast injection onto target link (defaulting to root chassis if empty)
+            bool isBallastTarget = false;
+            if (sidecar.massReconciliation.enabled && sidecar.massReconciliation.unmodeledBallast.massKg > 0.0)
+            {
+                const auto& target = sidecar.massReconciliation.unmodeledBallast.targetLink;
+                if ((target.empty() && link.isRoot) || target == link.name)
+                {
+                    isBallastTarget = true;
+                }
+            }
+
+            if (isBallastTarget)
+            {
+                double mBallast = sidecar.massReconciliation.unmodeledBallast.massKg;
+                glm::dvec3 rBallastNWU = sidecar.massReconciliation.unmodeledBallast.offsetM;
+
+                // Reconcile center of mass: c_new = (m0 * c0 + mb * rb) / (m0 + mb)
+                double totalMass = effectiveMass + mBallast;
+                if (totalMass > 1e-9)
+                {
+                    linkComNWU = (effectiveMass * linkComNWU + mBallast * rBallastNWU) / totalMass;
+                }
+                effectiveMass = totalMass;
+                rb.mass = static_cast<float>(effectiveMass);
+
+                // Reconcile inertia via parallel-axis point-mass contribution in NWU:
+                // I_ballast = m_b * ( (r.r)*I - r * r^T )
+                double rSq = glm::dot(rBallastNWU, rBallastNWU);
+                glm::dmat3 iBallastNWU(
+                    mBallast * (rSq - rBallastNWU.x * rBallastNWU.x),
+                    mBallast * (-rBallastNWU.x * rBallastNWU.y),
+                    mBallast * (-rBallastNWU.x * rBallastNWU.z),
+                    mBallast * (-rBallastNWU.y * rBallastNWU.x),
+                    mBallast * (rSq - rBallastNWU.y * rBallastNWU.y),
+                    mBallast * (-rBallastNWU.y * rBallastNWU.z),
+                    mBallast * (-rBallastNWU.z * rBallastNWU.x),
+                    mBallast * (-rBallastNWU.z * rBallastNWU.y),
+                    mBallast * (rSq - rBallastNWU.z * rBallastNWU.z)
+                );
+
+                inertiaNWU += iBallastNWU;
+                hasInertia = true;
+            }
+
+            if (hasInertia)
+            {
                 glm::dmat3 inertiaEngine = Schema::RobotSchemaLoader::ConvertNWUInertiaToEngine(inertiaNWU);
                 rb.hasCustomInertia = true;
                 rb.inertiaTensor = glm::mat3(inertiaEngine);
             }
+
+            // Set decoupled center of mass in Engine frame
+            rb.hasCustomCenterOfMass = true;
+            rb.centerOfMassOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(linkComNWU));
 
             const auto* mat = materials.GetMaterial(link.material);
             if (mat)
@@ -216,38 +302,73 @@ namespace FRCBananaSim::Robot
 
             scene.AddComponent(linkEntity, rb);
 
-            // Add Primary Collider if defined
+            // Add Colliders if defined (Primary + Sub-colliders for Compound Shape)
             if (!link.colliders.empty())
             {
-                const auto& colDef = link.colliders[0];
                 Physics::Components::ColliderComponent col;
 
-                if (colDef.type == "sphere")
+                auto populateColliderDef = [](const Schema::ColliderDefinition& def,
+                                              Physics::Components::ColliderShape& outShape,
+                                              glm::vec3& outBoxHalfExtents,
+                                              float& outRadius,
+                                              float& outHalfHeight,
+                                              glm::vec3& outOffset,
+                                              glm::quat& outRot)
                 {
-                    col.shape = Physics::Components::ColliderShape::Sphere;
-                    col.radius = static_cast<float>(colDef.dimensionsM.x);
-                }
-                else if (colDef.type == "cylinder")
-                {
-                    col.shape = Physics::Components::ColliderShape::Cylinder;
-                    col.radius = static_cast<float>(colDef.dimensionsM.x);
-                    col.halfHeight = static_cast<float>(colDef.dimensionsM.y * 0.5);
-                }
-                else if (colDef.type == "capsule")
-                {
-                    col.shape = Physics::Components::ColliderShape::Capsule;
-                    col.radius = static_cast<float>(colDef.dimensionsM.x);
-                    col.halfHeight = static_cast<float>(colDef.dimensionsM.y * 0.5);
-                }
-                else
-                {
-                    col.shape = Physics::Components::ColliderShape::Box;
-                    glm::vec3 dimsEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(colDef.dimensionsM));
-                    col.boxHalfExtents = glm::abs(dimsEngine) * 0.5f;
-                }
+                    if (def.type == "sphere")
+                    {
+                        outShape = Physics::Components::ColliderShape::Sphere;
+                        outRadius = static_cast<float>(def.dimensionsM.x);
+                    }
+                    else if (def.type == "cylinder")
+                    {
+                        outShape = Physics::Components::ColliderShape::Cylinder;
+                        outRadius = static_cast<float>(def.dimensionsM.x);
+                        outHalfHeight = static_cast<float>(def.dimensionsM.y * 0.5);
+                    }
+                    else if (def.type == "capsule")
+                    {
+                        outShape = Physics::Components::ColliderShape::Capsule;
+                        outRadius = static_cast<float>(def.dimensionsM.x);
+                        outHalfHeight = static_cast<float>(def.dimensionsM.y * 0.5);
+                    }
+                    else
+                    {
+                        outShape = Physics::Components::ColliderShape::Box;
+                        glm::vec3 dimsEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(def.dimensionsM));
+                        outBoxHalfExtents = glm::abs(dimsEngine) * 0.5f;
+                    }
 
-                col.localOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(colDef.originM));
-                col.localRotation = glm::quat(Schema::RobotSchemaLoader::ConvertNWUQuatToEngine(glm::dquat(colDef.rotationQuat)));
+                    outOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(def.originM));
+                    outRot = glm::quat(Schema::RobotSchemaLoader::ConvertNWUQuatToEngine(glm::dquat(def.rotationQuat)));
+                };
+
+                // Populate primary collider
+                populateColliderDef(
+                    link.colliders[0],
+                    col.shape,
+                    col.boxHalfExtents,
+                    col.radius,
+                    col.halfHeight,
+                    col.localOffset,
+                    col.localRotation
+                );
+
+                // Populate additional colliders as compound sub-colliders
+                for (size_t i = 1; i < link.colliders.size(); ++i)
+                {
+                    Physics::Components::ColliderPrimitive sub;
+                    populateColliderDef(
+                        link.colliders[i],
+                        sub.shape,
+                        sub.boxHalfExtents,
+                        sub.radius,
+                        sub.halfHeight,
+                        sub.localOffset,
+                        sub.localRotation
+                    );
+                    col.subColliders.push_back(sub);
+                }
 
                 scene.AddComponent(linkEntity, col);
             }
@@ -418,7 +539,7 @@ namespace FRCBananaSim::Robot
 
                 scene.AddComponent(mechEntity, elev);
             }
-            else if (mech.role == "arm" || mech.role == "wrist" || mech.role == "four_bar")
+            else if (mech.role == "arm" || mech.role == "wrist" || mech.role == "turret" || mech.role == "four_bar")
             {
                 Mechanisms::Components::ArmComponent arm;
                 arm.name = mech.name;
@@ -527,7 +648,12 @@ namespace FRCBananaSim::Robot
                 {
                     fw.spinAxis = glm::normalize(spinAxisEng);
                 }
-                fw.visualLocalOffset = glm::vec3(0.0f, 0.06f, 0.06f);
+                glm::vec3 mountOffset(0.0f, 0.06f, 0.06f);
+                if (glm::length(mech.mountOffsetM) > 1e-6)
+                {
+                    mountOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(mech.mountOffsetM));
+                }
+                fw.visualLocalOffset = mountOffset;
 
                 scene.AddComponent(mechEntity, fw);
             }
@@ -571,8 +697,21 @@ namespace FRCBananaSim::Robot
                     diff.viscousDampingNms = { mech.viscousDamping, mech.viscousDamping };
                 }
 
-                diff.motorModelA = CreateMotorFromPreset(mech.motorPreset, 1.0, 1.0);
-                diff.motorModelB = CreateMotorFromPreset(mech.motorPreset, 1.0, 1.0);
+                std::string presetA = (!mech.motorPresets.empty()) ? mech.motorPresets[0] : mech.motorPreset;
+                std::string presetB = (mech.motorPresets.size() > 1) ? mech.motorPresets[1] : mech.motorPreset;
+                diff.motorModelA = CreateMotorFromPreset(presetA, 1.0, 1.0);
+                diff.motorModelB = CreateMotorFromPreset(presetB, 1.0, 1.0);
+
+                if (!mech.statorCurrentLimits.empty())
+                {
+                    diff.statorCurrentLimitA = mech.statorCurrentLimits[0];
+                    diff.statorCurrentLimitB = (mech.statorCurrentLimits.size() > 1) ? mech.statorCurrentLimits[1] : mech.statorCurrentLimits[0];
+                }
+                if (!mech.supplyCurrentLimits.empty())
+                {
+                    diff.supplyCurrentLimitA = mech.supplyCurrentLimits[0];
+                    diff.supplyCurrentLimitB = (mech.supplyCurrentLimits.size() > 1) ? mech.supplyCurrentLimits[1] : mech.supplyCurrentLimits[0];
+                }
 
                 if (mech.actuatorType == "servo")
                 {

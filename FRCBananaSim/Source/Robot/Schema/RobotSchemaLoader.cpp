@@ -336,6 +336,44 @@ namespace FRCBananaSim::Robot::Schema
             sidecar.swerve.steerActuatorType = sw.value("steerActuatorType", "motor");
             sidecar.swerve.driveServoPreset = sw.value("driveServoPreset", "GoBildaSpeed");
             sidecar.swerve.steerServoPreset = sw.value("steerServoPreset", "GoBildaTorque");
+            if (sw.contains("customDriveMotor") && sw["customDriveMotor"].is_object())
+            {
+                const auto& cm = sw["customDriveMotor"];
+                sidecar.swerve.customDriveMotor.nominalVoltageV = cm.value("nominalVoltage_V", 12.0);
+                sidecar.swerve.customDriveMotor.stallTorqueNm = cm.value("stallTorque_Nm", 5.0);
+                sidecar.swerve.customDriveMotor.freeSpeedRpm = cm.value("freeSpeed_rpm", 6000.0);
+                sidecar.swerve.customDriveMotor.stallCurrentA = cm.value("stallCurrent_A", 250.0);
+                sidecar.swerve.customDriveMotor.freeCurrentA = cm.value("freeCurrent_A", 2.0);
+            }
+            if (sw.contains("customSteerMotor") && sw["customSteerMotor"].is_object())
+            {
+                const auto& cm = sw["customSteerMotor"];
+                sidecar.swerve.customSteerMotor.nominalVoltageV = cm.value("nominalVoltage_V", 12.0);
+                sidecar.swerve.customSteerMotor.stallTorqueNm = cm.value("stallTorque_Nm", 5.0);
+                sidecar.swerve.customSteerMotor.freeSpeedRpm = cm.value("freeSpeed_rpm", 6000.0);
+                sidecar.swerve.customSteerMotor.stallCurrentA = cm.value("stallCurrent_A", 250.0);
+                sidecar.swerve.customSteerMotor.freeCurrentA = cm.value("freeCurrent_A", 2.0);
+            }
+            if (sw.contains("customDriveServo") && sw["customDriveServo"].is_object())
+            {
+                const auto& cs = sw["customDriveServo"];
+                sidecar.swerve.customDriveServo.nominalVoltageV = cs.value("nominalVoltage_V", 6.0);
+                sidecar.swerve.customDriveServo.stallTorqueKgCm = cs.value("stallTorque_kgcm", 20.0);
+                sidecar.swerve.customDriveServo.speedSecPer60Deg = cs.value("speed_secPer60Deg", 0.10);
+                sidecar.swerve.customDriveServo.stallCurrentA = cs.value("stallCurrent_A", 2.5);
+                sidecar.swerve.customDriveServo.freeCurrentA = cs.value("freeCurrent_A", 0.15);
+                sidecar.swerve.customDriveServo.travelRangeDeg = cs.value("travelRange_deg", 300.0);
+            }
+            if (sw.contains("customSteerServo") && sw["customSteerServo"].is_object())
+            {
+                const auto& cs = sw["customSteerServo"];
+                sidecar.swerve.customSteerServo.nominalVoltageV = cs.value("nominalVoltage_V", 6.0);
+                sidecar.swerve.customSteerServo.stallTorqueKgCm = cs.value("stallTorque_kgcm", 20.0);
+                sidecar.swerve.customSteerServo.speedSecPer60Deg = cs.value("speed_secPer60Deg", 0.10);
+                sidecar.swerve.customSteerServo.stallCurrentA = cs.value("stallCurrent_A", 2.5);
+                sidecar.swerve.customSteerServo.freeCurrentA = cs.value("freeCurrent_A", 0.15);
+                sidecar.swerve.customSteerServo.travelRangeDeg = cs.value("travelRange_deg", 300.0);
+            }
 
             if (sw.contains("modules") && sw["modules"].is_array())
             {
@@ -375,11 +413,27 @@ namespace FRCBananaSim::Robot::Schema
                 mech.flywheelInertiaKgm2 = mNode.value("flywheelInertia_kgm2", 0.0);
                 mech.spinAxis = ParseOptionalVec3(mNode, "spinAxis", glm::dvec3(0.0, 1.0, 0.0));
                 mech.visualLink = mNode.value("visualLink", "");
+                mech.mountOffsetM = ParseOptionalVec3(mNode, "mountOffset_m", glm::dvec3(0.0, 0.0, 0.0));
                 mech.statorCurrentLimitA = mNode.value("statorCurrentLimit_A", 60.0);
                 mech.supplyCurrentLimitA = mNode.value("supplyCurrentLimit_A", 40.0);
-                mech.coulombFriction = mNode.value("coulombFriction", 0.0);
-                mech.viscousDamping = mNode.value("viscousDamping", 0.0);
+                if (mNode.contains("coulombFriction") && mNode["coulombFriction"].is_number())
+                {
+                    mech.coulombFriction = mNode["coulombFriction"].get<double>();
+                }
+                if (mNode.contains("viscousDamping") && mNode["viscousDamping"].is_number())
+                {
+                    mech.viscousDamping = mNode["viscousDamping"].get<double>();
+                }
                 mech.actuatorType = mNode.value("actuatorType", "motor");
+                if (mNode.contains("customMotor") && mNode["customMotor"].is_object())
+                {
+                    const auto& cm = mNode["customMotor"];
+                    mech.customMotor.nominalVoltageV = cm.value("nominalVoltage_V", 12.0);
+                    mech.customMotor.stallTorqueNm = cm.value("stallTorque_Nm", 5.0);
+                    mech.customMotor.freeSpeedRpm = cm.value("freeSpeed_rpm", 6000.0);
+                    mech.customMotor.stallCurrentA = cm.value("stallCurrent_A", 250.0);
+                    mech.customMotor.freeCurrentA = cm.value("freeCurrent_A", 2.0);
+                }
                 if (mNode.contains("servo") && mNode["servo"].is_object())
                 {
                     const auto& sNode = mNode["servo"];
@@ -388,6 +442,16 @@ namespace FRCBananaSim::Robot::Schema
                     mech.servo.pwmChannel = sNode.value("pwmChannel", 0);
                     mech.servo.supplyVoltageV = sNode.value("supplyVoltage_V", 6.0);
                     mech.servo.travelRangeDeg = sNode.value("travelRange_deg", 300.0);
+                    if (sNode.contains("customServo") && sNode["customServo"].is_object())
+                    {
+                        const auto& cs = sNode["customServo"];
+                        mech.customServo.nominalVoltageV = cs.value("nominalVoltage_V", 6.0);
+                        mech.customServo.stallTorqueKgCm = cs.value("stallTorque_kgcm", 20.0);
+                        mech.customServo.speedSecPer60Deg = cs.value("speed_secPer60Deg", 0.10);
+                        mech.customServo.stallCurrentA = cs.value("stallCurrent_A", 2.5);
+                        mech.customServo.freeCurrentA = cs.value("freeCurrent_A", 0.15);
+                        mech.customServo.travelRangeDeg = cs.value("travelRange_deg", 300.0);
+                    }
                 }
                 else if (mNode.contains("servoPreset"))
                 {
@@ -456,6 +520,47 @@ namespace FRCBananaSim::Robot::Schema
                     for (const auto& vd : mNode["viscousDamping"])
                     {
                         mech.viscousDampings.push_back(vd.get<double>());
+                    }
+                }
+                if (mNode.contains("motorPresets") && mNode["motorPresets"].is_array())
+                {
+                    for (const auto& mp : mNode["motorPresets"])
+                    {
+                        mech.motorPresets.push_back(mp.get<std::string>());
+                    }
+                }
+                if (mNode.contains("actuatorTypes") && mNode["actuatorTypes"].is_array())
+                {
+                    for (const auto& at : mNode["actuatorTypes"])
+                    {
+                        mech.actuatorTypes.push_back(at.get<std::string>());
+                    }
+                }
+                if (mNode.contains("statorCurrentLimits") && mNode["statorCurrentLimits"].is_array())
+                {
+                    for (const auto& scl : mNode["statorCurrentLimits"])
+                    {
+                        mech.statorCurrentLimits.push_back(scl.get<double>());
+                    }
+                }
+                if (mNode.contains("supplyCurrentLimits") && mNode["supplyCurrentLimits"].is_array())
+                {
+                    for (const auto& sucl : mNode["supplyCurrentLimits"])
+                    {
+                        mech.supplyCurrentLimits.push_back(sucl.get<double>());
+                    }
+                }
+                if (mNode.contains("customMotors") && mNode["customMotors"].is_array())
+                {
+                    for (const auto& cmNode : mNode["customMotors"])
+                    {
+                        CustomMotorSpec spec;
+                        spec.nominalVoltageV = cmNode.value("nominalVoltage_V", 12.0);
+                        spec.stallTorqueNm = cmNode.value("stallTorque_Nm", 4.0);
+                        spec.freeSpeedRpm = cmNode.value("freeSpeed_rpm", 6000.0);
+                        spec.stallCurrentA = cmNode.value("stallCurrent_A", 120.0);
+                        spec.freeCurrentA = cmNode.value("freeCurrent_A", 1.5);
+                        mech.customMotors.push_back(spec);
                     }
                 }
                 // ===================== [END NEW DIFFERENTIAL PARSING] =====================
@@ -590,6 +695,31 @@ namespace FRCBananaSim::Robot::Schema
                 }
 
                 sidecar.sensors.push_back(sensor);
+            }
+        }
+
+        // Mass Reconciliation
+        if (json.contains("massReconciliation") && json["massReconciliation"].is_object())
+        {
+            const auto& mr = json["massReconciliation"];
+            sidecar.massReconciliation.enabled = true;
+            sidecar.massReconciliation.linkMassMultiplier = mr.value("linkMassMultiplier", 1.0);
+            if (mr.contains("unmodeledBallast") && mr["unmodeledBallast"].is_object())
+            {
+                const auto& ub = mr["unmodeledBallast"];
+                sidecar.massReconciliation.unmodeledBallast.targetLink = ub.value("targetLink", "base_link");
+                sidecar.massReconciliation.unmodeledBallast.massKg = ub.value("mass_kg", 0.0);
+                sidecar.massReconciliation.unmodeledBallast.offsetM = ParseOptionalVec3(ub, "offset_m", glm::dvec3(0.0, 0.0, 0.0));
+            }
+            if (mr.contains("linkMassOverrides") && mr["linkMassOverrides"].is_object())
+            {
+                for (auto it = mr["linkMassOverrides"].begin(); it != mr["linkMassOverrides"].end(); ++it)
+                {
+                    if (it.value().is_number())
+                    {
+                        sidecar.massReconciliation.linkMassOverrides[it.key()] = it.value().get<double>();
+                    }
+                }
             }
         }
 
@@ -791,6 +921,21 @@ namespace FRCBananaSim::Robot::Schema
             {
                 errors.push_back("Sensor '" + sensor.name + "' references missing contactZone: '" + sensor.contactZone + "'");
                 isValid = false;
+            }
+        }
+
+        // 9. Mass Reconciliation
+        if (sidecar.massReconciliation.enabled)
+        {
+            if (sidecar.massReconciliation.unmodeledBallast.massKg > 0.0)
+            {
+                if (!sidecar.massReconciliation.unmodeledBallast.targetLink.empty() &&
+                    !manifest.FindLink(sidecar.massReconciliation.unmodeledBallast.targetLink))
+                {
+                    errors.push_back("MassReconciliation unmodeledBallast references missing targetLink: '" +
+                        sidecar.massReconciliation.unmodeledBallast.targetLink + "'");
+                    isValid = false;
+                }
             }
         }
 

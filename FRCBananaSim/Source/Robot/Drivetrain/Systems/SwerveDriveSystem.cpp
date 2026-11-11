@@ -186,7 +186,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Systems
             glm::vec3 linVelEngine(joltLinVel.GetX(), joltLinVel.GetY(), joltLinVel.GetZ());
             glm::vec3 angVelEngine(joltAngVel.GetX(), joltAngVel.GetY(), joltAngVel.GetZ());
 
-            if (collider)
+            if (collider && !collider->IsCompound() && (!chassisRb || !chassisRb->hasCustomCenterOfMass))
             {
                 rotEngine = rotEngine * glm::inverse(glm::dquat(collider->localRotation));
                 glm::vec3 worldOffset = glm::quat(rotEngine) * collider->localOffset;
@@ -227,7 +227,7 @@ namespace FRCBananaSim::Robot::Drivetrain::Systems
             glm::vec3 midLinVelEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(midLinVelNWU);
             glm::vec3 midAngVelEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(midAngVelNWU);
 
-            if (collider)   
+            if (collider && !collider->IsCompound() && (!chassisRb || !chassisRb->hasCustomCenterOfMass))
             {
                 JPH::Quat joltRot = bodyInterface.GetRotation(chassisRb->bodyID);
                 glm::dquat rotEngine(joltRot.GetW(), joltRot.GetX(), joltRot.GetY(), joltRot.GetZ());

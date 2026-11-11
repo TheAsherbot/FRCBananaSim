@@ -12,7 +12,7 @@ from banana_core.sidecar_check import cross_check_sidecar
 class TestSidecarCheck(unittest.TestCase):
     def setUp(self):
         sidecar_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "FRCBananaSim", "Resources", "Robots", "TestAssembly2026", "sidecar.json")
+            os.path.join(os.path.dirname(__file__), "..", "config", "sidecar.json")
         )
         with open(sidecar_path, "r", encoding="utf-8") as f:
             self.sidecar = json.load(f)

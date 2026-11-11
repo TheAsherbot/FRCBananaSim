@@ -22,6 +22,8 @@
 #include "Actuation/Components/BatteryComponent.h"
 #include "Control/SimControlBoundary.h"
 
+#include <Jolt/Physics/Collision/Shape/CompoundShape.h>
+#include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
 #include <filesystem>
 #include <iostream>
 #include <cmath>
@@ -502,8 +504,10 @@ namespace FRCBananaSim::Tests
             if (baseRb && !baseRb->bodyID.IsInvalid())
             {
                 JPH::RVec3 pos = jolt.GetBodyInterface().GetPosition(baseRb->bodyID);
+                JPH::RVec3 comPos = jolt.GetBodyInterface().GetCenterOfMassPosition(baseRb->bodyID);
                 JPH::Vec3 vel = jolt.GetBodyInterface().GetLinearVelocity(baseRb->bodyID);
-                TEST_EXPECT_TRUE(ctx, pos.GetY() >= 0.25 && pos.GetY() <= 0.32);
+                TEST_EXPECT_TRUE(ctx, comPos.GetY() >= 0.25 && comPos.GetY() <= 0.32);
+                TEST_EXPECT_TRUE(ctx, pos.GetY() >= 0.18 && pos.GetY() <= 0.22);
                 TEST_EXPECT_TRUE(ctx, vel.Length() < 0.05f);
             }
 
@@ -622,6 +626,359 @@ namespace FRCBananaSim::Tests
                 TEST_EXPECT_NEAR(ctx, crankJc->currentAngle, 0.0f, 0.02f);
                 TEST_EXPECT_NEAR(ctx, folJc->currentAngle, 0.0f, 0.02f);
                 TEST_EXPECT_TRUE(ctx, maxFoldMismatch < 0.03);
+            }
+        }
+
+        // =============================================================
+        // 7. Multi-Collider Compound Jolt Spawning (Q1 / RA7)
+        // =============================================================
+        {
+            std::cout << "  -> RA7: Multi-Collider Compound Jolt Spawning (Q1)\n";
+
+            RobotManifest customManifest;
+            customManifest.schemaVersion = "1.0.0";
+            customManifest.robotName = "MultiColliderBot";
+
+            LinkDefinition link;
+            link.name = "base_link";
+            link.isRoot = true;
+            link.massKg = 10.0;
+            link.centerOfMassM = glm::dvec3(0.0, 0.0, 0.0);
+            link.inertiaTensor.ixx = 1.0;
+            link.inertiaTensor.iyy = 1.0;
+            link.inertiaTensor.izz = 1.0;
+
+            // 3 colliders: Box, Sphere, Cylinder
+            ColliderDefinition col0;
+            col0.name = "box_proxy";
+            col0.type = "box";
+            col0.originM = glm::dvec3(0.1, 0.0, 0.0);
+            col0.dimensionsM = glm::dvec3(0.2, 0.2, 0.2);
+            link.colliders.push_back(col0);
+
+            ColliderDefinition col1;
+            col1.name = "sphere_proxy";
+            col1.type = "sphere";
+            col1.originM = glm::dvec3(-0.1, 0.0, 0.0);
+            col1.dimensionsM = glm::dvec3(0.05, 0.0, 0.0);
+            link.colliders.push_back(col1);
+
+            ColliderDefinition col2;
+            col2.name = "cylinder_proxy";
+            col2.type = "cylinder";
+            col2.originM = glm::dvec3(0.0, 0.1, 0.0);
+            col2.dimensionsM = glm::dvec3(0.04, 0.10, 0.0);
+            link.colliders.push_back(col2);
+
+            customManifest.links.push_back(link);
+
+            RobotSidecar customSidecar;
+            MaterialLibrary materials;
+
+            Physics::JoltContext jolt;
+            jolt.Initialize();
+
+            Scene scene;
+            RobotAssembler assembler(scene, &jolt);
+            auto robot = assembler.Assemble(customManifest, customSidecar, materials);
+
+            TEST_EXPECT_TRUE(ctx, robot.isSuccess);
+            TEST_EXPECT_TRUE(ctx, robot.chassisEntity != invalidEntity);
+
+            auto* colComp = scene.GetComponent<ColliderComponent>(robot.chassisEntity);
+            TEST_EXPECT_TRUE(ctx, colComp != nullptr);
+            if (colComp)
+            {
+                TEST_EXPECT_TRUE(ctx, colComp->IsCompound());
+                TEST_EXPECT_EQ(ctx, colComp->subColliders.size(), static_cast<size_t>(2));
+                TEST_EXPECT_EQ(ctx, static_cast<int>(colComp->shape), static_cast<int>(ColliderShape::Box));
+                TEST_EXPECT_EQ(ctx, static_cast<int>(colComp->subColliders[0].shape), static_cast<int>(ColliderShape::Sphere));
+                TEST_EXPECT_EQ(ctx, static_cast<int>(colComp->subColliders[1].shape), static_cast<int>(ColliderShape::Cylinder));
+            }
+
+            // Step physics once to create Jolt bodies
+            if (robot.physicsSystem)
+            {
+                robot.physicsSystem->FixedUpdate(0.005);
+            }
+
+            auto* rb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
+            TEST_EXPECT_TRUE(ctx, rb != nullptr);
+            if (rb && !rb->bodyID.IsInvalid())
+            {
+                const JPH::BodyLockInterface& lock = jolt.GetPhysicsSystem().GetBodyLockInterfaceNoLock();
+                const JPH::Body* body = lock.TryGetBody(rb->bodyID);
+                TEST_EXPECT_TRUE(ctx, body != nullptr);
+                if (body)
+                {
+                    const JPH::Shape* shape = body->GetShape();
+                    TEST_EXPECT_TRUE(ctx, shape != nullptr);
+                    if (shape)
+                    {
+                        const JPH::CompoundShape* compShape = nullptr;
+                        if (shape->GetSubType() == JPH::EShapeSubType::StaticCompound)
+                        {
+                            compShape = static_cast<const JPH::CompoundShape*>(shape);
+                        }
+                        else if (shape->GetSubType() == JPH::EShapeSubType::OffsetCenterOfMass)
+                        {
+                            const auto* offsetShape = static_cast<const JPH::OffsetCenterOfMassShape*>(shape);
+                            if (offsetShape->GetInnerShape()->GetSubType() == JPH::EShapeSubType::StaticCompound)
+                            {
+                                compShape = static_cast<const JPH::CompoundShape*>(offsetShape->GetInnerShape());
+                            }
+                        }
+                        TEST_EXPECT_TRUE(ctx, compShape != nullptr);
+                        if (compShape)
+                        {
+                            TEST_EXPECT_EQ(ctx, compShape->GetNumSubShapes(), static_cast<uint32_t>(3));
+                        }
+                    }
+                }
+            }
+        }
+
+        // =============================================================
+        // 8. Decoupled Link Center of Mass (Q2 / RA8)
+        // =============================================================
+        {
+            std::cout << "  -> RA8: Decoupled Link Center of Mass (Q2)\n";
+
+            RobotManifest customManifest;
+            customManifest.schemaVersion = "1.0.0";
+            customManifest.robotName = "DecoupledComBot";
+
+            LinkDefinition link;
+            link.name = "base_link";
+            link.isRoot = true;
+            link.massKg = 15.0;
+            // CoM offset in NWU frame
+            link.centerOfMassM = glm::dvec3(0.12, 0.04, 0.25);
+            link.inertiaTensor.ixx = 2.0;
+            link.inertiaTensor.iyy = 2.0;
+            link.inertiaTensor.izz = 2.0;
+
+            // Collider origin at (0,0,0) in NWU frame (decoupled from CoM!)
+            ColliderDefinition col;
+            col.name = "chassis_box";
+            col.type = "box";
+            col.originM = glm::dvec3(0.0, 0.0, 0.0);
+            col.dimensionsM = glm::dvec3(0.6, 0.6, 0.2);
+            link.colliders.push_back(col);
+
+            customManifest.links.push_back(link);
+
+            RobotSidecar customSidecar;
+            MaterialLibrary materials;
+
+            Physics::JoltContext jolt;
+            jolt.Initialize();
+
+            Scene scene;
+            RobotAssembler assembler(scene, &jolt);
+            auto robot = assembler.Assemble(customManifest, customSidecar, materials, glm::vec3(0.0f, 1.0f, 0.0f));
+
+            TEST_EXPECT_TRUE(ctx, robot.isSuccess);
+
+            auto* rb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
+            TEST_EXPECT_TRUE(ctx, rb != nullptr);
+            if (rb)
+            {
+                TEST_EXPECT_TRUE(ctx, rb->hasCustomCenterOfMass);
+                glm::vec3 expectedComEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(link.centerOfMassM));
+                TEST_EXPECT_NEAR(ctx, rb->centerOfMassOffset.x, expectedComEng.x, 1e-5f);
+                TEST_EXPECT_NEAR(ctx, rb->centerOfMassOffset.y, expectedComEng.y, 1e-5f);
+                TEST_EXPECT_NEAR(ctx, rb->centerOfMassOffset.z, expectedComEng.z, 1e-5f);
+            }
+
+            // Step physics to spawn body
+            if (robot.physicsSystem)
+            {
+                robot.physicsSystem->FixedUpdate(0.005);
+            }
+
+            if (rb && !rb->bodyID.IsInvalid())
+            {
+                JPH::RVec3 bodyPos = jolt.GetBodyInterface().GetPosition(rb->bodyID);
+                JPH::RVec3 comPos = jolt.GetBodyInterface().GetCenterOfMassPosition(rb->bodyID);
+
+                // Body position should be the spawn origin (0.0, 1.0, 0.0)
+                TEST_EXPECT_NEAR(ctx, static_cast<float>(bodyPos.GetX()), 0.0f, 1e-4f);
+                TEST_EXPECT_NEAR(ctx, static_cast<float>(bodyPos.GetY()), 1.0f, 1e-4f);
+                TEST_EXPECT_NEAR(ctx, static_cast<float>(bodyPos.GetZ()), 0.0f, 1e-4f);
+
+                // Body Center of Mass should be spawn origin + expectedComEng
+                glm::vec3 expectedComEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(link.centerOfMassM));
+                TEST_EXPECT_NEAR(ctx, static_cast<float>(comPos.GetX()), expectedComEng.x, 1e-4f);
+                TEST_EXPECT_NEAR(ctx, static_cast<float>(comPos.GetY()), 1.0f + expectedComEng.y, 1e-4f);
+                TEST_EXPECT_NEAR(ctx, static_cast<float>(comPos.GetZ()), expectedComEng.z, 1e-4f);
+
+                // The delta between CoM and Body origin matches centerOfMassOffset
+                JPH::Vec3 delta = JPH::Vec3(comPos - bodyPos);
+                TEST_EXPECT_NEAR(ctx, delta.GetX(), expectedComEng.x, 1e-4f);
+                TEST_EXPECT_NEAR(ctx, delta.GetY(), expectedComEng.y, 1e-4f);
+                TEST_EXPECT_NEAR(ctx, delta.GetZ(), expectedComEng.z, 1e-4f);
+            }
+        }
+
+        // =============================================================
+        // 9. Dynamic Flywheel Mount Offset (Q4 / RA9)
+        // =============================================================
+        {
+            std::cout << "  -> RA9: Dynamic Flywheel Mount Offset (Q4)\n";
+
+            RobotManifest customManifest;
+            customManifest.schemaVersion = "1.0.0";
+            customManifest.robotName = "FlywheelOffsetBot";
+
+            LinkDefinition parentLink;
+            parentLink.name = "arm_link";
+            parentLink.isRoot = true;
+            parentLink.massKg = 5.0;
+            parentLink.centerOfMassM = glm::dvec3(0.0, 0.0, 0.0);
+            parentLink.inertiaTensor.ixx = 1.0;
+            parentLink.inertiaTensor.iyy = 1.0;
+            parentLink.inertiaTensor.izz = 1.0;
+            customManifest.links.push_back(parentLink);
+
+            LinkDefinition visualLink;
+            visualLink.name = "flywheel_mesh";
+            visualLink.isRoot = false;
+            visualLink.massKg = 1.0;
+            visualLink.centerOfMassM = glm::dvec3(0.0, 0.0, 0.0);
+            visualLink.inertiaTensor.ixx = 0.1;
+            visualLink.inertiaTensor.iyy = 0.1;
+            visualLink.inertiaTensor.izz = 0.1;
+            customManifest.links.push_back(visualLink);
+
+            RobotSidecar customSidecar;
+            MechanismConfig fwMech;
+            fwMech.name = "shooter_flywheel";
+            fwMech.role = "flywheel";
+            fwMech.parentLink = "arm_link";
+            fwMech.visualLink = "flywheel_mesh";
+            fwMech.gearRatio = 1.0;
+            fwMech.mountOffsetM = glm::dvec3(0.20, -0.10, 0.35); // NWU
+            customSidecar.mechanisms.push_back(fwMech);
+
+            MaterialLibrary materials;
+            Physics::JoltContext jolt;
+            jolt.Initialize();
+
+            Scene scene;
+            RobotAssembler assembler(scene, &jolt);
+            auto robot = assembler.Assemble(customManifest, customSidecar, materials);
+
+            TEST_EXPECT_TRUE(ctx, robot.isSuccess);
+
+            auto fwEntityIt = robot.mechanismEntities.find("shooter_flywheel");
+            TEST_EXPECT_TRUE(ctx, fwEntityIt != robot.mechanismEntities.end());
+            if (fwEntityIt != robot.mechanismEntities.end())
+            {
+                auto* fw = scene.GetComponent<Robot::Mechanisms::Components::FlywheelComponent>(fwEntityIt->second);
+                TEST_EXPECT_TRUE(ctx, fw != nullptr);
+                if (fw)
+                {
+                    glm::vec3 expectedEngOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(fwMech.mountOffsetM));
+                    TEST_EXPECT_NEAR(ctx, fw->visualLocalOffset.x, expectedEngOffset.x, 1e-5f);
+                    TEST_EXPECT_NEAR(ctx, fw->visualLocalOffset.y, expectedEngOffset.y, 1e-5f);
+                    TEST_EXPECT_NEAR(ctx, fw->visualLocalOffset.z, expectedEngOffset.z, 1e-5f);
+                }
+            }
+
+            auto visEntityIt = robot.linkEntities.find("flywheel_mesh");
+            TEST_EXPECT_TRUE(ctx, visEntityIt != robot.linkEntities.end());
+            if (visEntityIt != robot.linkEntities.end())
+            {
+                auto* visT = scene.GetComponent<TransformComponent>(visEntityIt->second);
+                auto* parentT = scene.GetComponent<TransformComponent>(robot.linkEntities["arm_link"]);
+                TEST_EXPECT_TRUE(ctx, visT != nullptr);
+                TEST_EXPECT_TRUE(ctx, parentT != nullptr);
+                if (visT && parentT)
+                {
+                    glm::vec3 expectedEngOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(fwMech.mountOffsetM));
+                    glm::vec3 expectedPos = parentT->position + (parentT->rotation * expectedEngOffset);
+                    TEST_EXPECT_NEAR(ctx, visT->position.x, expectedPos.x, 1e-4f);
+                    TEST_EXPECT_NEAR(ctx, visT->position.y, expectedPos.y, 1e-4f);
+                    TEST_EXPECT_NEAR(ctx, visT->position.z, expectedPos.z, 1e-4f);
+                }
+            }
+        }
+
+        // =============================================================
+        // 10. Mass Reconciliation and Ballast Injection (RA10)
+        // =============================================================
+        {
+            std::cout << "  -> RA10: Mass Reconciliation and Ballast Injection\n";
+
+            RobotManifest customManifest;
+            customManifest.schemaVersion = "1.0.0";
+            customManifest.robotName = "BallastBot";
+
+            LinkDefinition link;
+            link.name = "base_link";
+            link.isRoot = true;
+            link.massKg = 30.0;
+            link.centerOfMassM = glm::dvec3(0.0, 0.0, 0.10);
+            link.inertiaTensor.ixx = 1.0;
+            link.inertiaTensor.iyy = 2.0;
+            link.inertiaTensor.izz = 3.0;
+
+            ColliderDefinition col;
+            col.name = "box";
+            col.type = "box";
+            col.originM = glm::dvec3(0.0, 0.0, 0.10);
+            col.dimensionsM = glm::dvec3(0.8, 0.8, 0.2);
+            link.colliders.push_back(col);
+            customManifest.links.push_back(link);
+
+            RobotSidecar customSidecar;
+            customSidecar.massReconciliation.enabled = true;
+            customSidecar.massReconciliation.linkMassMultiplier = 1.10; // Scaled base mass: 30 * 1.10 = 33 kg
+            customSidecar.massReconciliation.unmodeledBallast.massKg = 5.0; // Ballast mass: 5 kg -> Total = 38 kg
+            customSidecar.massReconciliation.unmodeledBallast.targetLink = "base_link";
+            customSidecar.massReconciliation.unmodeledBallast.offsetM = glm::dvec3(0.10, 0.0, 0.05);
+
+            MaterialLibrary materials;
+            Physics::JoltContext jolt;
+            jolt.Initialize();
+
+            Scene scene;
+            RobotAssembler assembler(scene, &jolt);
+            auto robot = assembler.Assemble(customManifest, customSidecar, materials);
+
+            TEST_EXPECT_TRUE(ctx, robot.isSuccess);
+
+            auto* rb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
+            TEST_EXPECT_TRUE(ctx, rb != nullptr);
+            if (rb)
+            {
+                // Verify total mass: 33 kg + 5 kg = 38 kg
+                TEST_EXPECT_NEAR(ctx, rb->mass, 38.0f, 1e-4f);
+
+                // Verify reconciled center of mass:
+                // c_new = (33 * [0, 0, 0.10] + 5 * [0.10, 0.0, 0.05]) / 38
+                // c_new = [0.50 / 38, 0.0, 3.55 / 38]
+                glm::dvec3 expectedComNWU(0.50 / 38.0, 0.0, 3.55 / 38.0);
+                glm::vec3 expectedComEng = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(expectedComNWU));
+                TEST_EXPECT_NEAR(ctx, rb->centerOfMassOffset.x, expectedComEng.x, 1e-4f);
+                TEST_EXPECT_NEAR(ctx, rb->centerOfMassOffset.y, expectedComEng.y, 1e-4f);
+                TEST_EXPECT_NEAR(ctx, rb->centerOfMassOffset.z, expectedComEng.z, 1e-4f);
+
+                // Verify custom inertia is present and strictly positive definite
+                TEST_EXPECT_TRUE(ctx, rb->hasCustomInertia);
+                TEST_EXPECT_TRUE(ctx, rb->inertiaTensor[0][0] > 2.0f); // Engine X is NWU Y
+                TEST_EXPECT_TRUE(ctx, rb->inertiaTensor[1][1] > 3.0f); // Engine Y is NWU Z
+                TEST_EXPECT_TRUE(ctx, rb->inertiaTensor[2][2] > 1.0f); // Engine Z is NWU X
+
+                // Verify no extra collider was spawned for ballast
+                auto* colComp = scene.GetComponent<ColliderComponent>(robot.chassisEntity);
+                TEST_EXPECT_TRUE(ctx, colComp != nullptr);
+                if (colComp)
+                {
+                    TEST_EXPECT_FALSE(ctx, colComp->IsCompound());
+                    TEST_EXPECT_TRUE(ctx, colComp->subColliders.empty());
+                }
             }
         }
     }

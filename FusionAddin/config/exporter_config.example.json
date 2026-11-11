@@ -1,6 +1,6 @@
 {
   "configVersion": "1.0.0",
-  "robotName": "TestAssembly2026",
+  "robotName": "auto",
   "outputDir": "C:/Game Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots",
   "sidecarPath": "./sidecar.json",
   "materialMapPath": "./material_map.json",
@@ -32,5 +32,7 @@
   "meshQuality": "normal",
   "meshExclude": ["*Screw*", "*Nut*", "*Rivet*", "*Washer*"],
   "hiddenProxyAction": "prompt",
+
+ 
   "floatSignificantDigits": 9
 }

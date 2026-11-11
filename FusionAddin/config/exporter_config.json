@@ -1,6 +1,6 @@
 {
   "configVersion": "1.0.0",
-  "robotName": "TestAssembly2026",
+  "robotName": "auto",
   "outputDir": "C:/Game Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots",
   "sidecarPath": "./sidecar.json",
   "materialMapPath": "./material_map.json",
@@ -11,7 +11,12 @@
   "includeHidden": false,
   "foldJoints": ["fl_*", "fr_*", "bl_*", "br_*"],
   "detachedVisualJoints": ["shooter_flywheel_axle"],
-  "keepSeparate": [],
+  "keepSeparate": [
+    [
+      "Intake:1+Wheels:1+Top:1+2in Hard Grip Wheel 1/2\" Hex:1",
+      "Bottom Basket:1+Shafts:1+1/2\" Hex Shaft 36\" length v2:7"
+    ]
+  ],
   "noCollider": ["shooter_flywheel_visual"],
   "linkNames": {
     "Wrist Assembly:1": "arm_wrist_link"
@@ -34,3 +39,4 @@
   "hiddenProxyAction": "prompt",
   "floatSignificantDigits": 9
 }
+

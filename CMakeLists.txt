@@ -52,6 +52,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/Schema/RobotManifest.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSidecar.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotSidecarSerializer.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/ElevatorSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/CompositeMassSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp
@@ -121,7 +122,49 @@ target_link_libraries(FRCBananaSim PRIVATE
     ws2_32
 )
 
-# Target 2: Headless CTest Executable
+# Target 2: Sidecar Configurator GUI Executable
+set(CONFIGURATOR_SOURCES
+    FRCBananaSim/Source/Tools/Configurator/ConfiguratorState.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/CADHierarchyPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/CADViewportPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/InspectorPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/SwervePanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/MechanismPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/CouplingsPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/SensorPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/MassReconciliationPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/LinterPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/SidecarConfiguratorApplication.cpp
+    FRCBananaSim/Source/Robot/Schema/MaterialLibrary.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotManifest.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotSidecar.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotSidecarSerializer.cpp
+    External/glad/src/glad.c
+    External/imgui/include/imgui/imgui.cpp
+    External/imgui/include/imgui/imgui_demo.cpp
+    External/imgui/include/imgui/imgui_draw.cpp
+    External/imgui/include/imgui/imgui_tables.cpp
+    External/imgui/include/imgui/imgui_widgets.cpp
+    External/imgui/include/imgui/backend/imgui_impl_glfw.cpp
+    External/imgui/include/imgui/backend/imgui_impl_opengl3.cpp
+)
+
+add_executable(SidecarConfigurator ${CONFIGURATOR_SOURCES})
+
+target_link_directories(SidecarConfigurator PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/glfw/bin/$<CONFIG>
+)
+
+target_link_libraries(SidecarConfigurator PRIVATE
+    glfw3
+    opengl32
+    gdi32
+    shell32
+    ole32
+)
+
+# Target 3: Headless CTest Executable
 enable_testing()
 
 set(TEST_SOURCES
@@ -142,6 +185,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/Schema/RobotManifest.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSidecar.cpp
     FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp
+    FRCBananaSim/Source/Robot/Schema/RobotSidecarSerializer.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/ElevatorSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/CompositeMassSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp
@@ -192,6 +236,10 @@ set(TEST_SOURCES
     Tests/Robot/RobotAssemblerTest.cpp
     Tests/Integration/FullRobotEnduranceTest.cpp
     Tests/Robot/ServoMechanismTest.cpp
+    FRCBananaSim/Source/Tools/Configurator/ConfiguratorState.cpp
+    Tests/Robot/SchemaSerializationTest.cpp
+    Tests/Robot/ConfiguratorTest.cpp
+    Tests/RoundTripPipelineTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})
@@ -229,4 +277,7 @@ add_test(NAME SimDeviceLockstepTest COMMAND FRCBananaSim_Tests --simdevice-locks
 add_test(NAME RobotAssemblerTest COMMAND FRCBananaSim_Tests --robot-assembler)
 add_test(NAME FullRobotEnduranceTest COMMAND FRCBananaSim_Tests --full-robot-endurance)
 add_test(NAME ServoMechanismTest COMMAND FRCBananaSim_Tests --servo-mechanism)
+add_test(NAME SchemaSerializationTest COMMAND FRCBananaSim_Tests --schema-serialization)
+add_test(NAME ConfiguratorTest COMMAND FRCBananaSim_Tests --configurator)
+add_test(NAME RoundTripPipelineTest COMMAND FRCBananaSim_Tests --round-trip)
 add_test(NAME AllTests COMMAND FRCBananaSim_Tests)

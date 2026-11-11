@@ -249,7 +249,7 @@
       "name": "shoulder_cancoder",
       "type": "cancoder",
       "bus": "canivore",
-      "canId": 12,
+      "canId": 25,
       "targetJoint": "arm_shoulder_hinge",
       "sensorToMechanismRatio": 1.0,
       "cpr": 4096,

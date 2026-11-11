@@ -19,11 +19,18 @@ from banana_core.frames import FrameConverter
 from writers.glb_writer import write_glb
 
 try:
+    import adsk
     import adsk.core
     import adsk.fusion
     IN_FUSION = True
 except ImportError:
     IN_FUSION = False
+
+try:
+    from .zero_pose import ExportAborted
+except ImportError:
+    class ExportAborted(Exception):
+        pass
 
 
 def export_link_meshes(
@@ -59,17 +66,37 @@ def export_link_meshes(
     selected_quality = quality_map.get(mesh_quality_str, adsk.fusion.TriangleMeshQualityOptions.NormalQualityTriangleMesh)
 
     total_robot_triangles = 0
+    total_links = len(links_data)
 
-    for link_entry in links_data:
+    for link_idx, link_entry in enumerate(links_data):
         lname = link_entry["name"]
         p_L = link_frame_origins.get(lname, (0.0, 0.0, 0.0))
         bodies = link_structural_bodies.get(lname, [])
+
+        if progress_dialog:
+            if getattr(progress_dialog, "wasCancelled", False):
+                raise ExportAborted("Export cancelled by user during mesh generation.")
+            progress_dialog.progressValue = 60 + int(34 * (link_idx / max(total_links, 1)))
+            progress_dialog.message = f"Tessellating 3D mesh ({link_idx + 1}/{total_links}): '{lname}'..."
+            if IN_FUSION:
+                try:
+                    adsk.doEvents()
+                except Exception:
+                    pass
 
         link_vertices: List[Tuple[float, float, float]] = []
         link_normals: List[Tuple[float, float, float]] = []
         link_indices: List[int] = []
 
-        for b in bodies:
+        for b_idx, b in enumerate(bodies):
+            if progress_dialog and b_idx % 4 == 0:
+                if getattr(progress_dialog, "wasCancelled", False):
+                    raise ExportAborted("Export cancelled by user during mesh generation.")
+                if IN_FUSION:
+                    try:
+                        adsk.doEvents()
+                    except Exception:
+                        pass
             fusion_body = getattr(b, "fusion_body", None)
             if not fusion_body:
                 continue
@@ -137,6 +164,12 @@ def export_link_meshes(
         tris = write_glb(link_vertices, link_normals, link_indices, glb_path, mesh_name=lname)
         mesh_counts[lname] = tris
         total_robot_triangles += tris
+
+        if progress_dialog and IN_FUSION:
+            try:
+                adsk.doEvents()
+            except Exception:
+                pass
 
         if tris > 150000:
             collector.warn("W280", f"Link '{lname}' triangle budget exceeded ({tris:,} > 150,000 triangles).", target=lname)

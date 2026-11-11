@@ -21,11 +21,18 @@ from banana_core.graph import RawJoint, RawOccurrence, sanitize_name, sanitize_i
 from banana_core.inertia import detect_product_sign, flip_products
 
 try:
+    import adsk
     import adsk.core
     import adsk.fusion
     IN_FUSION = True
 except ImportError:
     IN_FUSION = False
+
+try:
+    from .zero_pose import ExportAborted
+except ImportError:
+    class ExportAborted(Exception):
+        pass
 
 Tensor6 = Tuple[float, float, float, float, float, float]  # ixx, iyy, izz, ixy, ixz, iyz
 
@@ -648,6 +655,17 @@ def read_assembly(
     def traverse(occs, parent_name: Optional[str]):
         nonlocal grounded_seen
         for occ in _safe_iter(occs):
+            if progress_dialog:
+                if getattr(progress_dialog, "wasCancelled", False):
+                    raise ExportAborted("Export cancelled by user.")
+                if len(raw_occurrences) % 20 == 0:
+                    progress_dialog.message = f"Scanning CAD hierarchy: {len(raw_occurrences)} components found..."
+                    if IN_FUSION:
+                        try:
+                            adsk.doEvents()
+                        except Exception:
+                            pass
+
             if getattr(occ, "isSuppressed", False):
                 continue
             if not _is_occ_visible(occ, include_hidden=include_hidden):
@@ -703,6 +721,17 @@ def read_assembly(
         )
 
     # 3. Joints (assembly-context proxies per occurrence, §4)
+    if progress_dialog:
+        if getattr(progress_dialog, "wasCancelled", False):
+            raise ExportAborted("Export cancelled by user.")
+        progress_dialog.progressValue = 28
+        progress_dialog.message = "Reading joints, as-built joints, and rigid groups..."
+        if IN_FUSION:
+            try:
+                adsk.doEvents()
+            except Exception:
+                pass
+
     extracted_joints: List[RawJoint] = []
     seen_joint_tokens: Set[str] = set()
     seen_joint_signatures: Set[Tuple[str, str, str, float, float, float]] = set()
@@ -902,6 +931,17 @@ def read_assembly(
             collector.warn("W290", f"Skipped a joint that could not be read: {e}")
 
     # 4. Motion links helper (§6.9, couplings)
+    if progress_dialog:
+        if getattr(progress_dialog, "wasCancelled", False):
+            raise ExportAborted("Export cancelled by user.")
+        progress_dialog.progressValue = 36
+        progress_dialog.message = "Scanning motion links and couplings..."
+        if IN_FUSION:
+            try:
+                adsk.doEvents()
+            except Exception:
+                pass
+
     extracted_motion_links: List[ExtractedMotionLink] = []
     seen_ml_tokens: set = set()
     seen_ml_signatures: set = set()
@@ -1201,6 +1241,17 @@ def read_assembly(
             process_rigid_group(rg)
 
     # 5. Whole-design reference properties (Gate 4)
+    if progress_dialog:
+        if getattr(progress_dialog, "wasCancelled", False):
+            raise ExportAborted("Export cancelled by user.")
+        progress_dialog.progressValue = 40
+        progress_dialog.message = "Computing whole-design reference properties..."
+        if IN_FUSION:
+            try:
+                adsk.doEvents()
+            except Exception:
+                pass
+
     whole_mass = 0.0
     whole_com = (0.0, 0.0, 0.0)
     whole_inertia: Tuple[float, ...] = (0.0,) * 6

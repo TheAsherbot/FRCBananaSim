@@ -1,6 +1,6 @@
 /**
  * @file PhysicsSystem.cpp
- * @brief Implementation of the Jolt-backed physics simulation system with inertia tensor overrides.
+ * @brief Implementation of the Jolt-backed physics simulation system with compound colliders, decoupled CoM, and inertia overrides.
  */
 
 #include "Physics/Systems/PhysicsSystem.h"
@@ -19,11 +19,39 @@
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
+#include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
 
 namespace FRCBananaSim::Physics::Systems
 {
     using namespace Components;
     using Core::ECS::Components::TransformComponent;
+
+    namespace
+    {
+        /**
+         * @brief Helper to allocate a primitive Jolt shape settings object.
+         */
+        JPH::RefConst<JPH::ShapeSettings> CreatePrimitiveShapeSettings(
+            ColliderShape shape,
+            const glm::vec3& boxHalfExtents,
+            float radius,
+            float halfHeight)
+        {
+            switch (shape)
+            {
+            case ColliderShape::Box:
+                return new JPH::BoxShapeSettings(JPH::Vec3(boxHalfExtents.x, boxHalfExtents.y, boxHalfExtents.z));
+            case ColliderShape::Sphere:
+                return new JPH::SphereShapeSettings(radius);
+            case ColliderShape::Cylinder:
+                return new JPH::CylinderShapeSettings(halfHeight, radius);
+            case ColliderShape::Capsule:
+                return new JPH::CapsuleShapeSettings(halfHeight, radius);
+            }
+            return new JPH::BoxShapeSettings(JPH::Vec3(boxHalfExtents.x, boxHalfExtents.y, boxHalfExtents.z));
+        }
+    }
 
     PhysicsSystem::PhysicsSystem(Core::ECS::Core::Scene& scene, JoltContext& context)
         : ISystem(scene),
@@ -73,16 +101,16 @@ namespace FRCBananaSim::Physics::Systems
             return;
         }
 
-        // 1. Instantiate any newly added bodies
+        // 1. Instantiate physics bodies for any newly added RigidBody components
         CreatePendingBodies();
 
-        // 2. Synchronize kinematic transforms from ECS into Jolt
+        // 2. Push transforms from ECS into Jolt kinematic bodies
         PushKinematicTransforms();
 
-        // 3. Step physics simulation
+        // 3. Step the physical world
         joltContext.Step(static_cast<float>(dt));
 
-        // 4. Pull dynamic transforms and velocities back into ECS
+        // 4. Synchronize simulated poses back to ECS transforms
         PullSimulatedTransforms();
     }
 
@@ -126,55 +154,60 @@ namespace FRCBananaSim::Physics::Systems
 
             if (collider)
             {
-                switch (collider->shape)
+                if (collider->IsCompound())
                 {
-                case ColliderShape::Box:
-                {
-                    JPH::BoxShapeSettings shapeSettings(JPH::Vec3(
-                        collider->boxHalfExtents.x,
-                        collider->boxHalfExtents.y,
-                        collider->boxHalfExtents.z
-                    ));
-                    auto result = shapeSettings.Create();
-                    if (result.IsValid())
-                    {
-                        shape = result.Get();
-                    }
-                    break;
-                }
+                    JPH::Ref<JPH::StaticCompoundShapeSettings> compoundSettings = new JPH::StaticCompoundShapeSettings();
 
-                case ColliderShape::Sphere:
-                {
-                    JPH::SphereShapeSettings shapeSettings(collider->radius);
-                    auto result = shapeSettings.Create();
-                    if (result.IsValid())
-                    {
-                        shape = result.Get();
-                    }
-                    break;
-                }
+                    auto primarySettings = CreatePrimitiveShapeSettings(
+                        collider->shape, collider->boxHalfExtents, collider->radius, collider->halfHeight);
+                    compoundSettings->AddShape(
+                        JPH::Vec3(collider->localOffset.x, collider->localOffset.y, collider->localOffset.z),
+                        JPH::Quat(collider->localRotation.x, collider->localRotation.y, collider->localRotation.z, collider->localRotation.w),
+                        primarySettings);
 
-                case ColliderShape::Cylinder:
-                {
-                    JPH::CylinderShapeSettings shapeSettings(collider->halfHeight, collider->radius);
-                    auto result = shapeSettings.Create();
-                    if (result.IsValid())
+                    for (const auto& sub : collider->subColliders)
                     {
-                        shape = result.Get();
+                        auto subSettings = CreatePrimitiveShapeSettings(
+                            sub.shape, sub.boxHalfExtents, sub.radius, sub.halfHeight);
+                        compoundSettings->AddShape(
+                            JPH::Vec3(sub.localOffset.x, sub.localOffset.y, sub.localOffset.z),
+                            JPH::Quat(sub.localRotation.x, sub.localRotation.y, sub.localRotation.z, sub.localRotation.w),
+                            subSettings);
                     }
-                    break;
-                }
 
-                case ColliderShape::Capsule:
-                {
-                    JPH::CapsuleShapeSettings shapeSettings(collider->halfHeight, collider->radius);
-                    auto result = shapeSettings.Create();
+                    auto result = compoundSettings->Create();
                     if (result.IsValid())
                     {
                         shape = result.Get();
                     }
-                    break;
                 }
+                else if (rigidBody->hasCustomCenterOfMass)
+                {
+                    // Single shape with custom CoM: wrap with compound shape so localOffset/localRotation is anchored to link frame
+                    JPH::Ref<JPH::StaticCompoundShapeSettings> compoundSettings = new JPH::StaticCompoundShapeSettings();
+                    auto primarySettings = CreatePrimitiveShapeSettings(
+                        collider->shape, collider->boxHalfExtents, collider->radius, collider->halfHeight);
+                    compoundSettings->AddShape(
+                        JPH::Vec3(collider->localOffset.x, collider->localOffset.y, collider->localOffset.z),
+                        JPH::Quat(collider->localRotation.x, collider->localRotation.y, collider->localRotation.z, collider->localRotation.w),
+                        primarySettings);
+
+                    auto result = compoundSettings->Create();
+                    if (result.IsValid())
+                    {
+                        shape = result.Get();
+                    }
+                }
+                else
+                {
+                    // Legacy single shape without custom CoM
+                    auto shapeSettings = CreatePrimitiveShapeSettings(
+                        collider->shape, collider->boxHalfExtents, collider->radius, collider->halfHeight);
+                    auto result = shapeSettings->Create();
+                    if (result.IsValid())
+                    {
+                        shape = result.Get();
+                    }
                 }
             }
             else
@@ -198,6 +231,28 @@ namespace FRCBananaSim::Physics::Systems
                 continue;
             }
 
+            // Apply Decoupled Center of Mass if specified
+            if (rigidBody->hasCustomCenterOfMass)
+            {
+                JPH::Vec3 targetCOM(
+                    rigidBody->centerOfMassOffset.x,
+                    rigidBody->centerOfMassOffset.y,
+                    rigidBody->centerOfMassOffset.z
+                );
+                JPH::Vec3 currentCOM = shape->GetCenterOfMass();
+                JPH::Vec3 comShift = targetCOM - currentCOM;
+                JPH::OffsetCenterOfMassShapeSettings comSettings(comShift, shape);
+                auto comResult = comSettings.Create();
+                if (comResult.IsValid())
+                {
+                    shape = comResult.Get();
+                }
+                else
+                {
+                    SIM_LOG_ERROR("Failed to offset center of mass for Entity " << entity);
+                }
+            }
+
             // Map motion type
             JPH::EMotionType motionType = JPH::EMotionType::Dynamic;
             switch (rigidBody->motionType)
@@ -218,10 +273,12 @@ namespace FRCBananaSim::Physics::Systems
                 layer = ObjectLayers::NonMoving;
             }
 
-            // Determine spawn position including optional collider local offset
+            // Determine spawn position:
+            // For legacy non-compound bodies without custom CoM, apply local offset to spawn transform.
+            // For compound or custom CoM bodies, the body origin aligns directly with entity transform.
             glm::vec3 spawnPos = transform->position;
             glm::quat spawnRot = transform->rotation;
-            if (collider)
+            if (collider && !collider->IsCompound() && !rigidBody->hasCustomCenterOfMass)
             {
                 spawnPos += spawnRot * collider->localOffset;
                 spawnRot = spawnRot * collider->localRotation;
@@ -316,7 +373,7 @@ namespace FRCBananaSim::Physics::Systems
 
             glm::vec3 pos = transform->position;
             glm::quat rot = transform->rotation;
-            if (collider)
+            if (collider && !collider->IsCompound() && !rigidBody->hasCustomCenterOfMass)
             {
                 pos += rot * collider->localOffset;
                 rot = rot * collider->localRotation;
@@ -366,8 +423,8 @@ namespace FRCBananaSim::Physics::Systems
                 joltRot.GetZ()
             );
 
-            // Invert collider local offset if present
-            if (collider)
+            // Invert collider local offset if present on legacy non-compound body without custom CoM
+            if (collider && !collider->IsCompound() && !rigidBody->hasCustomCenterOfMass)
             {
                 worldRot = worldRot * glm::inverse(collider->localRotation);
                 worldPos -= worldRot * collider->localOffset;

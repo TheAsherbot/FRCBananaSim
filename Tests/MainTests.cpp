@@ -23,6 +23,9 @@
 #include "Integration/FullRobotEnduranceTest.h"
 #include "Robot/DifferentialMechanismTest.h"
 #include "Robot/ServoMechanismTest.h"
+#include "Robot/SchemaSerializationTest.h"
+#include "Robot/ConfiguratorTest.h"
+#include "RoundTripPipelineTest.h"
 
 #include <iostream>
 #include <string>
@@ -47,6 +50,9 @@ using FRCBananaSim::Tests::RunRobotAssemblerTest;
 using FRCBananaSim::Tests::RunFullRobotEnduranceTest;
 using FRCBananaSim::Tests::RunDifferentialMechanismTest;
 using FRCBananaSim::Tests::RunServoMechanismTest;
+using FRCBananaSim::Tests::RunSchemaSerializationTest;
+using FRCBananaSim::Tests::RunConfiguratorTest;
+using FRCBananaSim::Tests::RunRoundTripPipelineTest;
 
 int main(int argc, char* argv[])
 {
@@ -155,6 +161,22 @@ int main(int argc, char* argv[])
             runAll = false;
             RunServoMechanismTest(ctx);
         }
+        else if (arg == "--schema-serialization")
+        {
+            runAll = false;
+            RunSchemaSerializationTest(ctx);
+        }
+        else if (arg == "--configurator")
+        {
+            runAll = false;
+            RunConfiguratorTest(ctx);
+        }
+        else if (arg == "--round-trip")
+        {
+            runAll = false;
+            RunRoundTripPipelineTest(ctx);
+        }
+
     }
 
     if (runAll)
@@ -178,6 +200,9 @@ int main(int argc, char* argv[])
         RunFullRobotEnduranceTest(ctx);
         RunDifferentialMechanismTest(ctx);
         RunServoMechanismTest(ctx);
+        RunSchemaSerializationTest(ctx);
+        RunConfiguratorTest(ctx);
+        RunRoundTripPipelineTest(ctx);
     }
 
     std::cout << "======================================\n";

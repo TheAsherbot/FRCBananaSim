@@ -49,6 +49,33 @@ namespace FRCBananaSim::Robot::Schema
     };
 
     /**
+     * @struct CustomMotorSpec
+     * @brief Parametric electromechanical parameters for custom non-catalog DC motors.
+     */
+    struct CustomMotorSpec
+    {
+        double nominalVoltageV = 12.0;
+        double stallTorqueNm = 5.0;
+        double freeSpeedRpm = 6000.0;
+        double stallCurrentA = 250.0;
+        double freeCurrentA = 2.0;
+    };
+
+    /**
+     * @struct CustomServoSpec
+     * @brief Parametric electromechanical parameters for custom non-catalog PWM servos.
+     */
+    struct CustomServoSpec
+    {
+        double nominalVoltageV = 6.0;
+        double stallTorqueKgCm = 20.0;
+        double speedSecPer60Deg = 0.10;
+        double stallCurrentA = 2.5;
+        double freeCurrentA = 0.15;
+        double travelRangeDeg = 300.0;
+    };
+
+    /**
      * @struct SwerveConfig
      * @brief Drivetrain chassis link, swerve module layout, and actuator configurations.
      */
@@ -61,6 +88,10 @@ namespace FRCBananaSim::Robot::Schema
         std::string steerMotorPreset = "KrakenX44";
         std::string driveServoPreset = "GoBildaSpeed";
         std::string steerServoPreset = "GoBildaTorque";
+        CustomMotorSpec customDriveMotor;
+        CustomMotorSpec customSteerMotor;
+        CustomServoSpec customDriveServo;
+        CustomServoSpec customSteerServo;
         double driveGearRatio = 5.27;
         double steerGearRatio = 26.0909;
         double driveEfficiency = 0.96;
@@ -121,9 +152,15 @@ namespace FRCBananaSim::Robot::Schema
         std::vector<std::vector<double>> couplingMatrix; ///< 2x2 matrix for custom_matrix.
         std::vector<double> coulombFrictions;  ///< [frictionJointA, frictionJointB].
         std::vector<double> viscousDampings;   ///< [dampingJointA, dampingJointB].
+        std::vector<std::string> motorPresets; ///< For differential: [motorPresetA, motorPresetB].
+        std::vector<CustomMotorSpec> customMotors; ///< For differential: [customMotorA, customMotorB].
+        std::vector<CustomServoSpec> customServos; ///< For differential: [customServoA, customServoB].
+        std::vector<std::string> actuatorTypes;    ///< For differential: [actuatorTypeA, actuatorTypeB].
+        std::vector<double> statorCurrentLimits;   ///< For differential: [statorLimitA, statorLimitB].
+        std::vector<double> supplyCurrentLimits;   ///< For differential: [supplyLimitA, supplyLimitB].
 
         std::string name;
-        std::string role; ///< "elevator", "arm", "wrist", "four_bar", "flywheel", "intake", "differential"
+        std::string role; ///< "elevator", "arm", "wrist", "turret", "four_bar", "flywheel", "intake", "differential"
         std::string actuatorType = "motor"; ///< "motor" (CAN motor) or "servo" (PWM servo)
         ServoConfig servo;                  ///< Primary servo configuration (for arm, elevator, wrist)
         std::vector<ServoConfig> servos;    ///< Multiple servo configs (for differential mechanisms)
@@ -137,10 +174,13 @@ namespace FRCBananaSim::Robot::Schema
         double flywheelInertiaKgm2 = 0.0;    ///< Flywheel rotor mass moment of inertia (flywheels)
         glm::dvec3 spinAxis = { 0.0, 1.0, 0.0 }; ///< Local spin axis (flywheels)
         std::string visualLink;              ///< Visual mesh entity name to rotate with flywheel
+        glm::dvec3 mountOffsetM = { 0.0, 0.0, 0.0 }; ///< Mount translation offset relative to joint/parent (flywheels/intakes)
         double statorCurrentLimitA = 60.0;
         double supplyCurrentLimitA = 40.0;
         double coulombFriction = 0.0;
         double viscousDamping = 0.0;
+        CustomMotorSpec customMotor;
+        CustomServoSpec customServo;
         SpringAssistConfig springAssist;
         std::vector<ControllerConfig> controllers;
     };
@@ -239,6 +279,29 @@ namespace FRCBananaSim::Robot::Schema
     };
 
     /**
+     * @struct UnmodeledBallastConfig
+     * @brief Point-mass inertial ballast offset applied to a target link without a physical collision shape.
+     */
+    struct UnmodeledBallastConfig
+    {
+        std::string targetLink = "base_link";
+        double massKg = 0.0;
+        glm::dvec3 offsetM = { 0.0, 0.0, 0.0 };
+    };
+
+    /**
+     * @struct MassReconciliationConfig
+     * @brief Non-destructive physical bench scale adjustments and unmodeled ballast calibration.
+     */
+    struct MassReconciliationConfig
+    {
+        bool enabled = false;
+        double linkMassMultiplier = 1.0;
+        UnmodeledBallastConfig unmodeledBallast;
+        std::unordered_map<std::string, double> linkMassOverrides; ///< Per-link mass override in kg
+    };
+
+    /**
      * @struct RobotSidecar
      * @brief Complete parsed sidecar.json electromechanical and sensor specification.
      */
@@ -251,6 +314,7 @@ namespace FRCBananaSim::Robot::Schema
         std::vector<MechanismConfig> mechanisms;
         std::vector<CouplingConfig> couplings;
         std::vector<SensorConfig> sensors;
+        MassReconciliationConfig massReconciliation;
 
         /**
          * @brief Looks up a mechanism configuration by name.
@@ -258,6 +322,7 @@ namespace FRCBananaSim::Robot::Schema
          * @return Pointer to mechanism config, or nullptr if not found.
          */
         const MechanismConfig* FindMechanism(const std::string& mechanismName) const;
+        MechanismConfig* FindMechanism(const std::string& mechanismName);
 
         /**
          * @brief Looks up a sensor configuration by name.
@@ -265,6 +330,7 @@ namespace FRCBananaSim::Robot::Schema
          * @return Pointer to sensor config, or nullptr if not found.
          */
         const SensorConfig* FindSensor(const std::string& sensorName) const;
+        SensorConfig* FindSensor(const std::string& sensorName);
 
         /**
          * @brief Looks up a joint coupling by name.
@@ -272,5 +338,6 @@ namespace FRCBananaSim::Robot::Schema
          * @return Pointer to coupling config, or nullptr if not found.
          */
         const CouplingConfig* FindCoupling(const std::string& couplingName) const;
+        CouplingConfig* FindCoupling(const std::string& couplingName);
     };
 }

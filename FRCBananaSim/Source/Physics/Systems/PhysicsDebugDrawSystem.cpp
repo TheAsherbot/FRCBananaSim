@@ -1,6 +1,6 @@
 /**
  * @file PhysicsDebugDrawSystem.cpp
- * @brief Implementation of oriented wireframe visualization for collision shapes.
+ * @brief Implementation of oriented wireframe visualization for collision shapes and compound colliders.
  */
 
 #include "PhysicsDebugDrawSystem.h"
@@ -61,59 +61,88 @@ namespace FRCBananaSim::Physics::Systems
                 }
             }
 
-            // Calculate world-space center and orientation for the collider
-            glm::vec3 center = transform->position + transform->rotation * collider->localOffset;
-            glm::quat orientation = transform->rotation * collider->localRotation;
-
-            switch (collider->shape)
+            auto drawPrimitive = [&](ColliderShape shape,
+                                     const glm::vec3& extents,
+                                     float radius,
+                                     float halfHeight,
+                                     const glm::vec3& localOffset,
+                                     const glm::quat& localRotation)
             {
-            case ColliderShape::Box:
+                glm::vec3 center = transform->position + transform->rotation * localOffset;
+                glm::quat orientation = transform->rotation * localRotation;
+
+                switch (shape)
+                {
+                case ColliderShape::Box:
+                {
+                    // Draw oriented bounding box (OBB) 12 edges
+                    glm::vec3 corners[8] = {
+                        center + orientation * glm::vec3(-extents.x, -extents.y, -extents.z),
+                        center + orientation * glm::vec3(extents.x, -extents.y, -extents.z),
+                        center + orientation * glm::vec3(extents.x,  extents.y, -extents.z),
+                        center + orientation * glm::vec3(-extents.x,  extents.y, -extents.z),
+                        center + orientation * glm::vec3(-extents.x, -extents.y,  extents.z),
+                        center + orientation * glm::vec3(extents.x, -extents.y,  extents.z),
+                        center + orientation * glm::vec3(extents.x,  extents.y,  extents.z),
+                        center + orientation * glm::vec3(-extents.x,  extents.y,  extents.z)
+                    };
+
+                    // Bottom loop
+                    DebugDraw::Line(corners[0], corners[1], color);
+                    DebugDraw::Line(corners[1], corners[2], color);
+                    DebugDraw::Line(corners[2], corners[3], color);
+                    DebugDraw::Line(corners[3], corners[0], color);
+
+                    // Top loop
+                    DebugDraw::Line(corners[4], corners[5], color);
+                    DebugDraw::Line(corners[5], corners[6], color);
+                    DebugDraw::Line(corners[6], corners[7], color);
+                    DebugDraw::Line(corners[7], corners[4], color);
+
+                    // Vertical pillars
+                    DebugDraw::Line(corners[0], corners[4], color);
+                    DebugDraw::Line(corners[1], corners[5], color);
+                    DebugDraw::Line(corners[2], corners[6], color);
+                    DebugDraw::Line(corners[3], corners[7], color);
+                    break;
+                }
+
+                case ColliderShape::Sphere:
+                {
+                    DebugDraw::Sphere(center, radius, color, 16, true);
+                    break;
+                }
+
+                case ColliderShape::Cylinder:
+                case ColliderShape::Capsule:
+                {
+                    DebugDraw::Cylinder(center, radius, halfHeight, color, 16, true);
+                    break;
+                }
+                }
+            };
+
+            // Draw primary shape
+            drawPrimitive(
+                collider->shape,
+                collider->boxHalfExtents,
+                collider->radius,
+                collider->halfHeight,
+                collider->localOffset,
+                collider->localRotation
+            );
+
+            // Draw compound sub-colliders if present
+            for (const auto& sub : collider->subColliders)
             {
-                // Draw oriented bounding box (OBB) 12 edges
-                const glm::vec3& ext = collider->boxHalfExtents;
-                glm::vec3 corners[8] = {
-                    center + orientation * glm::vec3(-ext.x, -ext.y, -ext.z),
-                    center + orientation * glm::vec3(ext.x, -ext.y, -ext.z),
-                    center + orientation * glm::vec3(ext.x,  ext.y, -ext.z),
-                    center + orientation * glm::vec3(-ext.x,  ext.y, -ext.z),
-                    center + orientation * glm::vec3(-ext.x, -ext.y,  ext.z),
-                    center + orientation * glm::vec3(ext.x, -ext.y,  ext.z),
-                    center + orientation * glm::vec3(ext.x,  ext.y,  ext.z),
-                    center + orientation * glm::vec3(-ext.x,  ext.y,  ext.z)
-                };
-
-                // Bottom loop
-                DebugDraw::Line(corners[0], corners[1], color);
-                DebugDraw::Line(corners[1], corners[2], color);
-                DebugDraw::Line(corners[2], corners[3], color);
-                DebugDraw::Line(corners[3], corners[0], color);
-
-                // Top loop
-                DebugDraw::Line(corners[4], corners[5], color);
-                DebugDraw::Line(corners[5], corners[6], color);
-                DebugDraw::Line(corners[6], corners[7], color);
-                DebugDraw::Line(corners[7], corners[4], color);
-
-                // Vertical pillars
-                DebugDraw::Line(corners[0], corners[4], color);
-                DebugDraw::Line(corners[1], corners[5], color);
-                DebugDraw::Line(corners[2], corners[6], color);
-                DebugDraw::Line(corners[3], corners[7], color);
-                break;
-            }
-
-            case ColliderShape::Sphere:
-            {
-                DebugDraw::Sphere(center, collider->radius, color, 16, true);
-                break;
-            }
-
-            case ColliderShape::Cylinder:
-            case ColliderShape::Capsule:
-            {
-                DebugDraw::Cylinder(center, collider->radius, collider->halfHeight, color, 16, true);
-                break;
-            }
+                drawPrimitive(
+                    sub.shape,
+                    sub.boxHalfExtents,
+                    sub.radius,
+                    sub.halfHeight,
+                    sub.localOffset,
+                    sub.localRotation
+                );
             }
         }
     }

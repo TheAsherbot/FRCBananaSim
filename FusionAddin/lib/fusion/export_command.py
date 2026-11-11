@@ -30,6 +30,7 @@ from .fusion_reader import read_assembly
 from .mesh_reader import export_link_meshes
 
 try:
+    import adsk
     import adsk.core
     import adsk.fusion
     IN_FUSION = True
@@ -40,6 +41,100 @@ except ImportError:
 def _load_json(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def get_cad_robot_name(app: Any, design: Any, config: Dict[str, Any]) -> str:
+    """
+    Determines the robot name and output folder name.
+
+    Priority:
+    1. If config specifies an explicit custom robotName (other than 'auto', 'cad_name', or empty), use that.
+    2. Otherwise, extract the clean name from the active Fusion 360 CAD document/design:
+       - Root component name in browser tree (e.g. 'TestAssembly2026')
+       - Active document name (e.g. 'TestAssembly2026 v4' -> 'TestAssembly2026')
+    3. Fallback: 'Robot' if no CAD name is available.
+    """
+    cfg_name = config.get("robotName", "auto")
+    if cfg_name and str(cfg_name).strip().lower() not in ("auto", "cad_name", ""):
+        return str(cfg_name).strip()
+
+    candidate = ""
+    # Try design rootComponent name first (typically the unversioned assembly name)
+    try:
+        if design and hasattr(design, "rootComponent") and design.rootComponent and design.rootComponent.name:
+            candidate = design.rootComponent.name.strip()
+    except Exception:
+        pass
+
+    # Try active document name
+    if not candidate:
+        try:
+            if app and hasattr(app, "activeDocument") and app.activeDocument and app.activeDocument.name:
+                candidate = app.activeDocument.name.strip()
+        except Exception:
+            pass
+
+    # Try parent document of design
+    if not candidate:
+        try:
+            if design and hasattr(design, "parentDocument") and design.parentDocument and design.parentDocument.name:
+                candidate = design.parentDocument.name.strip()
+        except Exception:
+            pass
+
+    if candidate:
+        import re
+        # Strip Fusion version suffix (e.g. ' v1', ' v12')
+        cleaned = re.sub(r"\s+v\d+$", "", candidate, flags=re.IGNORECASE).strip()
+        # Clean filesystem-invalid characters: < > : " / \ | ? *
+        cleaned = re.sub(r'[<>:"/\\|?*]', '_', cleaned)
+        cleaned = cleaned.strip(". ")
+        if cleaned:
+            return cleaned
+
+    return "Robot"
+
+
+def resolve_sidecar(config: Dict[str, Any], config_dir: str, output_dir: str):
+    """
+    Locates and loads the sidecar configuration to use for export cross-checking.
+
+    Priority:
+    1. Output location (output_dir/sidecar.json): If an existing sidecar is already present
+       in the robot's output folder, preserve and use it (the user's active configuration).
+    2. Configured sidecarPath (if explicitly set and pointing to an existing file).
+    3. Template sidecar.json in config_dir (fallback for brand new robot exports).
+    """
+    output_sidecar = os.path.join(output_dir, "sidecar.json")
+    sidecar_cfg = config.get("sidecarPath", "./sidecar.json")
+
+    candidates = []
+    # 1. Output directory has highest priority (preserves user's configured robot sidecar)
+    if os.path.exists(output_sidecar):
+        candidates.append(output_sidecar)
+
+    # 2. Configured sidecarPath (absolute or relative to config_dir)
+    if sidecar_cfg:
+        cfg_cand = sidecar_cfg if os.path.isabs(sidecar_cfg) else os.path.join(config_dir, sidecar_cfg)
+        if cfg_cand not in candidates and os.path.exists(cfg_cand):
+            candidates.append(cfg_cand)
+
+    # 3. Fallback template in config_dir
+    template_cand = os.path.join(config_dir, "sidecar.json")
+    if template_cand not in candidates and os.path.exists(template_cand):
+        candidates.append(template_cand)
+
+    sidecar_path = None
+    sidecar_data = None
+    for cand in candidates:
+        try:
+            sidecar_data = _load_json(cand)
+            sidecar_path = cand
+            break
+        except Exception:
+            continue
+
+    return sidecar_path, sidecar_data
 
 
 def run_export_dialog(app: Any, ui: Any):
@@ -79,29 +174,70 @@ def run_export_dialog(app: Any, ui: Any):
         except Exception:
             pass
 
-    # 3. Output directory
-    robot_name = config.get("robotName", "TestAssembly2026")
+    # 3. Output directory & robot name
+    robot_name = get_cad_robot_name(app, design, config)
+    config["robotName"] = robot_name  # Ensure manifest_builder and reports use the resolved CAD name
     base_output_dir = config.get("outputDir", "C:/Game Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots")
     output_dir = os.path.join(base_output_dir, robot_name)
     os.makedirs(output_dir, exist_ok=True)
 
-    # 4. Sidecar (optional input; copied byte-for-byte, never rewritten)
-    sidecar_cfg = config.get("sidecarPath", "./sidecar.json")
-    candidates = [
-        sidecar_cfg if os.path.isabs(sidecar_cfg) else os.path.join(config_dir, sidecar_cfg),
-        os.path.join(output_dir, "sidecar.json"),
-        os.path.join(config_dir, "sidecar.json"),
-    ]
-    sidecar_path = None
-    sidecar_data = None
-    for cand in candidates:
-        if cand and os.path.exists(cand):
+    # 4. Pre-export confirmation & advisory dialog
+    confirm_msg = (
+        f"Export robot: '{robot_name}'\n"
+        f"Destination folder: '{output_dir}'\n\n"
+        "This exporter will scan the entire assembly hierarchy, evaluate kinematic constraints, "
+        "compute high-accuracy physical mass properties, and tessellate detailed 3D visual meshes "
+        "(often millions of polygons for full competition robots).\n\n"
+        "• Estimated time: 1 to 3 minutes depending on CAD complexity.\n"
+        "• Fusion 360 may temporarily pause while calculating heavy geometry.\n\n"
+        "Do you want to continue?"
+    )
+    confirm = ui.messageBox(
+        confirm_msg,
+        "FRCBananaSim Exporter",
+        adsk.core.MessageBoxButtonTypes.OKCancelButtonType,
+        adsk.core.MessageBoxIconTypes.InformationIconType,
+    )
+    if confirm != adsk.core.DialogResults.DialogOK:
+        app.log("FRCBananaExporter: export cancelled by user before start.")
+        return
+
+    # 5. Progress dialog to prevent UI freeze and allow cancellation
+    progress_dialog = None
+    if ui:
+        try:
+            progress_dialog = ui.createProgressDialog()
+            progress_dialog.isBackgroundTranslucent = False
+            progress_dialog.isCancelButtonShown = True
+            progress_dialog.show(
+                "FRCBananaSim Exporter",
+                f"Starting export for '{robot_name}'...",
+                0,
+                100,
+                1,
+            )
+        except Exception:
+            progress_dialog = None
+
+    def update_progress(val: int, msg: str):
+        if progress_dialog:
             try:
-                sidecar_data = _load_json(cand)
-                sidecar_path = cand
-                break
+                if getattr(progress_dialog, "wasCancelled", False):
+                    raise ExportAborted("Export was cancelled by the user.")
+                progress_dialog.progressValue = val
+                progress_dialog.message = msg
+            except ExportAborted:
+                raise
             except Exception:
-                continue
+                pass
+        if IN_FUSION:
+            try:
+                adsk.doEvents()
+            except Exception:
+                pass
+
+    # 6. Sidecar (preserves existing robot sidecar if present, never overwrites)
+    sidecar_path, sidecar_data = resolve_sidecar(config, config_dir, output_dir)
 
     collector = DiagnosticCollector()
 
@@ -111,6 +247,11 @@ def run_export_dialog(app: Any, ui: Any):
             "Export it as an active collision / sensor-zone proxy?"
         )
         res = ui.messageBox(msg, "Hidden Proxy Detected", adsk.core.MessageBoxButtonTypes.YesNoButtonType)
+        if IN_FUSION:
+            try:
+                adsk.doEvents()
+            except Exception:
+                pass
         return res == adsk.core.DialogResults.DialogYes
 
     try:
@@ -119,6 +260,11 @@ def run_export_dialog(app: Any, ui: Any):
             fusion_forward=config.get("fusionForward", "+Z"),
         )
     except Exception as e:
+        if progress_dialog:
+            try:
+                progress_dialog.hide()
+            except Exception:
+                pass
         ui.messageBox(f"Invalid frame configuration:\n{e}")
         return
 
@@ -126,16 +272,25 @@ def run_export_dialog(app: Any, ui: Any):
 
     try:
         with ZeroPoseGuard(design, collector):
+            update_progress(5, "Verifying zero pose and joint positions...")
+
             # --- Read CAD ---
-            assembly = read_assembly(app, design, config, collector, hidden_proxy_prompt_cb=hidden_proxy_callback)
+            update_progress(10, "Scanning assembly occurrences and bodies...")
+            assembly = read_assembly(
+                app, design, config, collector,
+                hidden_proxy_prompt_cb=hidden_proxy_callback,
+                progress_dialog=progress_dialog,
+            )
 
             # --- Kinematic graph ---
+            update_progress(45, "Constructing kinematic graph and grouping links...")
             graph_res = build_kinematic_graph(
                 assembly.occurrences, assembly.joints, assembly.rigid_groups,
                 config, collector, sidecar=sidecar_data,
             )
 
             # --- Manifest ---
+            update_progress(50, "Aggregating mass properties and building manifest...")
             built = build_manifest_data(
                 graph_res,
                 {
@@ -161,18 +316,20 @@ def run_export_dialog(app: Any, ui: Any):
             else:
                 collector.warn("W500", "No sidecar.json found; sidecar cross-check skipped.")
 
+            update_progress(55, "Writing manifest.json and copying sidecar...")
             write_manifest_json(manifest, os.path.join(output_dir, "manifest.json"),
                                 digits=config.get("floatSignificantDigits", 9))
 
-            if sidecar_path and os.path.exists(sidecar_path):
-                dest = os.path.join(output_dir, "sidecar.json")
-                try:
-                    if not (os.path.exists(dest) and os.path.samefile(sidecar_path, dest)):
+            dest = os.path.join(output_dir, "sidecar.json")
+            if not os.path.exists(dest):
+                if sidecar_path and os.path.exists(sidecar_path):
+                    try:
                         shutil.copyfile(sidecar_path, dest)
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
 
             # --- Meshes (link-local frame origins, NOT CoM) ---
+            update_progress(60, "Tessellating 3D visual meshes (GLB)...")
             link_structural = {name: [] for name in graph_res.links}
             for b in assembly.structural_bodies:
                 lname = graph_res.occ_to_link.get(b.occ_name)
@@ -183,9 +340,11 @@ def run_export_dialog(app: Any, ui: Any):
                 manifest["links"], link_structural, built["link_frame_origins"],
                 frame_conv, config, collector, output_dir,
                 origin_point_m=assembly.origin_point_m,
+                progress_dialog=progress_dialog,
             )
 
             # --- Gate 4 validation (§5.4) ---
+            update_progress(95, "Validating against CAD whole-design properties...")
             excluded = [
                 (b.mass_kg, b.com_cm, InertiaTensor(*b.inertia_origin_kgcm2))
                 for b in assembly.excluded_visible_proxies
@@ -273,6 +432,7 @@ def run_export_dialog(app: Any, ui: Any):
             for l in manifest["links"]:
                 mass_by_mat[l["material"]] = mass_by_mat.get(l["material"], 0.0) + l["mass_kg"]
 
+            update_progress(98, "Writing export reports...")
             _, md_path = write_export_reports(
                 {
                     "summary": summary,
@@ -284,6 +444,13 @@ def run_export_dialog(app: Any, ui: Any):
                 },
                 collector, output_dir,
             )
+
+        update_progress(100, "Export complete!")
+        if progress_dialog:
+            try:
+                progress_dialog.hide()
+            except Exception:
+                pass
 
         # (joints are restored here, after the `with` block, even if anything above threw)
         status = "FAILED (errors)" if collector.has_errors else ("OK with warnings" if collector.has_warnings else "OK")
@@ -308,6 +475,22 @@ def run_export_dialog(app: Any, ui: Any):
         )
 
     except ExportAborted as e:
+        if progress_dialog:
+            try:
+                progress_dialog.hide()
+            except Exception:
+                pass
         ui.messageBox(f"Export aborted (nothing was written):\n\n{e}", "FRCBananaSim Exporter")
     except Exception:
+        if progress_dialog:
+            try:
+                progress_dialog.hide()
+            except Exception:
+                pass
         ui.messageBox(f"Export failed with unhandled exception:\n{traceback.format_exc()}")
+    finally:
+        if progress_dialog:
+            try:
+                progress_dialog.hide()
+            except Exception:
+                pass

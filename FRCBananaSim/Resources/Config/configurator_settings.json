@@ -1,0 +1,11 @@
+{
+  "fovDegrees": 45.0,
+  "invertOrbitX": false,
+  "invertOrbitY": false,
+  "invertScrollZoom": true,
+  "lastRobotPath": "FRCBananaSim/Resources/Robots\\Reference2026",
+  "orbitSensitivity": 0.4000000059604645,
+  "panSensitivity": 0.0024999999441206455,
+  "preset": 0,
+  "zoomSensitivity": 0.20000000298023224
+}
