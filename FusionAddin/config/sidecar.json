@@ -1,0 +1,318 @@
+{
+  "schemaVersion": "1.0.0",
+  "targetManifest": "manifest.json",
+  "electrical": {
+    "openCircuitVoltage_V": 12.6,
+    "internalResistance_Ohm": 0.023,
+    "quiescentCurrent_A": 1.5,
+    "brownoutWarning_V": 6.8,
+    "brownoutShutoff_V": 6.3,
+    "brownoutRecovery_V": 7.5,
+    "servoRailVoltage_V": 6.0,
+    "servoRailCurrentLimit_A": 2.2,
+    "servoRailBuckEfficiency": 0.88
+  },
+  "swerve": {
+    "chassisLink": "base_link",
+    "driveMotorPreset": "KrakenX60",
+    "steerMotorPreset": "KrakenX44",
+    "driveGearRatio": 5.27,
+    "steerGearRatio": 26.0909,
+    "driveEfficiency": 0.96,
+    "steerEfficiency": 0.92,
+    "wheelRadius_m": 0.0508,
+    "driveStatorLimit_A": 60.0,
+    "driveSupplyLimit_A": 40.0,
+    "steerStatorLimit_A": 40.0,
+    "steerSupplyLimit_A": 30.0,
+    "modules": [
+      {
+        "name": "FrontLeft",
+        "pos_m": [ 0.28, 0.28, 0.0 ],
+        "driveCanId": 0,
+        "steerCanId": 1,
+        "cancoderId": 20,
+        "canBus": "canivore"
+      },
+      {
+        "name": "FrontRight",
+        "pos_m": [ 0.28, -0.28, 0.0 ],
+        "driveCanId": 2,
+        "steerCanId": 3,
+        "cancoderId": 21,
+        "canBus": "canivore"
+      },
+      {
+        "name": "BackLeft",
+        "pos_m": [ -0.28, 0.28, 0.0 ],
+        "driveCanId": 4,
+        "steerCanId": 5,
+        "cancoderId": 22,
+        "canBus": "canivore"
+      },
+      {
+        "name": "BackRight",
+        "pos_m": [ -0.28, -0.28, 0.0 ],
+        "driveCanId": 6,
+        "steerCanId": 7,
+        "cancoderId": 23,
+        "canBus": "canivore"
+      }
+    ]
+  },
+  "mechanisms": [
+    {
+      "name": "elevator_drive",
+      "role": "elevator",
+      "targetJoint": "elevator_stage1_slider",
+      "motorPreset": "KrakenX60",
+      "gearRatio": 9.0,
+      "efficiency": 0.94,
+      "drumRadius_m": 0.01905,
+      "statorCurrentLimit_A": 80.0,
+      "supplyCurrentLimit_A": 50.0,
+      "coulombFriction": 12.0,
+      "viscousDamping": 8.0,
+      "springAssist": {
+        "type": "constant_force",
+        "force_N": 45.0
+      },
+      "controllers": [
+        {
+          "vendor": "CTRE_TalonFX",
+          "canId": 10,
+          "canBus": "canivore",
+          "inverted": false,
+          "role": "leader"
+        },
+        {
+          "vendor": "CTRE_TalonFX",
+          "canId": 11,
+          "canBus": "canivore",
+          "inverted": true,
+          "role": "follower"
+        }
+      ]
+    },
+    {
+      "name": "arm_shoulder",
+      "role": "arm",
+      "targetJoint": "arm_shoulder_hinge",
+      "motorPreset": "KrakenX60",
+      "gearRatio": 64.0,
+      "efficiency": 0.90,
+      "statorCurrentLimit_A": 60.0,
+      "supplyCurrentLimit_A": 40.0,
+      "coulombFriction": 0.8,
+      "viscousDamping": 0.15,
+      "controllers": [
+        {
+          "vendor": "CTRE_TalonFX",
+          "canId": 12,
+          "canBus": "canivore",
+          "inverted": false,
+          "role": "leader"
+        }
+      ]
+    },
+    {
+      "name": "arm_wrist",
+      "role": "wrist",
+      "targetJoint": "arm_wrist_hinge",
+      "motorPreset": "NEO",
+      "gearRatio": 36.0,
+      "efficiency": 0.90,
+      "statorCurrentLimit_A": 40.0,
+      "supplyCurrentLimit_A": 30.0,
+      "coulombFriction": 0.3,
+      "viscousDamping": 0.05,
+      "controllers": [
+        {
+          "vendor": "REV_SparkMax",
+          "canId": 13,
+          "canBus": "rio",
+          "inverted": false,
+          "role": "leader"
+        }
+      ]
+    },
+    {
+      "name": "intake_fourbar_deploy",
+      "role": "four_bar",
+      "targetJoint": "fourbar_crank_hinge",
+      "motorPreset": "KrakenX44",
+      "gearRatio": 45.0,
+      "efficiency": 0.90,
+      "statorCurrentLimit_A": 50.0,
+      "supplyCurrentLimit_A": 30.0,
+      "coulombFriction": 0.5,
+      "viscousDamping": 0.10,
+      "controllers": [
+        {
+          "vendor": "CTRE_TalonFX",
+          "canId": 14,
+          "canBus": "rio",
+          "inverted": false,
+          "role": "leader"
+        }
+      ]
+    },
+    {
+      "name": "shooter_flywheel",
+      "role": "flywheel",
+      "parentLink": "arm_wrist_link",
+      "motorPreset": "KrakenX60",
+      "gearRatio": 0.5,
+      "efficiency": 0.97,
+      "flywheelInertia_kgm2": 0.0032,
+      "statorCurrentLimit_A": 80.0,
+      "supplyCurrentLimit_A": 60.0,
+      "coulombFriction": 0.04,
+      "viscousDamping": 0.0002,
+      "spinAxis": [ 0.0, 1.0, 0.0 ],
+      "visualLink": "shooter_flywheel_visual",
+      "controllers": [
+        {
+          "vendor": "CTRE_TalonFX",
+          "canId": 15,
+          "canBus": "canivore",
+          "inverted": false,
+          "role": "leader"
+        },
+        {
+          "vendor": "CTRE_TalonFX",
+          "canId": 16,
+          "canBus": "canivore",
+          "inverted": true,
+          "role": "follower"
+        }
+      ]
+    }
+  ],
+  "couplings": [
+    {
+      "name": "elevator_2stage_cascade",
+      "type": "elevator_cascade",
+      "solverMode": "analytic_coupled",
+      "cascadeStages": [
+        {
+          "joint": "elevator_stage1_slider",
+          "multiplier": 1.0
+        },
+        {
+          "joint": "elevator_carriage_slider",
+          "multiplier": 1.0
+        }
+      ]
+    },
+    {
+      "name": "intake_4bar_closure",
+      "type": "four_bar_loop",
+      "crankJoint": "fourbar_crank_hinge",
+      "couplerJoint": "fourbar_coupler_hinge",
+      "followerJoint": "fourbar_follower_hinge",
+      "closureParentLink": "intake_follower_link",
+      "closureChildLink": "intake_coupler_link",
+      "closureParentAnchor_m": [ 0.24, 0.0, 0.0 ],
+      "closureChildAnchor_m": [ -0.12, 0.0, 0.06 ],
+      "closureAxis": [ 0.0, 1.0, 0.0 ]
+    },
+    {
+      "name": "shoulder_to_wrist_coupling",
+      "type": "power_coupling",
+      "solverMode": "jolt_constraint",
+      "powerCoupling": {
+        "transmissionType": "chain",
+        "masterJoint": "arm_shoulder_hinge",
+        "slaveJoint": "arm_wrist_hinge",
+        "ratio": 1.0,
+        "inverted": true,
+        "efficiency": 0.92,
+        "backlashRad": 0.005
+      }
+    }
+  ],
+  "sensors": [
+    {
+      "name": "chassis_pigeon2",
+      "type": "imu_pigeon2",
+      "bus": "canivore",
+      "canId": 24,
+      "parentLink": "base_link",
+      "mountOffset_m": [ 0.0, 0.0, 0.05 ],
+      "mountRotation_quat": [ 1.0, 0.0, 0.0, 0.0 ],
+      "gyroNoiseStdDev_rad_s": 0.0015,
+      "gyroBiasRandomWalk_rad_s2": 0.0001,
+      "accelNoiseStdDev_m_s2": 0.02
+    },
+    {
+      "name": "shoulder_cancoder",
+      "type": "cancoder",
+      "bus": "canivore",
+      "canId": 12,
+      "targetJoint": "arm_shoulder_hinge",
+      "sensorToMechanismRatio": 1.0,
+      "cpr": 4096,
+      "offset_rad": 0.0,
+      "inverted": false
+    },
+    {
+      "name": "elevator_bottom_limit",
+      "type": "limit_switch",
+      "bus": "rio",
+      "targetJoint": "elevator_stage1_slider",
+      "dioChannel": 0,
+      "attachToControllerCanId": 10,
+      "limitDirection": "reverse",
+      "triggerMin": -0.01,
+      "triggerMax": 0.005,
+      "normallyClosed": false
+    },
+    {
+      "name": "elevator_top_limit",
+      "type": "limit_switch",
+      "bus": "rio",
+      "targetJoint": "elevator_stage1_slider",
+      "dioChannel": 1,
+      "attachToControllerCanId": 10,
+      "limitDirection": "forward",
+      "triggerMin": 0.595,
+      "triggerMax": 0.62,
+      "normallyClosed": false
+    },
+    {
+      "name": "intake_beam_break",
+      "type": "beam_break",
+      "bus": "rio",
+      "contactZone": "intake_capture_zone",
+      "dioChannel": 2,
+      "debounceTime_s": 0.010,
+      "inverted": true
+    },
+    {
+      "name": "arm_joint_potentiometer",
+      "type": "analog_input",
+      "bus": "analog",
+      "analogChannel": 0,
+      "targetJoint": "arm_shoulder_hinge",
+      "customNumericParams": {
+        "minVolts": 0.5,
+        "maxVolts": 4.5,
+        "minAngleRad": -1.5707963,
+        "maxAngleRad": 1.5707963
+      }
+    },
+    {
+      "name": "intake_distance_sensor",
+      "type": "laser_can",
+      "bus": "rio",
+      "canId": 35,
+      "parentLink": "intake_coupler_link",
+      "mountOffset_m": [ 0.12, 0.0, 0.0 ],
+      "customNumericParams": {
+        "maxRangeMeters": 2.0,
+        "stdDevMeters": 0.003
+      }
+    }
+  ]
+}

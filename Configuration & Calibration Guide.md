@@ -234,6 +234,9 @@ By default, the exporter creates a simple bounding box around each moving link. 
    * In 3D physics engines, moving collision bodies must be **convex** (no hollow bowls or indented curves in a single piece).
    * To model a curved ramp or half-pipe: create **2 to 4 flat tangent boxes** along the curve (like facets of an arc) named `COL_ramp_seg1`, `COL_ramp_seg2`, `COL_ramp_seg3`.
    * Game pieces will roll smoothly along the faceted boxes without physics lag or glitches.
+5. **Visibility Rule for Colliders:**
+   * **If visible (eye/lightbulb ON):** Exported immediately **without question**.
+   * **If invisible / hidden (eye/lightbulb OFF):** Designers often hide collision proxy bodies during assembly so they don't obstruct view of motors, shafts, or gearboxes. When exporting, if the exporter finds a hidden `COL_*` body inside an active component, it will **explicitly ask you if it should be exported**. If you say yes, it's included as an active collider override; if you say no, it's skipped.
 
 ```
        Curved Intake / Shooter Ramp:
@@ -260,6 +263,9 @@ To define where a game piece gets detected or grabbed:
    * `ZONE_shooter_engagement_zone`: Tunnel where flywheel compresses the piece.
    * `ZONE_indexer_beam_break`: Optical beam-break laser path.
 3. The exporter turns these into non-colliding trigger zones (`ObjectLayers::SENSOR`). They do not add any mass or visual clutter.
+4. **Visibility Rule for Sensor Zones:**
+   * **If visible (eye/lightbulb ON):** Exported immediately **without question**.
+   * **If invisible / hidden (eye/lightbulb OFF):** If a `ZONE_*` trigger body is hidden in CAD, the exporter will **ask you if it should be exported**, ensuring you never accidentally omit sensor zones or export old prototype boxes.
 
 ---
 
@@ -298,7 +304,10 @@ The Fusion exporter strictly respects CAD visibility and uses **hierarchical bra
 * **What this means for CADders:**
   * You can keep prototype mechanisms, experimental intake arms, field game pieces, or test benches inside your CAD model!
   * As long as you turn off the visibility eye icon on their parent component, they are 100% ignored by the exporter. None of their child components, sub-assemblies, bodies, colliders, or joints will leak into `manifest.json` or `Meshes/*.glb`.
-  * For visible components, individual hidden bodies are also ignored, allowing you to hide internal visual clutter without deleting geometry.
+  * For visible components, individual hidden structural bodies are skipped silently.
+  * **Special Rule for Collision & Sensor Proxies (`COL_*` & `ZONE_*`):**
+    * **If visible:** Exported immediately **without question**.
+    * **If invisible / hidden:** The exporter will **prompt you to ask whether they should be exported**, protecting you from accidentally dropping intended collision geometry or sensor zones that were hidden for visual clarity during modeling.
 
 ---
 
@@ -309,6 +318,7 @@ Before exporting your assembly for simulation:
 - [ ] **Home / Zero Position:** Mechanism joints set to their resting/stowed position (Elevator down at $0.0\text{ m}$, Arm at $0^\circ$).
 - [ ] **No Pending Movement:** Click **Capture Position** or **Revert** in Fusion so no floating parts are active.
 - [ ] **Hide Experimental / Unused Branches:** Turn off visibility (click eye off) on any test rigs, alternate mechanisms, or field obstacles.
+- [ ] **Collision & Sensor Proxies:** Desired `COL_*` and `ZONE_*` shapes can be left visible (exported without question) or hidden (the exporter will prompt you during export to confirm whether to include each one).
 - [ ] **Hardware Suppressed / Hidden:** Hide or suppress small screws, nuts, washers, and zip ties (they bloat 3D mesh polygon counts without helping physics).
 - [ ] **Total Mass Sanity Check:** Check assembly **Properties $\to$ Mass**. If a 125 lb robot shows 300+ lbs, find which parts were left on default Steel and change them to Aluminum!
 

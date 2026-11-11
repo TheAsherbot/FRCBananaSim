@@ -1,0 +1,36 @@
+{
+  "configVersion": "1.0.0",
+  "robotName": "TestAssembly2026",
+  "outputDir": "C:/Game Dev/C++/Projects/FRCBananaSim/FRCBananaSim/Resources/Robots",
+  "sidecarPath": "./sidecar.json",
+  "materialMapPath": "./material_map.json",
+  "fusionUp": "+Y",
+  "fusionForward": "+Z",
+  "robotOrigin": "ROBOT_ORIGIN",
+  "revoluteAxisSignShim": true,
+  "includeHidden": false,
+  "foldJoints": ["fl_*", "fr_*", "bl_*", "br_*"],
+  "detachedVisualJoints": ["shooter_flywheel_axle"],
+  "keepSeparate": [],
+  "noCollider": ["shooter_flywheel_visual"],
+  "linkNames": {
+    "Wrist Assembly:1": "arm_wrist_link"
+  },
+  "jointOverrides": {
+    "arm_shoulder_hinge": {
+      "springFrequency_Hz": 40.0,
+      "springDampingRatio": 1.0
+    }
+  },
+  "contactZones": {
+    "intake_capture_zone": {
+      "tangentAxis": [-1.0, 0.0, 0.0],
+      "compressionAxis": [0.0, 0.0, 1.0],
+      "nominalGap_m": 0.11
+    }
+  },
+  "meshQuality": "normal",
+  "meshExclude": ["*Screw*", "*Nut*", "*Rivet*", "*Washer*"],
+  "hiddenProxyAction": "prompt",
+  "floatSignificantDigits": 9
+}
