@@ -185,6 +185,34 @@ def cross_check_sidecar(
         if "contactZone" in sens:
             check_zone(sens["contactZone"], f"{path}.contactZone")
 
+    # 5. Joint Limit Overrides
+    joint_overrides = sidecar.get("jointOverrides", {})
+    if isinstance(joint_overrides, dict):
+        for jname, ov in joint_overrides.items():
+            check_joint(jname, f"jointOverrides['{jname}']")
+            if isinstance(ov, dict):
+                has_limits = ov.get("hasLimits", False)
+                lower = ov.get("lower")
+                upper = ov.get("upper")
+                if has_limits and lower is not None and upper is not None:
+                    if isinstance(lower, (int, float)) and isinstance(upper, (int, float)):
+                        if lower > upper:
+                            collector.warn(
+                                "W501",
+                                f"Joint override for '{jname}' has lower limit ({lower}) greater than upper limit ({upper}).",
+                                target=jname,
+                            )
+
+    # 6. Bumpers
+    if "bumpers" in sidecar and isinstance(sidecar["bumpers"], dict):
+        bmp = sidecar["bumpers"]
+        tlink = bmp.get("targetLink")
+        if tlink:
+            check_link(tlink, "bumpers.targetLink")
+        shape = bmp.get("shape")
+        if shape and shape not in {"box", "perimeter", "u_shape"}:
+            collector.warn("W501", f"Invalid bumper shape '{shape}'. Must be one of 'box', 'perimeter', or 'u_shape'.")
+
     # Check for passive joints
     for tj in exported_tree_joint_names:
         if tj not in referenced_joints:

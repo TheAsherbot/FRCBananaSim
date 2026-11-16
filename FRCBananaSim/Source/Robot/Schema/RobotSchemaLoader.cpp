@@ -651,6 +651,7 @@ namespace FRCBananaSim::Robot::Schema
                 sensor.bus = sNode.value("bus", "rio");
                 sensor.canId = sNode.value("canId", 0);
                 sensor.dioChannel = sNode.value("dioChannel", 0);
+                sensor.secondaryDioChannel = sNode.value("secondaryDioChannel", 0);
                 sensor.analogChannel = sNode.value("analogChannel", 0);
                 sensor.i2cAddress = sNode.value("i2cAddress", 0);
                 sensor.attachToControllerCanId = sNode.value("attachToControllerCanId", 0);
@@ -721,6 +722,44 @@ namespace FRCBananaSim::Robot::Schema
                     }
                 }
             }
+        }
+
+        // Joint Overrides (Hardstop Limits & Compliance Springs)
+        if (json.contains("jointOverrides") && json["jointOverrides"].is_object())
+        {
+            for (auto it = json["jointOverrides"].begin(); it != json["jointOverrides"].end(); ++it)
+            {
+                if (it.value().is_object())
+                {
+                    const auto& jo = it.value();
+                    JointLimitOverride ov;
+                    ov.hasLimits = jo.value("hasLimits", true);
+                    ov.lower = jo.value("lower", 0.0);
+                    ov.upper = jo.value("upper", 0.0);
+                    ov.unit = jo.value("unit", "rad");
+                    ov.springFrequencyHz = jo.value("springFrequency_Hz", 40.0);
+                    ov.springDampingRatio = jo.value("springDampingRatio", 1.0);
+                    sidecar.jointOverrides[it.key()] = ov;
+                }
+            }
+        }
+
+        // Bumpers (Parametric Collision Geometry & Mass)
+        if (json.contains("bumpers") && json["bumpers"].is_object())
+        {
+            const auto& bj = json["bumpers"];
+            sidecar.bumpers.enabled = bj.value("enabled", false);
+            sidecar.bumpers.targetLink = bj.value("targetLink", "");
+            sidecar.bumpers.shape = bj.value("shape", "box");
+            sidecar.bumpers.lengthM = bj.value("length_m", 0.85);
+            sidecar.bumpers.widthM = bj.value("width_m", 0.85);
+            sidecar.bumpers.heightM = bj.value("height_m", 0.127);
+            sidecar.bumpers.thicknessM = bj.value("thickness_m", 0.0825);
+            sidecar.bumpers.offsetM = ParseOptionalVec3(bj, "offset_m", glm::dvec3(0.0, 0.09, 0.0));
+            sidecar.bumpers.massKg = bj.value("mass_kg", 6.0);
+            sidecar.bumpers.material = bj.value("material", "bumper_fabric");
+            sidecar.bumpers.color = bj.value("color", "red");
+            sidecar.bumpers.cutoutWidthM = bj.value("cutoutWidth_m", 0.40);
         }
 
         return true;
@@ -939,6 +978,16 @@ namespace FRCBananaSim::Robot::Schema
             }
         }
 
+        // 8. Bumpers Target Link Enforcement
+        if (sidecar.bumpers.enabled && !sidecar.bumpers.targetLink.empty())
+        {
+            if (!manifest.FindLink(sidecar.bumpers.targetLink))
+            {
+                errors.push_back("Bumpers targetLink references missing link: '" + sidecar.bumpers.targetLink + "'");
+                isValid = false;
+            }
+        }
+
         return isValid;
     }
 
@@ -1022,6 +1071,70 @@ namespace FRCBananaSim::Robot::Schema
         glm::dmat3 rEngine = glm::mat3_cast(qEngine);
         glm::dmat3 rNWU = Minv * rEngine * glm::transpose(Minv);
         return glm::normalize(glm::quat_cast(rNWU));
+    }
+
+    // --- Sidecar Configurator Robot Frame (+X Right, +Y Up, +Z Front) ---
+    glm::dvec3 RobotSchemaLoader::ConvertNWUToRobotFrame(const glm::dvec3& vNWU)
+    {
+        // NWU: +X North (Forward), +Y West (Left), +Z Up
+        // Robot Frame: +X East (Right), +Y Up, +Z North (Forward)
+        // x_Robot = -y_NWU (Right)
+        // y_Robot = +z_NWU (Up)
+        // z_Robot = +x_NWU (Front)
+        return glm::dvec3(-vNWU.y, vNWU.z, vNWU.x);
+    }
+
+    glm::vec3 RobotSchemaLoader::ConvertNWUToRobotFrame(const glm::vec3& vNWU)
+    {
+        return glm::vec3(-vNWU.y, vNWU.z, vNWU.x);
+    }
+
+    glm::dvec3 RobotSchemaLoader::ConvertRobotFrameToNWU(const glm::dvec3& vRobot)
+    {
+        // Inverse:
+        // x_NWU = +z_Robot (Forward)
+        // y_NWU = -x_Robot (Left)
+        // z_NWU = +y_Robot (Up)
+        return glm::dvec3(vRobot.z, -vRobot.x, vRobot.y);
+    }
+
+    glm::vec3 RobotSchemaLoader::ConvertRobotFrameToNWU(const glm::vec3& vRobot)
+    {
+        return glm::vec3(vRobot.z, -vRobot.x, vRobot.y);
+    }
+
+    glm::dquat RobotSchemaLoader::ConvertNWUQuatToRobotFrame(const glm::dquat& qNWU)
+    {
+        glm::dmat3 M(0.0);
+        M[0] = glm::dvec3( 0.0, 0.0, 1.0); // column 0: x_NWU -> z_Robot
+        M[1] = glm::dvec3(-1.0, 0.0, 0.0); // column 1: y_NWU -> -x_Robot
+        M[2] = glm::dvec3( 0.0, 1.0, 0.0); // column 2: z_NWU -> y_Robot
+
+        glm::dmat3 rNWU = glm::mat3_cast(qNWU);
+        glm::dmat3 rRobot = M * rNWU * glm::transpose(M);
+        return glm::normalize(glm::quat_cast(rRobot));
+    }
+
+    glm::quat RobotSchemaLoader::ConvertNWUQuatToRobotFrame(const glm::quat& qNWU)
+    {
+        return glm::quat(ConvertNWUQuatToRobotFrame(glm::dquat(qNWU)));
+    }
+
+    glm::dmat3 RobotSchemaLoader::ConvertRobotFrameInertiaToNWU(const glm::dmat3& iRobot)
+    {
+        // Robot Frame: [0]=X(Right), [1]=Y(Up), [2]=Z(Front)
+        // NWU Frame:   [0]=X(Front), [1]=Y(Left), [2]=Z(Up)
+        glm::dmat3 iNWU(0.0);
+        iNWU[0][0] = iRobot[2][2];
+        iNWU[1][1] = iRobot[0][0];
+        iNWU[2][2] = iRobot[1][1];
+        iNWU[0][1] = -iRobot[2][0];
+        iNWU[1][0] = -iRobot[0][2];
+        iNWU[0][2] = iRobot[2][1];
+        iNWU[2][0] = iRobot[1][2];
+        iNWU[1][2] = -iRobot[0][1];
+        iNWU[2][1] = -iRobot[1][0];
+        return iNWU;
     }
 }
 

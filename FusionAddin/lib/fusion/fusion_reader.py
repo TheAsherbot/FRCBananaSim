@@ -658,13 +658,12 @@ def read_assembly(
             if progress_dialog:
                 if getattr(progress_dialog, "wasCancelled", False):
                     raise ExportAborted("Export cancelled by user.")
-                if len(raw_occurrences) % 20 == 0:
-                    progress_dialog.message = f"Scanning CAD hierarchy: {len(raw_occurrences)} components found..."
-                    if IN_FUSION:
-                        try:
-                            adsk.doEvents()
-                        except Exception:
-                            pass
+                progress_dialog.message = f"Scanning CAD hierarchy: {occ.name}..."
+                if IN_FUSION:
+                    try:
+                        adsk.doEvents()
+                    except Exception:
+                        pass
 
             if getattr(occ, "isSuppressed", False):
                 continue
@@ -701,6 +700,11 @@ def read_assembly(
                 for body in _safe_iter(occ.bRepBodies):
                     _process_body_entry(body, occ_name, hidden_proxy_action, structural_bodies,
                                         collider_bodies, zone_bodies, collector, hidden_proxy_prompt_cb, stats)
+                    if IN_FUSION:
+                        try:
+                            adsk.doEvents()
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
@@ -1138,7 +1142,18 @@ def read_assembly(
     # 3. Traversed visible occurrences (subassemblies and external components)
     # Process all joints FIRST before resolving motion links so extracted_joints is fully populated!
     seen_ext_designs: Set[str] = set()
-    for occ in traversed_occurrences:
+    total_traversed = len(traversed_occurrences)
+    for idx, occ in enumerate(traversed_occurrences):
+        if progress_dialog and idx % 4 == 0:
+            if getattr(progress_dialog, "wasCancelled", False):
+                raise ExportAborted("Export cancelled by user.")
+            progress_dialog.message = f"Scanning subassembly joints ({idx + 1}/{total_traversed}): {occ.name}..."
+            if IN_FUSION:
+                try:
+                    adsk.doEvents()
+                except Exception:
+                    pass
+
         comp = _safe_attr(occ, "component")
         if not comp:
             continue
@@ -1175,7 +1190,17 @@ def read_assembly(
     for ml in _safe_iter(_safe_attr(design, "motionLinks")):
         process_motion_link(ml)
 
-    for occ in traversed_occurrences:
+    for idx, occ in enumerate(traversed_occurrences):
+        if progress_dialog and idx % 6 == 0:
+            if getattr(progress_dialog, "wasCancelled", False):
+                raise ExportAborted("Export cancelled by user.")
+            progress_dialog.message = f"Scanning motion links ({idx + 1}/{total_traversed}): {occ.name}..."
+            if IN_FUSION:
+                try:
+                    adsk.doEvents()
+                except Exception:
+                    pass
+
         comp = _safe_attr(occ, "component")
         if not comp:
             continue

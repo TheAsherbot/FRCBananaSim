@@ -133,6 +133,7 @@ set(CONFIGURATOR_SOURCES
     FRCBananaSim/Source/Tools/Configurator/Panels/CouplingsPanel.cpp
     FRCBananaSim/Source/Tools/Configurator/Panels/SensorPanel.cpp
     FRCBananaSim/Source/Tools/Configurator/Panels/MassReconciliationPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/BumperPanel.cpp
     FRCBananaSim/Source/Tools/Configurator/Panels/LinterPanel.cpp
     FRCBananaSim/Source/Tools/Configurator/SidecarConfiguratorApplication.cpp
     FRCBananaSim/Source/Robot/Schema/MaterialLibrary.cpp

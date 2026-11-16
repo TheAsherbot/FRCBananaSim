@@ -388,14 +388,25 @@ namespace FRCBananaSim::Robot::Schema
                 s["type"] = sensor.type;
                 s["bus"] = sensor.bus.empty() ? "rio" : sensor.bus;
 
-                if (sensor.canId > 0 || (sensor.bus != "analog" && sensor.bus != "rio" && sensor.type.find("imu") != std::string::npos))
+                if (sensor.canId > 0 || (sensor.bus != "analog" && sensor.bus != "rio" && sensor.type.find("imu") != std::string::npos) ||
+                    sensor.type == "andymark_lidar3" || sensor.type == "laser_can")
                 {
                     s["canId"] = sensor.canId;
                 }
 
-                if (sensor.dioChannel > 0 || sensor.type == "limit_switch" || sensor.type == "beam_break")
+                if (sensor.dioChannel > 0 || sensor.type == "limit_switch" || sensor.type == "beam_break" || sensor.type == "rev_through_bore")
                 {
                     s["dioChannel"] = sensor.dioChannel;
+                }
+
+                if (sensor.secondaryDioChannel > 0 || sensor.type == "rev_through_bore")
+                {
+                    s["secondaryDioChannel"] = sensor.secondaryDioChannel;
+                }
+
+                if (sensor.i2cAddress > 0 || sensor.bus.find("i2c") != std::string::npos || sensor.type == "color_sensor")
+                {
+                    s["i2cAddress"] = sensor.i2cAddress;
                 }
 
                 if (sensor.analogChannel > 0 || sensor.bus == "analog" || sensor.type == "analog_input")
@@ -433,7 +444,8 @@ namespace FRCBananaSim::Robot::Schema
                     s["normallyClosed"] = sensor.normallyClosed;
                 }
 
-                if (sensor.type == "limit_switch" || sensor.type == "analog_input")
+                if (sensor.type == "limit_switch" || sensor.type == "analog_input" ||
+                    sensor.type == "andymark_lidar3" || sensor.type == "laser_can")
                 {
                     s["triggerMin"] = sensor.triggerMin;
                     s["triggerMax"] = sensor.triggerMax;
@@ -485,7 +497,7 @@ namespace FRCBananaSim::Robot::Schema
                     }
                 }
 
-                if (sensor.type == "cancoder")
+                if (sensor.type == "cancoder" || sensor.type == "rev_through_bore")
                 {
                     s["sensorToMechanismRatio"] = sensor.sensorToMechanismRatio;
                     s["cpr"] = sensor.cpr;
@@ -541,6 +553,53 @@ namespace FRCBananaSim::Robot::Schema
             }
 
             root["massReconciliation"] = mr;
+        }
+
+        // 7. Joint Overrides (Hardstop Limits & Compliance Springs)
+        if (!sidecar.jointOverrides.empty())
+        {
+            nlohmann::json joJson = nlohmann::json::object();
+            for (const auto& [jointName, ov] : sidecar.jointOverrides)
+            {
+                nlohmann::json item;
+                item["hasLimits"] = ov.hasLimits;
+                item["lower"] = ov.lower;
+                item["upper"] = ov.upper;
+                item["unit"] = ov.unit;
+                item["springFrequency_Hz"] = ov.springFrequencyHz;
+                item["springDampingRatio"] = ov.springDampingRatio;
+                joJson[jointName] = item;
+            }
+            root["jointOverrides"] = joJson;
+        }
+
+        // 8. Bumpers (Parametric Collision Geometry & Mass)
+        if (sidecar.bumpers.enabled)
+        {
+            nlohmann::json bJson;
+            bJson["enabled"] = sidecar.bumpers.enabled;
+            if (!sidecar.bumpers.targetLink.empty())
+            {
+                bJson["targetLink"] = sidecar.bumpers.targetLink;
+            }
+            bJson["shape"] = sidecar.bumpers.shape;
+            bJson["length_m"] = sidecar.bumpers.lengthM;
+            bJson["width_m"] = sidecar.bumpers.widthM;
+            bJson["height_m"] = sidecar.bumpers.heightM;
+            bJson["thickness_m"] = sidecar.bumpers.thicknessM;
+            bJson["offset_m"] = {
+                sidecar.bumpers.offsetM.x,
+                sidecar.bumpers.offsetM.y,
+                sidecar.bumpers.offsetM.z
+            };
+            bJson["mass_kg"] = sidecar.bumpers.massKg;
+            bJson["material"] = sidecar.bumpers.material;
+            bJson["color"] = sidecar.bumpers.color;
+            if (sidecar.bumpers.shape == "u_shape")
+            {
+                bJson["cutoutWidth_m"] = sidecar.bumpers.cutoutWidthM;
+            }
+            root["bumpers"] = bJson;
         }
 
         return root;

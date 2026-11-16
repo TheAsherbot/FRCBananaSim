@@ -19,7 +19,7 @@ namespace FRCBananaSim::Tools::Configurator
 {
 
     static const char* kSensorTypes[] = {
-        "imu_pigeon2", "imu_navx", "cancoder", "beam_break", "limit_switch", "analog_input", "laser_can", "color_sensor", "custom"
+        "imu_pigeon2", "imu_navx", "cancoder", "beam_break", "limit_switch", "analog_input", "laser_can", "color_sensor", "rev_through_bore", "andymark_lidar3", "custom"
     };
 
     static const char* kSensorTypeLabels[] = {
@@ -31,6 +31,8 @@ namespace FRCBananaSim::Tools::Configurator
         "Analog Input (Potentiometer / Pressure)",
         "LaserCAN (Time-of-Flight Distance)",
         "Color Sensor V3 (REV I2C Color)",
+        "REV Through Bore Encoder (REV-11-1271)",
+        "AndyMark LIDAR-Lite v3 / CAN Lidar (am-3829 / am-5684)",
         "Custom Transducer"
     };
 
@@ -60,6 +62,8 @@ namespace FRCBananaSim::Tools::Configurator
 
     void SensorPanel::Render(ConfiguratorState& state)
     {
+        ImGui::PushTextWrapPos(0.0f);
+
         ImGui::TextColored(ImVec4(1.0f, 0.84f, 0.0f, 1.0f), "SENSOR SUITE & INSTRUMENTATION");
         ImGui::Separator();
 
@@ -163,6 +167,33 @@ namespace FRCBananaSim::Tools::Configurator
                     newSens.bus = "i2c_onboard";
                     newSens.i2cAddress = 0x52;
                 }
+                else if (newSens.type == "rev_through_bore")
+                {
+                    newSens.bus = "rio";
+                    newSens.dioChannel = 2;
+                    newSens.secondaryDioChannel = 3;
+                    newSens.cpr = 1024;
+                    newSens.sensorToMechanismRatio = 1.0;
+                    newSens.customStringParams["encoderMode"] = "duty_cycle";
+                    for (const auto& j : state.manifest.joints)
+                    {
+                        if (j.type == "revolute" || j.type == "continuous")
+                        {
+                            newSens.targetJoint = j.name;
+                            break;
+                        }
+                    }
+                }
+                else if (newSens.type == "andymark_lidar3")
+                {
+                    newSens.bus = "rio";
+                    newSens.canId = 35;
+                    newSens.i2cAddress = 0x62;
+                    newSens.triggerMin = 0.05;
+                    newSens.triggerMax = 40.0;
+                    newSens.customNumericParams["noiseStdDevM"] = 0.01;
+                    newSens.parentLink = (!state.manifest.links.empty()) ? state.manifest.links[0].name : "base_link";
+                }
 
                 sensors.push_back(newSens);
                 state.RunLinter();
@@ -234,31 +265,55 @@ namespace FRCBananaSim::Tools::Configurator
                 ImGui::TextDisabled("Sensor Nickname:");
                 char nameEditBuf[64];
                 strncpy_s(nameEditBuf, sizeof(nameEditBuf), sens.name.c_str(), _TRUNCATE);
-                ImGui::SetNextItemWidth(std::max(80.0f, availW - (2.0f * btnW + 16.0f)));
-                if (ImGui::InputText("##SensorName", nameEditBuf, sizeof(nameEditBuf)))
+                if (availW < 270.0f)
                 {
-                    sens.name = nameEditBuf;
-                    state.RunLinter();
+                    ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::InputText("##SensorName", nameEditBuf, sizeof(nameEditBuf)))
+                    {
+                        sens.name = nameEditBuf;
+                        state.RunLinter();
+                    }
+                    if (ImGui::Button("Duplicate", ImVec2(btnW, 0.0f)))
+                    {
+                        sensorToDuplicate = static_cast<int>(sIdx);
+                    }
+                    ImGui::SameLine(0.0f, 8.0f);
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+                    if (ImGui::Button("Delete", ImVec2(btnW, 0.0f)))
+                    {
+                        sensorToDelete = static_cast<int>(sIdx);
+                    }
+                    ImGui::PopStyleColor(2);
                 }
+                else
+                {
+                    ImGui::SetNextItemWidth(std::max(80.0f, availW - (2.0f * btnW + 20.0f)));
+                    if (ImGui::InputText("##SensorName", nameEditBuf, sizeof(nameEditBuf)))
+                    {
+                        sens.name = nameEditBuf;
+                        state.RunLinter();
+                    }
 
-                ImGui::SameLine(0.0f, 8.0f);
-                if (ImGui::Button("Duplicate", ImVec2(btnW, 0.0f)))
-                {
-                    sensorToDuplicate = static_cast<int>(sIdx);
-                }
+                    ImGui::SameLine(0.0f, 8.0f);
+                    if (ImGui::Button("Duplicate", ImVec2(btnW, 0.0f)))
+                    {
+                        sensorToDuplicate = static_cast<int>(sIdx);
+                    }
 
-                ImGui::SameLine(0.0f, 8.0f);
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
-                if (ImGui::Button("Delete", ImVec2(btnW, 0.0f)))
-                {
-                    sensorToDelete = static_cast<int>(sIdx);
+                    ImGui::SameLine(0.0f, 8.0f);
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+                    if (ImGui::Button("Delete", ImVec2(btnW, 0.0f)))
+                    {
+                        sensorToDelete = static_cast<int>(sIdx);
+                    }
+                    ImGui::PopStyleColor(2);
                 }
-                ImGui::PopStyleColor(2);
 
                 // Type selector
                 ImGui::TextDisabled("Sensor Type:");
-                int currentTypeIdx = 8; // custom
+                int currentTypeIdx = 10; // custom
                 for (int t = 0; t < IM_ARRAYSIZE(kSensorTypes); ++t)
                 {
                     if (sens.type == kSensorTypes[t])
@@ -329,11 +384,11 @@ namespace FRCBananaSim::Tools::Configurator
                     float offX = static_cast<float>(sens.mountOffsetM.x);
                     float offY = static_cast<float>(sens.mountOffsetM.y);
                     float offZ = static_cast<float>(sens.mountOffsetM.z);
-                    ImGui::Text("Mount Offset relative to Link Origin (m):");
+                    ImGui::Text("Mount Offset relative to Link Origin (+X=Right, +Y=Up, +Z=Front) (m):");
                     bool offChanged = false;
-                    offChanged |= SliderWithDirectInput("X (m)##PigeonOff", &offX, -1.0f, 1.0f, "%.3f");
-                    offChanged |= SliderWithDirectInput("Y (m)##PigeonOff", &offY, -1.0f, 1.0f, "%.3f");
-                    offChanged |= SliderWithDirectInput("Z (m)##PigeonOff", &offZ, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("X (Right [+]) (m)##PigeonOff", &offX, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("Y (Up [+]) (m)##PigeonOff", &offY, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("Z (Front [+]) (m)##PigeonOff", &offZ, -1.0f, 1.0f, "%.3f");
                     if (offChanged)
                     {
                         sens.mountOffsetM = glm::dvec3(offX, offY, offZ);
@@ -403,11 +458,11 @@ namespace FRCBananaSim::Tools::Configurator
                     float offX = static_cast<float>(sens.mountOffsetM.x);
                     float offY = static_cast<float>(sens.mountOffsetM.y);
                     float offZ = static_cast<float>(sens.mountOffsetM.z);
-                    ImGui::Text("Mount Offset relative to Link Origin (m):");
+                    ImGui::Text("Mount Offset relative to Link Origin (+X=Right, +Y=Up, +Z=Front) (m):");
                     bool offChanged = false;
-                    offChanged |= SliderWithDirectInput("X (m)##NavXOff", &offX, -1.0f, 1.0f, "%.3f");
-                    offChanged |= SliderWithDirectInput("Y (m)##NavXOff", &offY, -1.0f, 1.0f, "%.3f");
-                    offChanged |= SliderWithDirectInput("Z (m)##NavXOff", &offZ, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("X (Right [+]) (m)##NavXOff", &offX, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("Y (Up [+]) (m)##NavXOff", &offY, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("Z (Front [+]) (m)##NavXOff", &offZ, -1.0f, 1.0f, "%.3f");
                     if (offChanged)
                     {
                         sens.mountOffsetM = glm::dvec3(offX, offY, offZ);
@@ -582,15 +637,14 @@ namespace FRCBananaSim::Tools::Configurator
 
                     // Signal Routing (roboRIO DIO vs Hard-Wired to Motor Controller)
                     int routeMode = (sens.attachToControllerCanId > 0) ? 1 : 0;
-                    ImGui::Text("Hardware Connection:");
-                    ImGui::SameLine();
+                    BeginOptionRow("Hardware Connection:", 170.0f);
                     if (ImGui::RadioButton("roboRIO DIO Channel##Limit", routeMode == 0))
                     {
                         sens.attachToControllerCanId = 0;
                         state.RunLinter();
                     }
-                    ImGui::SameLine();
-                    if (ImGui::RadioButton("Hard-Wired to Motor Controller CAN ID##Limit", routeMode == 1))
+                    AutoWrapSameLine(260.0f);
+                    if (ImGui::RadioButton("Hard-Wired to Motor Controller##Limit", routeMode == 1))
                     {
                         sens.attachToControllerCanId = 1;
                         state.RunLinter();
@@ -765,10 +819,11 @@ namespace FRCBananaSim::Tools::Configurator
                     float offX = static_cast<float>(sens.mountOffsetM.x);
                     float offY = static_cast<float>(sens.mountOffsetM.y);
                     float offZ = static_cast<float>(sens.mountOffsetM.z);
+                    ImGui::TextDisabled("Mount Offset (+X=Right, +Y=Up, +Z=Front) (m):");
                     bool offChanged = false;
-                    offChanged |= SliderWithDirectInput("Offset X (m)##LaserCAN", &offX, -1.0f, 1.0f, "%.3f");
-                    offChanged |= SliderWithDirectInput("Offset Y (m)##LaserCAN", &offY, -1.0f, 1.0f, "%.3f");
-                    offChanged |= SliderWithDirectInput("Offset Z (m)##LaserCAN", &offZ, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("Offset X (Right [+]) (m)##LaserCAN", &offX, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("Offset Y (Up [+]) (m)##LaserCAN", &offY, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("Offset Z (Front [+]) (m)##LaserCAN", &offZ, -1.0f, 1.0f, "%.3f");
                     if (offChanged)
                     {
                         sens.mountOffsetM = glm::dvec3(offX, offY, offZ);
@@ -795,7 +850,352 @@ namespace FRCBananaSim::Tools::Configurator
                         sens.i2cAddress = static_cast<uint32_t>(std::clamp(addrHex, 0, 127));
                     }
                 }
-                // CASE I: Custom Transducer
+                // CASE I: REV Through Bore Encoder (REV-11-1271)
+                else if (sens.type == "rev_through_bore")
+                {
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "REV Through Bore Encoder (REV-11-1271):");
+
+                    // 1. Output Signal Mode (Absolute DutyCycle vs Relative Quadrature)
+                    std::string& modeStr = sens.customStringParams["encoderMode"];
+                    if (modeStr.empty())
+                    {
+                        modeStr = (sens.secondaryDioChannel > 0) ? "quadrature" : "duty_cycle";
+                    }
+                    bool isQuad = (modeStr == "quadrature");
+
+                    BeginOptionRow("Encoder Mode:", 220.0f);
+                    if (ImGui::RadioButton("Absolute (PWM Duty Cycle)##REVMode", !isQuad))
+                    {
+                        modeStr = "duty_cycle";
+                        sens.cpr = 1024;
+                        state.RunLinter();
+                    }
+                    AutoWrapSameLine(210.0f);
+                    if (ImGui::RadioButton("Relative Quadrature (A/B DIO)##REVMode", isQuad))
+                    {
+                        modeStr = "quadrature";
+                        sens.cpr = 8192;
+                        if (sens.secondaryDioChannel == 0 || sens.secondaryDioChannel == sens.dioChannel)
+                        {
+                            sens.secondaryDioChannel = (sens.dioChannel < 31) ? (sens.dioChannel + 1) : 0;
+                        }
+                        state.RunLinter();
+                    }
+
+                    if (!isQuad)
+                    {
+                        // Hardware Route for Absolute Duty Cycle: roboRIO DIO vs SPARK Data Port
+                        int routeMode = (sens.attachToControllerCanId > 0) ? 1 : 0;
+                        BeginOptionRow("Hardware Connection:", 150.0f);
+                        if (ImGui::RadioButton("roboRIO DIO Pin##REVAbs", routeMode == 0))
+                        {
+                            sens.attachToControllerCanId = 0;
+                            state.RunLinter();
+                        }
+                        AutoWrapSameLine(210.0f);
+                        if (ImGui::RadioButton("SPARK MAX/Flex Data Port##REVAbs", routeMode == 1))
+                        {
+                            sens.attachToControllerCanId = 1;
+                            state.RunLinter();
+                        }
+
+                        if (sens.attachToControllerCanId == 0)
+                        {
+                            int dioChan = static_cast<int>(sens.dioChannel);
+                            ImGui::SetNextItemWidth(70.0f);
+                            if (ImGui::InputInt("DutyCycle DIO Channel [0..31]##REV", &dioChan, 1, 2))
+                            {
+                                sens.dioChannel = static_cast<uint32_t>(std::clamp(dioChan, 0, 31));
+                                state.RunLinter();
+                            }
+                            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Connects to the yellow Absolute PWM signal wire on the Through Bore cable");
+                        }
+                        else
+                        {
+                            int ctrlCanId = static_cast<int>(sens.attachToControllerCanId);
+                            ImGui::SetNextItemWidth(70.0f);
+                            if (ImGui::InputInt("SPARK Controller CAN ID##REV", &ctrlCanId, 1, 5))
+                            {
+                                sens.attachToControllerCanId = static_cast<uint32_t>(std::max(1, ctrlCanId));
+                                state.RunLinter();
+                            }
+                            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Connected directly via 10-pin ribbon cable to SPARK MAX / Flex data port");
+                        }
+                    }
+                    else
+                    {
+                        // Quadrature: Channel A and Channel B DIO
+                        int dioA = static_cast<int>(sens.dioChannel);
+                        int dioB = static_cast<int>(sens.secondaryDioChannel);
+
+                        ImGui::SetNextItemWidth(70.0f);
+                        if (ImGui::InputInt("Channel A DIO [0..31]##REV", &dioA, 1, 2))
+                        {
+                            sens.dioChannel = static_cast<uint32_t>(std::clamp(dioA, 0, 31));
+                            state.RunLinter();
+                        }
+
+                        ImGui::SameLine(0.0f, 15.0f);
+                        ImGui::SetNextItemWidth(70.0f);
+                        if (ImGui::InputInt("Channel B DIO [0..31]##REV", &dioB, 1, 2))
+                        {
+                            sens.secondaryDioChannel = static_cast<uint32_t>(std::clamp(dioB, 0, 31));
+                            state.RunLinter();
+                        }
+                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Optical quadrature signals: Channel A and Channel B (2048 CPR = 8192 counts/rev)");
+                    }
+
+                    // Target Joint (Filtered to revolute / continuous)
+                    std::vector<const char*> jointNames;
+                    int selectedJointIdx = -1;
+                    for (size_t j = 0; j < state.manifest.joints.size(); ++j)
+                    {
+                        const auto& joint = state.manifest.joints[j];
+                        if (joint.type == "revolute" || joint.type == "continuous")
+                        {
+                            if (sens.targetJoint == joint.name)
+                            {
+                                selectedJointIdx = static_cast<int>(jointNames.size());
+                            }
+                            jointNames.push_back(joint.name.c_str());
+                        }
+                    }
+                    ImGui::SetNextItemWidth(220.0f);
+                    if (ImGui::Combo("Target Joint##REV", &selectedJointIdx, jointNames.data(), static_cast<int>(jointNames.size())))
+                    {
+                        if (selectedJointIdx >= 0 && selectedJointIdx < static_cast<int>(jointNames.size()))
+                        {
+                            sens.targetJoint = jointNames[selectedJointIdx];
+                            state.RunLinter();
+                        }
+                    }
+
+                    // Ratio & CPR
+                    float ratio = static_cast<float>(sens.sensorToMechanismRatio);
+                    if (SliderWithDirectInput("Sensor-to-Mechanism Ratio##REV", &ratio, 0.1f, 50.0f, "%.3f", 100.0f, 65.0f))
+                    {
+                        sens.sensorToMechanismRatio = std::max(0.001, static_cast<double>(ratio));
+                    }
+
+                    int cprInt = static_cast<int>(sens.cpr);
+                    ImGui::SetNextItemWidth(90.0f);
+                    if (ImGui::InputInt("CPR (Counts Per Rev)##REV", &cprInt, 1024, 4096))
+                    {
+                        sens.cpr = static_cast<uint32_t>(std::max(1, cprInt));
+                    }
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Quadrature optical is typically 8192 (4x decoding). Duty cycle absolute is typically 1024 or 4096.");
+
+                    // Zero Offset in Radians and Degrees
+                    float offsetRad = static_cast<float>(sens.offsetRad);
+                    float offsetDeg = offsetRad * (180.0f / static_cast<float>(std::numbers::pi));
+
+                    if (SliderWithDirectInput("Zero Offset (rad)##REV", &offsetRad, -3.14159f, 3.14159f, "%.4f", 100.0f, 65.0f))
+                    {
+                        sens.offsetRad = offsetRad;
+                    }
+                    ImGui::SameLine(0.0f, 10.0f);
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(%.1f deg)", offsetDeg);
+
+                    // Direction Inversion
+                    bool inv = sens.inverted;
+                    if (ImGui::Checkbox("Invert Sensor Direction##REV", &inv))
+                    {
+                        sens.inverted = inv;
+                    }
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Inverts counting direction (+rad vs -rad).");
+                }
+                // CASE J: AndyMark LIDAR-Lite v3 / CAN Lidar (am-3829 / am-5684)
+                else if (sens.type == "andymark_lidar3")
+                {
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "AndyMark LIDAR-Lite v3 / CAN Lidar (am-3829 / am-5684):");
+
+                    // 1. Hardware Interface Mode
+                    int busMode = 0; // 0: CAN, 1: I2C, 2: DIO PWM
+                    if (sens.bus == "i2c_onboard" || sens.bus == "i2c_mxp")
+                    {
+                        busMode = 1;
+                    }
+                    else if (sens.bus == "dio_pwm")
+                    {
+                        busMode = 2;
+                    }
+
+                    BeginOptionRow("Hardware Interface:", 170.0f);
+                    if (ImGui::RadioButton("CAN Bus (am-5684)##LidarMode", busMode == 0))
+                    {
+                        sens.bus = "rio";
+                        if (sens.canId == 0) sens.canId = 35;
+                        state.RunLinter();
+                    }
+                    AutoWrapSameLine(170.0f);
+                    if (ImGui::RadioButton("I2C Bus (am-3829)##LidarMode", busMode == 1))
+                    {
+                        sens.bus = "i2c_onboard";
+                        if (sens.i2cAddress == 0) sens.i2cAddress = 0x62;
+                        state.RunLinter();
+                    }
+                    AutoWrapSameLine(200.0f);
+                    if (ImGui::RadioButton("DIO PWM Mode (am-3829)##LidarMode", busMode == 2))
+                    {
+                        sens.bus = "dio_pwm";
+                        state.RunLinter();
+                    }
+
+                    if (busMode == 0)
+                    {
+                        int canIdInt = static_cast<int>(sens.canId);
+                        ImGui::SetNextItemWidth(70.0f);
+                        if (ImGui::InputInt("CAN ID##LidarCAN", &canIdInt, 1, 5))
+                        {
+                            sens.canId = static_cast<uint32_t>(std::max(0, canIdInt));
+                            state.RunLinter();
+                        }
+
+                        ImGui::SameLine(0.0f, 12.0f);
+                        int busIdx = (sens.bus == "canivore") ? 1 : 0;
+                        ImGui::SetNextItemWidth(140.0f);
+                        if (ImGui::Combo("CAN Bus##LidarCAN", &busIdx, kCanBusLabels, IM_ARRAYSIZE(kCanBusLabels)))
+                        {
+                            sens.bus = kCanBuses[busIdx];
+                            state.RunLinter();
+                        }
+                    }
+                    else if (busMode == 1)
+                    {
+                        int busIdx = (sens.bus == "i2c_mxp") ? 1 : 0;
+                        const char* i2cBuses[] = { "I2C (Onboard)", "I2C (MXP Extension)" };
+                        ImGui::SetNextItemWidth(160.0f);
+                        if (ImGui::Combo("I2C Port##LidarI2C", &busIdx, i2cBuses, 2))
+                        {
+                            sens.bus = (busIdx == 1) ? "i2c_mxp" : "i2c_onboard";
+                            state.RunLinter();
+                        }
+
+                        ImGui::SameLine(0.0f, 12.0f);
+                        int addrHex = static_cast<int>(sens.i2cAddress);
+                        ImGui::SetNextItemWidth(90.0f);
+                        if (ImGui::InputInt("I2C Address (Hex 0x62=98)##LidarI2C", &addrHex, 1, 16))
+                        {
+                            sens.i2cAddress = static_cast<uint32_t>(std::clamp(addrHex, 0, 127));
+                        }
+                    }
+                    else
+                    {
+                        int dioChan = static_cast<int>(sens.dioChannel);
+                        ImGui::SetNextItemWidth(70.0f);
+                        if (ImGui::InputInt("roboRIO DIO Channel [0..31]##LidarDIO", &dioChan, 1, 2))
+                        {
+                            sens.dioChannel = static_cast<uint32_t>(std::clamp(dioChan, 0, 31));
+                            state.RunLinter();
+                        }
+                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("PWM output mode: 10 us pulse width per cm measured (am-3829 Mode pin)");
+                    }
+
+                    // Mount Parent Link
+                    std::vector<const char*> linkNames;
+                    int selectedLinkIdx = -1;
+                    for (size_t l = 0; l < state.manifest.links.size(); ++l)
+                    {
+                        linkNames.push_back(state.manifest.links[l].name.c_str());
+                        if (sens.parentLink == state.manifest.links[l].name)
+                        {
+                            selectedLinkIdx = static_cast<int>(l);
+                        }
+                    }
+                    ImGui::SetNextItemWidth(220.0f);
+                    if (ImGui::Combo("Mount Link##LidarLink", &selectedLinkIdx, linkNames.data(), static_cast<int>(linkNames.size())))
+                    {
+                        if (selectedLinkIdx >= 0 && selectedLinkIdx < static_cast<int>(linkNames.size()))
+                        {
+                            sens.parentLink = linkNames[selectedLinkIdx];
+                            state.RunLinter();
+                        }
+                    }
+
+                    // Mount Offset (m) in Robot Frame (+X=Right, +Y=Up, +Z=Front)
+                    float offX = static_cast<float>(sens.mountOffsetM.x);
+                    float offY = static_cast<float>(sens.mountOffsetM.y);
+                    float offZ = static_cast<float>(sens.mountOffsetM.z);
+                    ImGui::Text("Mount Offset relative to Link Origin (+X=Right, +Y=Up, +Z=Front) (m):");
+                    bool offChanged = false;
+                    offChanged |= SliderWithDirectInput("X (Right [+]) (m)##LidarOff", &offX, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("Y (Up [+]) (m)##LidarOff", &offY, -1.0f, 1.0f, "%.3f");
+                    offChanged |= SliderWithDirectInput("Z (Front [+]) (m)##LidarOff", &offZ, -1.0f, 1.0f, "%.3f");
+                    if (offChanged)
+                    {
+                        sens.mountOffsetM = glm::dvec3(offX, offY, offZ);
+                    }
+
+                    // Pointing Direction
+                    ImGui::Text("Laser Pointing Direction:");
+                    if (ImGui::Button("Front (+Z)##LidarDir"))
+                    {
+                        sens.mountRotationQuat = glm::dquat(1.0, 0.0, 0.0, 0.0);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Rear (-Z)##LidarDir"))
+                    {
+                        sens.mountRotationQuat = glm::dquat(0.0, 0.0, 1.0, 0.0); // 180 deg around Y
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Left (-X)##LidarDir"))
+                    {
+                        sens.mountRotationQuat = glm::dquat(0.7071068, 0.0, -0.7071068, 0.0); // -90 deg around Y
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Right (+X)##LidarDir"))
+                    {
+                        sens.mountRotationQuat = glm::dquat(0.7071068, 0.0, 0.7071068, 0.0); // +90 deg around Y
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Down (-Y)##LidarDir"))
+                    {
+                        sens.mountRotationQuat = glm::dquat(0.7071068, 0.7071068, 0.0, 0.0); // 90 deg pitch down
+                    }
+
+                    // Range Bounds & Noise Calibration
+                    float minR = static_cast<float>(sens.triggerMin);
+                    float maxR = static_cast<float>(sens.triggerMax > 0.0 ? sens.triggerMax : 40.0);
+                    bool rangeChanged = false;
+                    rangeChanged |= SliderWithDirectInput("Min Range (m)##LidarRange", &minR, 0.01f, 2.0f, "%.3f m", 100.0f, 65.0f);
+                    rangeChanged |= SliderWithDirectInput("Max Range (m)##LidarRange", &maxR, 0.5f, 50.0f, "%.2f m", 100.0f, 65.0f);
+                    if (rangeChanged)
+                    {
+                        sens.triggerMin = static_cast<double>(minR);
+                        sens.triggerMax = static_cast<double>(maxR);
+                        state.RunLinter();
+                    }
+
+                    // Presets
+                    ImGui::TextDisabled("Quick Presets:");
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("am-3829 LIDAR-Lite v3 (40m)"))
+                    {
+                        sens.triggerMin = 0.05;
+                        sens.triggerMax = 40.0;
+                        sens.bus = "i2c_onboard";
+                        sens.i2cAddress = 0x62;
+                        sens.customNumericParams["noiseStdDevM"] = 0.01;
+                        state.RunLinter();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("am-5684 CAN Lidar (4m)"))
+                    {
+                        sens.triggerMin = 0.03;
+                        sens.triggerMax = 4.0;
+                        sens.bus = "rio";
+                        if (sens.canId == 0) sens.canId = 35;
+                        sens.customNumericParams["noiseStdDevM"] = 0.005;
+                        state.RunLinter();
+                    }
+
+                    float noiseM = static_cast<float>(sens.customNumericParams.count("noiseStdDevM") ? sens.customNumericParams["noiseStdDevM"] : 0.01);
+                    if (SliderWithDirectInput("Measurement Noise StdDev (m)##Lidar", &noiseM, 0.0f, 0.05f, "%.4f m", 100.0f, 65.0f))
+                    {
+                        sens.customNumericParams["noiseStdDevM"] = std::max(0.0, static_cast<double>(noiseM));
+                    }
+                }
+                // CASE K: Custom Transducer
                 else
                 {
                     ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Custom Sensor Configuration:");
@@ -891,5 +1291,7 @@ namespace FRCBananaSim::Tools::Configurator
             sensors.push_back(dup);
             state.RunLinter();
         }
+
+        ImGui::PopTextWrapPos();
     }
 }

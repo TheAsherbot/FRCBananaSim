@@ -282,6 +282,59 @@ namespace FRCBananaSim::Robot
                 hasInertia = true;
             }
 
+            // Check for bumper mass injection onto target link (defaulting to root chassis if empty)
+            bool isBumperTarget = false;
+            if (sidecar.bumpers.enabled && sidecar.bumpers.massKg > 0.0)
+            {
+                const auto& target = sidecar.bumpers.targetLink;
+                if ((target.empty() && link.isRoot) || target == link.name)
+                {
+                    isBumperTarget = true;
+                }
+            }
+
+            if (isBumperTarget)
+            {
+                double mBumper = sidecar.bumpers.massKg;
+                glm::dvec3 rBumperNWU = Schema::RobotSchemaLoader::ConvertRobotFrameToNWU(sidecar.bumpers.offsetM);
+
+                double totalMass = effectiveMass + mBumper;
+                if (totalMass > 1e-9)
+                {
+                    linkComNWU = (effectiveMass * linkComNWU + mBumper * rBumperNWU) / totalMass;
+                }
+                effectiveMass = totalMass;
+                rb.mass = static_cast<float>(effectiveMass);
+
+                // Rotational inertia of the bumper bounding cuboid in Robot frame (+X Right, +Y Up, +Z Front)
+                double lx = std::max(0.1, sidecar.bumpers.widthM);   // Width across X
+                double ly = std::max(0.05, sidecar.bumpers.heightM); // Height across Y
+                double lz = std::max(0.1, sidecar.bumpers.lengthM);  // Length across Z
+                glm::dmat3 iBumperBodyRobot(0.0);
+                iBumperBodyRobot[0][0] = (mBumper / 12.0) * (ly * ly + lz * lz);
+                iBumperBodyRobot[1][1] = (mBumper / 12.0) * (lx * lx + lz * lz);
+                iBumperBodyRobot[2][2] = (mBumper / 12.0) * (lx * lx + ly * ly);
+
+                glm::dmat3 iBumperBodyNWU = Schema::RobotSchemaLoader::ConvertRobotFrameInertiaToNWU(iBumperBodyRobot);
+
+                // Parallel axis contribution from offset in NWU
+                double rSq = glm::dot(rBumperNWU, rBumperNWU);
+                glm::dmat3 iBumperParallelNWU(
+                    mBumper * (rSq - rBumperNWU.x * rBumperNWU.x),
+                    mBumper * (-rBumperNWU.x * rBumperNWU.y),
+                    mBumper * (-rBumperNWU.x * rBumperNWU.z),
+                    mBumper * (-rBumperNWU.y * rBumperNWU.x),
+                    mBumper * (rSq - rBumperNWU.y * rBumperNWU.y),
+                    mBumper * (-rBumperNWU.y * rBumperNWU.z),
+                    mBumper * (-rBumperNWU.z * rBumperNWU.x),
+                    mBumper * (-rBumperNWU.z * rBumperNWU.y),
+                    mBumper * (rSq - rBumperNWU.z * rBumperNWU.z)
+                );
+
+                inertiaNWU += (iBumperBodyNWU + iBumperParallelNWU);
+                hasInertia = true;
+            }
+
             if (hasInertia)
             {
                 glm::dmat3 inertiaEngine = Schema::RobotSchemaLoader::ConvertNWUInertiaToEngine(inertiaNWU);
@@ -302,8 +355,103 @@ namespace FRCBananaSim::Robot
 
             scene.AddComponent(linkEntity, rb);
 
+            // Prepare colliders list, optionally injecting virtual bumper colliders
+            std::vector<Schema::ColliderDefinition> effectiveColliders;
+            bool isBumperColliderTarget = false;
+            if (sidecar.bumpers.enabled)
+            {
+                const auto& target = sidecar.bumpers.targetLink;
+                if ((target.empty() && link.isRoot) || target == link.name)
+                {
+                    isBumperColliderTarget = true;
+                }
+            }
+
+            for (const auto& cDef : link.colliders)
+            {
+                // If virtual bumpers are enabled on this target, ignore any existing CAD bumper box
+                if (isBumperColliderTarget &&
+                    (cDef.name.find("bumper") != std::string::npos || cDef.material == "bumper_fabric"))
+                {
+                    continue;
+                }
+                effectiveColliders.push_back(cDef);
+            }
+
+            if (isBumperColliderTarget)
+            {
+                const auto& b = sidecar.bumpers;
+                std::string bMat = b.material.empty() ? "bumper_fabric" : b.material;
+
+                auto addBumperBoxEngine = [&](const std::string& nameSuffix, const glm::dvec3& originRob, const glm::dvec3& dimsRob)
+                {
+                    Schema::ColliderDefinition def;
+                    def.name = "bumper_" + nameSuffix;
+                    def.type = "box";
+                    def.originM = Schema::RobotSchemaLoader::ConvertRobotFrameToNWU(originRob);
+                    def.dimensionsM = glm::abs(Schema::RobotSchemaLoader::ConvertRobotFrameToNWU(dimsRob));
+                    def.material = bMat;
+                    effectiveColliders.push_back(def);
+                };
+
+                if (b.shape == "box")
+                {
+                    addBumperBoxEngine("solid_box", b.offsetM, glm::dvec3(b.widthM, b.heightM, b.lengthM));
+                }
+                else if (b.shape == "perimeter")
+                {
+                    // Front (+Z)
+                    addBumperBoxEngine("front",
+                        glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
+                        glm::dvec3(b.widthM, b.heightM, b.thicknessM));
+                    // Back (-Z)
+                    addBumperBoxEngine("back",
+                        glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z - b.lengthM * 0.5 + b.thicknessM * 0.5),
+                        glm::dvec3(b.widthM, b.heightM, b.thicknessM));
+                    // Left (-X)
+                    double sideLen = std::max(0.01, b.lengthM - 2.0 * b.thicknessM);
+                    addBumperBoxEngine("left",
+                        glm::dvec3(b.offsetM.x - b.widthM * 0.5 + b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                        glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                    // Right (+X)
+                    addBumperBoxEngine("right",
+                        glm::dvec3(b.offsetM.x + b.widthM * 0.5 - b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                        glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                }
+                else if (b.shape == "u_shape")
+                {
+                    // Back (-Z)
+                    addBumperBoxEngine("back",
+                        glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z - b.lengthM * 0.5 + b.thicknessM * 0.5),
+                        glm::dvec3(b.widthM, b.heightM, b.thicknessM));
+                    // Left (-X)
+                    double sideLen = std::max(0.01, b.lengthM - 2.0 * b.thicknessM);
+                    addBumperBoxEngine("left",
+                        glm::dvec3(b.offsetM.x - b.widthM * 0.5 + b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                        glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                    // Right (+X)
+                    addBumperBoxEngine("right",
+                        glm::dvec3(b.offsetM.x + b.widthM * 0.5 - b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                        glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                    // Front corners if cutout is narrower than the inside width
+                    double innerWidth = b.widthM - 2.0 * b.thicknessM;
+                    if (b.cutoutWidthM < innerWidth && innerWidth > 0.02)
+                    {
+                        double cornerW = (innerWidth - b.cutoutWidthM) * 0.5 + b.thicknessM;
+                        // Front-Left (-X, +Z)
+                        addBumperBoxEngine("front_left",
+                            glm::dvec3(b.offsetM.x - (b.widthM - cornerW) * 0.5, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
+                            glm::dvec3(cornerW, b.heightM, b.thicknessM));
+                        // Front-Right (+X, +Z)
+                        addBumperBoxEngine("front_right",
+                            glm::dvec3(b.offsetM.x + (b.widthM - cornerW) * 0.5, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
+                            glm::dvec3(cornerW, b.heightM, b.thicknessM));
+                    }
+                }
+            }
+
             // Add Colliders if defined (Primary + Sub-colliders for Compound Shape)
-            if (!link.colliders.empty())
+            if (!effectiveColliders.empty())
             {
                 Physics::Components::ColliderComponent col;
 
@@ -345,7 +493,7 @@ namespace FRCBananaSim::Robot
 
                 // Populate primary collider
                 populateColliderDef(
-                    link.colliders[0],
+                    effectiveColliders[0],
                     col.shape,
                     col.boxHalfExtents,
                     col.radius,
@@ -355,11 +503,11 @@ namespace FRCBananaSim::Robot
                 );
 
                 // Populate additional colliders as compound sub-colliders
-                for (size_t i = 1; i < link.colliders.size(); ++i)
+                for (size_t i = 1; i < effectiveColliders.size(); ++i)
                 {
                     Physics::Components::ColliderPrimitive sub;
                     populateColliderDef(
-                        link.colliders[i],
+                        effectiveColliders[i],
                         sub.shape,
                         sub.boxHalfExtents,
                         sub.radius,
@@ -416,27 +564,29 @@ namespace FRCBananaSim::Robot
                 glm::vec3 worldAnchor = parentPose.worldPos + (parentPose.worldRot * originEngine);
                 glm::vec3 worldAxis = glm::normalize(parentPose.worldRot * axisEngine);
 
+                Schema::JointLimitOverride effLimits = sidecar.GetEffectiveLimits(joint.name, manifest);
+
                 if (joint.type == "revolute" || joint.type == "continuous")
                 {
                     jc.type = Physics::Components::JointType::Hinge;
                     jc.SetWorldSpace(worldAnchor, worldAxis);
-                    jc.hasLimits = joint.limits.hasLimits;
-                    if (joint.limits.hasLimits)
+                    jc.hasLimits = effLimits.hasLimits;
+                    if (effLimits.hasLimits)
                     {
-                        jc.minLimit = static_cast<float>(joint.limits.lower);
-                        jc.maxLimit = static_cast<float>(joint.limits.upper);
+                        jc.minLimit = static_cast<float>(effLimits.lower);
+                        jc.maxLimit = static_cast<float>(effLimits.upper);
                         jc.hasLimitSpring = true;
-                        jc.limitSpringFrequency = static_cast<float>(joint.limits.springFrequencyHz > 0.0 ? joint.limits.springFrequencyHz : 40.0);
-                        jc.limitSpringDamping = static_cast<float>(joint.limits.springDampingRatio > 0.0 ? joint.limits.springDampingRatio : 1.0);
+                        jc.limitSpringFrequency = static_cast<float>(effLimits.springFrequencyHz > 0.0 ? effLimits.springFrequencyHz : 40.0);
+                        jc.limitSpringDamping = static_cast<float>(effLimits.springDampingRatio > 0.0 ? effLimits.springDampingRatio : 1.0);
                     }
                 }
                 else if (joint.type == "prismatic")
                 {
                     jc.type = Physics::Components::JointType::Slider;
-                    float minL = static_cast<float>(joint.limits.lower);
-                    float maxL = static_cast<float>(joint.limits.upper);
+                    float minL = static_cast<float>(effLimits.lower);
+                    float maxL = static_cast<float>(effLimits.upper);
                     jc.SetWorldSpaceSlider(worldAnchor, worldAxis, minL, maxL);
-                    jc.hasLimits = joint.limits.hasLimits;
+                    jc.hasLimits = effLimits.hasLimits;
                     jc.motorMode = Physics::Components::JointMotorMode::Position;
                     jc.targetPosition = 0.0f;
                     jc.springFrequency = 100.0f;
@@ -529,9 +679,10 @@ namespace FRCBananaSim::Robot
                                 }
                             }
                         }
-                        if (jDef->limits.hasLimits)
+                        Schema::JointLimitOverride effLimits = sidecar.GetEffectiveLimits(jDef->name, manifest);
+                        if (effLimits.hasLimits)
                         {
-                            stage.maxTravelM = jDef->limits.upper - jDef->limits.lower;
+                            stage.maxTravelM = effLimits.upper - effLimits.lower;
                         }
                     }
                     elev.stages.push_back(stage);
@@ -603,10 +754,11 @@ namespace FRCBananaSim::Robot
                             }
                         }
                     }
-                    if (jDef->limits.hasLimits)
+                    Schema::JointLimitOverride effLimits = sidecar.GetEffectiveLimits(jDef->name, manifest);
+                    if (effLimits.hasLimits)
                     {
-                        arm.minAngleRad = jDef->limits.lower;
-                        arm.maxAngleRad = jDef->limits.upper;
+                        arm.minAngleRad = effLimits.lower;
+                        arm.maxAngleRad = effLimits.upper;
                     }
                 }
 
@@ -928,12 +1080,14 @@ namespace FRCBananaSim::Robot
             Core::ECS::Core::Entity se = scene.CreateEntity();
             result.sensorEntities[s.name] = se;
 
-            if (s.type == "cancoder")
+            if (s.type == "cancoder" || s.type == "rev_through_bore")
             {
                 Sensors::Components::EncoderComponent enc;
                 enc.name = s.name;
-                enc.bindingType = Sensors::Components::EncoderBindingType::CANcoder;
-                enc.slot = s.canId;
+                enc.bindingType = (s.type == "cancoder")
+                    ? Sensors::Components::EncoderBindingType::CANcoder
+                    : Sensors::Components::EncoderBindingType::JointOnly;
+                enc.slot = (s.type == "cancoder") ? s.canId : s.dioChannel;
                 auto jIt = result.jointEntities.find(s.targetJoint);
                 if (jIt != result.jointEntities.end())
                 {

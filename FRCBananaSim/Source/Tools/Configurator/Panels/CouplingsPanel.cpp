@@ -544,7 +544,7 @@ namespace FRCBananaSim::Tools::Configurator
                         static_cast<float>(coup.fourBar.closureParentAnchorM.y),
                         static_cast<float>(coup.fourBar.closureParentAnchorM.z)
                     };
-                    ImGui::TextDisabled("Parent Anchor [X, Y, Z] (m):");
+                    ImGui::TextDisabled("Parent Anchor [X=Right, Y=Up, Z=Front] (m):");
                     ImGui::SetNextItemWidth(-1.0f);
                     if (ImGui::InputFloat3("##pAnchor", pAnchor, "%.3f"))
                     {
@@ -557,7 +557,7 @@ namespace FRCBananaSim::Tools::Configurator
                         static_cast<float>(coup.fourBar.closureChildAnchorM.y),
                         static_cast<float>(coup.fourBar.closureChildAnchorM.z)
                     };
-                    ImGui::TextDisabled("Child Anchor [X, Y, Z] (m):");
+                    ImGui::TextDisabled("Child Anchor [X=Right, Y=Up, Z=Front] (m):");
                     ImGui::SetNextItemWidth(-1.0f);
                     if (ImGui::InputFloat3("##cAnchor", cAnchor, "%.3f"))
                     {
@@ -570,7 +570,7 @@ namespace FRCBananaSim::Tools::Configurator
                         static_cast<float>(coup.fourBar.closureAxis.y),
                         static_cast<float>(coup.fourBar.closureAxis.z)
                     };
-                    ImGui::TextDisabled("Closure Axis [X, Y, Z]:");
+                    ImGui::TextDisabled("Closure Axis [X=Right, Y=Up, Z=Front]:");
                     ImGui::SetNextItemWidth(-1.0f);
                     if (ImGui::InputFloat3("##cAxis", cAxis, "%.2f"))
                     {

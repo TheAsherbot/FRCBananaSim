@@ -981,5 +981,65 @@ namespace FRCBananaSim::Tests
                 }
             }
         }
+
+        // =============================================================
+        // 11. Virtual Bumper Generation & Mass Injection (RA11)
+        // =============================================================
+        {
+            std::cout << "  -> RA11: Virtual Bumper Generation & Mass Injection\n";
+
+            RobotManifest customManifest;
+            customManifest.schemaVersion = "1.0.0";
+            customManifest.robotName = "BumperBot";
+
+            LinkDefinition link;
+            link.name = "base_link";
+            link.isRoot = true;
+            link.massKg = 30.0;
+            link.centerOfMassM = glm::dvec3(0.0, 0.0, 0.10);
+            link.inertiaTensor.ixx = 1.0;
+            link.inertiaTensor.iyy = 2.0;
+            link.inertiaTensor.izz = 3.0;
+            // No colliders in CAD!
+            customManifest.links.push_back(link);
+
+            RobotSidecar customSidecar;
+            customSidecar.bumpers.enabled = true;
+            customSidecar.bumpers.targetLink = "base_link";
+            customSidecar.bumpers.shape = "perimeter";
+            customSidecar.bumpers.lengthM = 0.85;
+            customSidecar.bumpers.widthM = 0.85;
+            customSidecar.bumpers.heightM = 0.127;
+            customSidecar.bumpers.thicknessM = 0.0825;
+            customSidecar.bumpers.offsetM = glm::dvec3(0.0, 0.0, 0.09);
+            customSidecar.bumpers.massKg = 6.0;
+
+            MaterialLibrary materials;
+            Physics::JoltContext jolt;
+            jolt.Initialize();
+
+            Scene scene;
+            RobotAssembler assembler(scene, &jolt);
+            auto robot = assembler.Assemble(customManifest, customSidecar, materials);
+
+            TEST_EXPECT_TRUE(ctx, robot.isSuccess);
+
+            auto* rb = scene.GetComponent<RigidBodyComponent>(robot.chassisEntity);
+            TEST_EXPECT_TRUE(ctx, rb != nullptr);
+            if (rb)
+            {
+                // Verify chassis mass includes bumpers: 30 kg + 6 kg = 36 kg
+                TEST_EXPECT_NEAR(ctx, rb->mass, 36.0f, 1e-4f);
+            }
+
+            auto* colComp = scene.GetComponent<ColliderComponent>(robot.chassisEntity);
+            TEST_EXPECT_TRUE(ctx, colComp != nullptr);
+            if (colComp)
+            {
+                // 4-piece perimeter bumper generates primary + 3 sub-colliders = 4 boxes
+                TEST_EXPECT_TRUE(ctx, colComp->IsCompound());
+                TEST_EXPECT_EQ(ctx, colComp->subColliders.size(), static_cast<size_t>(3));
+            }
+        }
     }
 }

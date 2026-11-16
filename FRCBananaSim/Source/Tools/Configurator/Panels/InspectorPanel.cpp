@@ -9,7 +9,10 @@
 #include "Tools/Configurator/Panels/CouplingsPanel.h"
 #include "Tools/Configurator/Panels/SensorPanel.h"
 #include "Tools/Configurator/Panels/MassReconciliationPanel.h"
+#include "Tools/Configurator/Panels/BumperPanel.h"
 #include "Tools/Configurator/ConfiguratorState.h"
+#include "Tools/Configurator/Panels/ConfiguratorWidgets.h"
+#include "Robot/Schema/RobotSchemaLoader.h"
 
 #include <imgui/imgui.h>
 
@@ -20,7 +23,8 @@ namespace FRCBananaSim::Tools::Configurator
           mechanismPanel(std::make_unique<MechanismPanel>()),
           couplingsPanel(std::make_unique<CouplingsPanel>()),
           sensorPanel(std::make_unique<SensorPanel>()),
-          massReconciliationPanel(std::make_unique<MassReconciliationPanel>())
+          massReconciliationPanel(std::make_unique<MassReconciliationPanel>()),
+          bumperPanel(std::make_unique<BumperPanel>())
     {
     }
 
@@ -28,16 +32,19 @@ namespace FRCBananaSim::Tools::Configurator
 
     void InspectorPanel::Render(ConfiguratorState& state)
     {
+        ImGui::PushTextWrapPos(0.0f);
+
         ImGui::TextDisabled("SUBSYSTEM & PROPERTY INSPECTOR");
         ImGui::Separator();
 
         // 2-Line Subsystem Navigation Bar
         float availW = ImGui::GetContentRegionAvail().x;
         float spacing = ImGui::GetStyle().ItemSpacing.x;
-        float btnW = std::max(70.0f, (availW - 2.0f * spacing) / 3.0f);
+        float btnW4 = std::max(60.0f, (availW - 3.0f * spacing) / 4.0f);
+        float btnW3 = std::max(70.0f, (availW - 2.0f * spacing) / 3.0f);
         float btnH = 26.0f;
 
-        auto renderNavButton = [&](const char* label, ConfiguratorState::ActiveInspectorTab tab)
+        auto renderNavButton = [&](const char* label, ConfiguratorState::ActiveInspectorTab tab, float width)
         {
             bool isActive = (state.activeInspectorTab == tab);
             if (isActive)
@@ -55,7 +62,7 @@ namespace FRCBananaSim::Tools::Configurator
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.75f, 0.78f, 0.82f, 1.0f));
             }
 
-            if (ImGui::Button(label, ImVec2(btnW, btnH)))
+            if (ImGui::Button(label, ImVec2(width, btnH)))
             {
                 state.activeInspectorTab = tab;
             }
@@ -63,19 +70,21 @@ namespace FRCBananaSim::Tools::Configurator
             ImGui::PopStyleColor(4);
         };
 
-        // Line 1: CAD Selection | Swerve Drive | Mechanisms
-        renderNavButton("CAD Selection", ConfiguratorState::ActiveInspectorTab::CADSelection);
+        // Line 1: CAD Selection | Swerve Drive | Mechanisms | Bumpers
+        renderNavButton("CAD Selection", ConfiguratorState::ActiveInspectorTab::CADSelection, btnW4);
         ImGui::SameLine();
-        renderNavButton("Swerve Drive", ConfiguratorState::ActiveInspectorTab::SwerveDrivetrain);
+        renderNavButton("Swerve Drive", ConfiguratorState::ActiveInspectorTab::SwerveDrivetrain, btnW4);
         ImGui::SameLine();
-        renderNavButton("Mechanisms", ConfiguratorState::ActiveInspectorTab::Mechanisms);
+        renderNavButton("Mechanisms", ConfiguratorState::ActiveInspectorTab::Mechanisms, btnW4);
+        ImGui::SameLine();
+        renderNavButton("Bumpers", ConfiguratorState::ActiveInspectorTab::Bumpers, btnW4);
 
-        // Line 2: Couplings | Sensor Suite | Mass & Scale
-        renderNavButton("Couplings", ConfiguratorState::ActiveInspectorTab::Couplings);
+        // Line 2: Couplings | Sensors | Mass & Scale
+        renderNavButton("Couplings", ConfiguratorState::ActiveInspectorTab::Couplings, btnW3);
         ImGui::SameLine();
-        renderNavButton("Sensors", ConfiguratorState::ActiveInspectorTab::Sensors);
+        renderNavButton("Sensors", ConfiguratorState::ActiveInspectorTab::Sensors, btnW3);
         ImGui::SameLine();
-        renderNavButton("Mass & Scale", ConfiguratorState::ActiveInspectorTab::MassReconciliation);
+        renderNavButton("Mass & Scale", ConfiguratorState::ActiveInspectorTab::MassReconciliation, btnW3);
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -93,6 +102,9 @@ namespace FRCBananaSim::Tools::Configurator
         case ConfiguratorState::ActiveInspectorTab::Mechanisms:
             mechanismPanel->Render(state);
             break;
+        case ConfiguratorState::ActiveInspectorTab::Bumpers:
+            bumperPanel->Render(state);
+            break;
         case ConfiguratorState::ActiveInspectorTab::Couplings:
             couplingsPanel->Render(state);
             break;
@@ -103,6 +115,8 @@ namespace FRCBananaSim::Tools::Configurator
             massReconciliationPanel->Render(state);
             break;
         }
+
+        ImGui::PopTextWrapPos();
     }
 
     void InspectorPanel::RenderCADSelection(ConfiguratorState& state)
@@ -147,9 +161,10 @@ namespace FRCBananaSim::Tools::Configurator
                     ImGui::Text("Mass:         %.3f kg", link->massKg);
                 }
 
-                ImGui::Text("Center of Mass (NWU):");
+                glm::vec3 comRobot = Robot::Schema::RobotSchemaLoader::ConvertNWUToRobotFrame(glm::vec3(link->centerOfMassM));
+                ImGui::Text("Center of Mass (+X Right, +Y Up, +Z Front):");
                 ImGui::Text("  [X=%.3f, Y=%.3f, Z=%.3f] m",
-                    link->centerOfMassM.x, link->centerOfMassM.y, link->centerOfMassM.z);
+                    comRobot.x, comRobot.y, comRobot.z);
 
                 ImGui::Spacing();
                 ImGui::Text("Rotational Inertia (kg*m^2):");
@@ -167,8 +182,11 @@ namespace FRCBananaSim::Tools::Configurator
                     const auto& col = link->colliders[i];
                     if (ImGui::TreeNode((void*)(intptr_t)i, "Collider %zu: %s (%s)", i, col.name.c_str(), col.type.c_str()))
                     {
-                        ImGui::Text("Origin (NWU):  [%.3f, %.3f, %.3f] m", col.originM.x, col.originM.y, col.originM.z);
-                        ImGui::Text("Dimensions:    [%.3f, %.3f, %.3f] m", col.dimensionsM.x, col.dimensionsM.y, col.dimensionsM.z);
+                        glm::vec3 colOrigRobot = Robot::Schema::RobotSchemaLoader::ConvertNWUToRobotFrame(glm::vec3(col.originM));
+                        glm::vec3 colDimsRobot = glm::abs(Robot::Schema::RobotSchemaLoader::ConvertNWUToRobotFrame(glm::vec3(col.dimensionsM)));
+                        ImGui::Text("Origin (+X Right, +Y Up, +Z Front):     [%.3f, %.3f, %.3f] m", colOrigRobot.x, colOrigRobot.y, colOrigRobot.z);
+                        ImGui::Text("Dimensions [X(Width), Y(Height), Z(Length)]: [%.3f, %.3f, %.3f] m",
+                            colDimsRobot.x, colDimsRobot.y, colDimsRobot.z);
                         ImGui::TreePop();
                     }
                 }
@@ -189,25 +207,17 @@ namespace FRCBananaSim::Tools::Configurator
                 ImGui::Text("Parent Link: %s", joint->parentLink.c_str());
                 ImGui::Text("Child Link:  %s", joint->childLink.c_str());
 
-                ImGui::Spacing();
-                ImGui::Text("Anchor Origin (NWU):");
-                ImGui::Text("  [X=%.3f, Y=%.3f, Z=%.3f] m", joint->originM.x, joint->originM.y, joint->originM.z);
-                ImGui::Text("Motion Axis (NWU):");
-                ImGui::Text("  [X=%.3f, Y=%.3f, Z=%.3f]", joint->axis.x, joint->axis.y, joint->axis.z);
+                glm::vec3 jOrigRobot = Robot::Schema::RobotSchemaLoader::ConvertNWUToRobotFrame(glm::vec3(joint->originM));
+                glm::vec3 jAxisRobot = Robot::Schema::RobotSchemaLoader::ConvertNWUToRobotFrame(glm::vec3(joint->axis));
 
                 ImGui::Spacing();
-                if (joint->limits.hasLimits)
-                {
-                    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Physical Hardstop Limits:");
-                    ImGui::Text("  Lower: %.3f %s", joint->limits.lower, joint->limits.unit.c_str());
-                    ImGui::Text("  Upper: %.3f %s", joint->limits.upper, joint->limits.unit.c_str());
-                    ImGui::Text("  Spring Frequency: %.1f Hz", joint->limits.springFrequencyHz);
-                    ImGui::Text("  Damping Ratio:    %.2f", joint->limits.springDampingRatio);
-                }
-                else
-                {
-                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "Limits: Unbounded / Continuous");
-                }
+                ImGui::Text("Anchor Origin (+X Right, +Y Up, +Z Front):");
+                ImGui::Text("  [X=%.3f, Y=%.3f, Z=%.3f] m", jOrigRobot.x, jOrigRobot.y, jOrigRobot.z);
+                ImGui::Text("Motion Axis (+X Right, +Y Up, +Z Front):");
+                ImGui::Text("  [X=%.3f, Y=%.3f, Z=%.3f]", jAxisRobot.x, jAxisRobot.y, jAxisRobot.z);
+
+                ImGui::Spacing();
+                RenderJointLimitEditor(state, joint->name, "InspectorJointLimit");
                 return;
             }
         }

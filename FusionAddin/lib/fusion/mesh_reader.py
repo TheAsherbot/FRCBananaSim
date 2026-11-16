@@ -87,11 +87,19 @@ def export_link_meshes(
         link_vertices: List[Tuple[float, float, float]] = []
         link_normals: List[Tuple[float, float, float]] = []
         link_indices: List[int] = []
+        total_bodies = len(bodies)
 
         for b_idx, b in enumerate(bodies):
-            if progress_dialog and b_idx % 4 == 0:
+            if progress_dialog:
                 if getattr(progress_dialog, "wasCancelled", False):
                     raise ExportAborted("Export cancelled by user during mesh generation.")
+                if total_bodies > 0:
+                    link_fraction = (link_idx + (b_idx / total_bodies)) / max(total_links, 1)
+                    progress_dialog.progressValue = 58 + int(36 * link_fraction)
+                progress_dialog.message = (
+                    f"Tessellating 3D mesh ({link_idx + 1}/{total_links}) '{lname}': "
+                    f"body {b_idx + 1}/{total_bodies} ({b.name})..."
+                )
                 if IN_FUSION:
                     try:
                         adsk.doEvents()
@@ -118,6 +126,11 @@ def export_link_meshes(
                 calc = mesh_mgr.createMeshCalculator()
                 calc.setQuality(selected_quality)
                 tri_mesh = calc.calculate()
+                if IN_FUSION:
+                    try:
+                        adsk.doEvents()
+                    except Exception:
+                        pass
                 if not tri_mesh:
                     continue
 

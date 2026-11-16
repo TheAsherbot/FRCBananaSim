@@ -405,6 +405,20 @@ namespace FRCBananaSim::Tools::Configurator
                         state.RunLinter();
                     }
 
+                    // Limit configuration for Differential Joints
+                    if (!mech.targetJoints[0].empty())
+                    {
+                        ImGui::Spacing();
+                        ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), "Pitch Joint Output A Limits ('%s'):", mech.targetJoints[0].c_str());
+                        RenderJointLimitEditor(state, mech.targetJoints[0], "DiffPitch");
+                    }
+                    if (!mech.targetJoints[1].empty())
+                    {
+                        ImGui::Spacing();
+                        ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), "Roll Joint Output B Limits ('%s'):", mech.targetJoints[1].c_str());
+                        RenderJointLimitEditor(state, mech.targetJoints[1], "DiffRoll");
+                    }
+
                     // Parent Link Combo
                     int parentLinkIdx = -1;
                     for (size_t l = 0; l < allLinkNames.size(); ++l)
@@ -478,19 +492,10 @@ namespace FRCBananaSim::Tools::Configurator
                         }
                     }
 
-                    // Display CAD joint limits readout if known
-                    const auto* boundJoint = state.manifest.FindJoint(mech.targetJoint);
-                    if (boundJoint)
+                    if (!mech.targetJoint.empty())
                     {
-                        if (boundJoint->limits.hasLimits)
-                        {
-                            ImGui::TextDisabled("  CAD Range: [%.2f, %.2f] %s",
-                                boundJoint->limits.lower, boundJoint->limits.upper, boundJoint->limits.unit.c_str());
-                        }
-                        else
-                        {
-                            ImGui::TextDisabled("  CAD Range: [Continuous / Unbounded]");
-                        }
+                        ImGui::Spacing();
+                        RenderJointLimitEditor(state, mech.targetJoint, "MechLimit");
                     }
 
                     // Parent Link Combo
@@ -1329,7 +1334,7 @@ namespace FRCBananaSim::Tools::Configurator
                     float axisX = static_cast<float>(mech.spinAxis.x);
                     float axisY = static_cast<float>(mech.spinAxis.y);
                     float axisZ = static_cast<float>(mech.spinAxis.z);
-                    ImGui::TextDisabled("Spin Axis (Unit Vector):");
+                    ImGui::TextDisabled("Spin Axis (+X=Right, +Y=Up, +Z=Front):");
                     SliderWithDirectInput("Axis X##Spin", &axisX, -1.0f, 1.0f, "%.2f", 75.0f, 45.0f);
                     SliderWithDirectInput("Axis Y##Spin", &axisY, -1.0f, 1.0f, "%.2f", 75.0f, 45.0f);
                     SliderWithDirectInput("Axis Z##Spin", &axisZ, -1.0f, 1.0f, "%.2f", 75.0f, 45.0f);
@@ -1343,16 +1348,16 @@ namespace FRCBananaSim::Tools::Configurator
                     float offX = static_cast<float>(mech.mountOffsetM.x);
                     float offY = static_cast<float>(mech.mountOffsetM.y);
                     float offZ = static_cast<float>(mech.mountOffsetM.z);
-                    ImGui::TextDisabled("Dynamic Mount Offset (m) [Q4 Fix]:");
-                    if (SliderWithDirectInput("Mount X (m)##Flywheel", &offX, -0.5f, 0.5f, "%.3f", 75.0f, 50.0f))
+                    ImGui::TextDisabled("Dynamic Mount Offset (+X=Right, +Y=Up, +Z=Front) (m):");
+                    if (SliderWithDirectInput("Mount X (Right [+]) (m)##Flywheel", &offX, -0.5f, 0.5f, "%.3f", 75.0f, 50.0f))
                     {
                         mech.mountOffsetM.x = static_cast<double>(offX);
                     }
-                    if (SliderWithDirectInput("Mount Y (m)##Flywheel", &offY, -0.5f, 0.5f, "%.3f", 75.0f, 50.0f))
+                    if (SliderWithDirectInput("Mount Y (Up [+]) (m)##Flywheel", &offY, -0.5f, 0.5f, "%.3f", 75.0f, 50.0f))
                     {
                         mech.mountOffsetM.y = static_cast<double>(offY);
                     }
-                    if (SliderWithDirectInput("Mount Z (m)##Flywheel", &offZ, -0.5f, 0.5f, "%.3f", 75.0f, 50.0f))
+                    if (SliderWithDirectInput("Mount Z (Front [+]) (m)##Flywheel", &offZ, -0.5f, 0.5f, "%.3f", 75.0f, 50.0f))
                     {
                         mech.mountOffsetM.z = static_cast<double>(offZ);
                     }

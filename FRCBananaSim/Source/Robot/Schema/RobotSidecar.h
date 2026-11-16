@@ -13,6 +13,8 @@
 
 namespace FRCBananaSim::Robot::Schema
 {
+    struct RobotManifest;
+
     /**
      * @struct ElectricalConfig
      * @brief Lumped battery, bus resistance, brownout threshold, and regulated servo rail parameters.
@@ -248,13 +250,14 @@ namespace FRCBananaSim::Robot::Schema
     struct SensorConfig
     {
         std::string name;
-        std::string type; ///< "imu_pigeon2", "imu_navx", "cancoder", "limit_switch", "beam_break", "analog_input", "laser_can", "color_sensor", "custom"
-        std::string bus = "rio"; ///< "rio", "canivore", "i2c_onboard", "i2c_mxp", "spi", "analog"
+        std::string type; ///< "imu_pigeon2", "imu_navx", "cancoder", "beam_break", "limit_switch", "analog_input", "laser_can", "color_sensor", "rev_through_bore", "andymark_lidar3", "custom"
+        std::string bus = "rio"; ///< "rio", "canivore", "i2c_onboard", "i2c_mxp", "spi", "analog", "dio_pwm"
         uint32_t canId = 0;
         uint32_t dioChannel = 0;
+        uint32_t secondaryDioChannel = 0;     ///< Secondary DIO channel (e.g. Quadrature Channel B for REV Through Bore)
         uint32_t analogChannel = 0;     ///< AnalogIn channel [0..7] for potentiometers / pressure transducers
         uint32_t i2cAddress = 0;        ///< 7-bit I2C device address
-        uint32_t attachToControllerCanId = 0; ///< Motor controller CAN ID for hard-wired limit switches
+        uint32_t attachToControllerCanId = 0; ///< Motor controller CAN ID for hard-wired limit switches or SPARK data port sensors
         std::string parentLink;
         std::string targetJoint;
         std::string contactZone;
@@ -302,6 +305,42 @@ namespace FRCBananaSim::Robot::Schema
     };
 
     /**
+     * @struct JointLimitOverride
+     * @brief Override parameters for joint physical hardstops and compliance springs.
+     */
+    struct JointLimitOverride
+    {
+        bool hasLimits = true;
+        double lower = 0.0;
+        double upper = 0.0;
+        std::string unit = "rad"; ///< "rad", "deg", "m"
+        double springFrequencyHz = 40.0;
+        double springDampingRatio = 1.0;
+    };
+
+    /**
+     * @struct BumperConfig
+     * @brief Parametric FRC bumper configuration for robots without CAD-modeled bumpers.
+     */
+    struct BumperConfig
+    {
+        bool enabled = false;                           ///< When true, physical bumper colliders and mass are injected.
+        std::string targetLink = "";                    ///< Link to attach bumpers to (defaults to root/chassis).
+        std::string shape = "box";                      ///< "box" (solid cuboid), "perimeter" (4 hollow sides), or "u_shape" (front cutout)
+        double lengthM = 0.85;                          ///< Outer X length in meters (~33.5 in)
+        double widthM = 0.85;                           ///< Outer Y width in meters (~33.5 in)
+        double heightM = 0.127;                         ///< Bumper vertical height in meters (standard 5.0 in)
+        double thicknessM = 0.0825;                     ///< Perimeter bumper thickness in meters (plywood + noodles, ~3.25 in)
+        glm::dvec3 offsetM = { 0.0, 0.0, 0.09 };        ///< Center offset relative to targetLink NWU (default 0.09m above ground)
+        double massKg = 6.0;                            ///< Total mass of the bumper set in kg (~13.2 lbs)
+        std::string material = "bumper_fabric";         ///< Material for friction & restitution
+        std::string color = "red";                      ///< "red", "blue", or custom hex
+
+        // Cutout settings for "u_shape" (e.g. front ground intake opening)
+        double cutoutWidthM = 0.40;                     ///< Width of the front opening cutout in meters (~15.7 in)
+    };
+
+    /**
      * @struct RobotSidecar
      * @brief Complete parsed sidecar.json electromechanical and sensor specification.
      */
@@ -315,6 +354,8 @@ namespace FRCBananaSim::Robot::Schema
         std::vector<CouplingConfig> couplings;
         std::vector<SensorConfig> sensors;
         MassReconciliationConfig massReconciliation;
+        std::unordered_map<std::string, JointLimitOverride> jointOverrides;
+        BumperConfig bumpers;
 
         /**
          * @brief Looks up a mechanism configuration by name.
@@ -339,5 +380,21 @@ namespace FRCBananaSim::Robot::Schema
          */
         const CouplingConfig* FindCoupling(const std::string& couplingName) const;
         CouplingConfig* FindCoupling(const std::string& couplingName);
+
+        /**
+         * @brief Looks up a joint limit override by joint name.
+         * @param jointName Unique joint identifier.
+         * @return Pointer to override config, or nullptr if not found.
+         */
+        const JointLimitOverride* FindJointOverride(const std::string& jointName) const;
+        JointLimitOverride* FindJointOverride(const std::string& jointName);
+
+        /**
+         * @brief Computes effective limits for a joint, factoring in sidecar overrides over CAD defaults.
+         * @param jointName Unique joint identifier.
+         * @param manifest Loaded robot CAD manifest.
+         * @return Active effective physical limits.
+         */
+        JointLimitOverride GetEffectiveLimits(const std::string& jointName, const RobotManifest& manifest) const;
     };
 }

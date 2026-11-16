@@ -105,6 +105,15 @@ namespace FRCBananaSim::Robot::Schema
         static glm::dmat3 GetNWUToEngineMatrix();
         static glm::dmat3 GetEngineToNWUMatrix();
 
+        // Bidirectional Coordinate Transformation for Sidecar Configurator & GUI (+X Right, +Y Up, +Z Front)
+        static glm::dvec3 ConvertNWUToRobotFrame(const glm::dvec3& vNWU);
+        static glm::vec3 ConvertNWUToRobotFrame(const glm::vec3& vNWU);
+        static glm::dvec3 ConvertRobotFrameToNWU(const glm::dvec3& vRobot);
+        static glm::vec3 ConvertRobotFrameToNWU(const glm::vec3& vRobot);
+        static glm::dquat ConvertNWUQuatToRobotFrame(const glm::dquat& qNWU);
+        static glm::quat ConvertNWUQuatToRobotFrame(const glm::quat& qNWU);
+        static glm::dmat3 ConvertRobotFrameInertiaToNWU(const glm::dmat3& iRobot);
+
     private:
         RobotManifest manifest;
         RobotSidecar sidecar;

@@ -8,6 +8,7 @@
 #include "Robot/Schema/RobotSidecarSerializer.h"
 #include "Robot/Schema/RobotSchemaLoader.h"
 #include "Robot/Schema/RobotSidecar.h"
+#include "Robot/Schema/RobotManifest.h"
 
 #include <nlohmann/json.hpp>
 #include <filesystem>
@@ -358,6 +359,149 @@ namespace FRCBananaSim::Tests
             TEST_EXPECT_NEAR(ctx, loadedSwerve.customSteerServo.stallCurrentA, 3.8, tolerance);
             TEST_EXPECT_NEAR(ctx, loadedSwerve.customSteerServo.freeCurrentA, 0.22, tolerance);
             TEST_EXPECT_NEAR(ctx, loadedSwerve.customSteerServo.travelRangeDeg, 270.0, tolerance);
+        }
+
+        // =============================================================
+        // SS6: Joint Limit Overrides Round-Trip & Effective Limits
+        // =============================================================
+        {
+            std::cout << "  -> SS6: Joint Limit Overrides Round-Trip & Effective Limits\n";
+
+            RobotSidecar sidecar;
+
+            JointLimitOverride armOv;
+            armOv.hasLimits = true;
+            armOv.lower = -1.570796;
+            armOv.upper = 2.094395;
+            armOv.unit = "rad";
+            armOv.springFrequencyHz = 25.0;
+            armOv.springDampingRatio = 0.85;
+            sidecar.jointOverrides["arm_shoulder_hinge"] = armOv;
+
+            JointLimitOverride elevOv;
+            elevOv.hasLimits = true;
+            elevOv.lower = 0.05;
+            elevOv.upper = 1.25;
+            elevOv.unit = "m";
+            elevOv.springFrequencyHz = 35.0;
+            elevOv.springDampingRatio = 0.95;
+            sidecar.jointOverrides["elevator_carriage_slider"] = elevOv;
+
+            JointLimitOverride contOv;
+            contOv.hasLimits = false;
+            contOv.lower = 0.0;
+            contOv.upper = 0.0;
+            contOv.unit = "rad";
+            contOv.springFrequencyHz = 40.0;
+            contOv.springDampingRatio = 1.0;
+            sidecar.jointOverrides["intake_roller_joint"] = contOv;
+
+            nlohmann::json j = RobotSidecarSerializer::SerializeToJson(sidecar);
+            RobotSchemaLoader loader;
+            bool success = loader.LoadSidecarFromJson(j);
+            TEST_EXPECT_TRUE(ctx, success);
+
+            const auto& loadedSidecar = loader.GetSidecar();
+            TEST_EXPECT_EQ(ctx, loadedSidecar.jointOverrides.size(), static_cast<size_t>(3));
+
+            const auto* loadedArm = loadedSidecar.FindJointOverride("arm_shoulder_hinge");
+            TEST_EXPECT_TRUE(ctx, loadedArm != nullptr);
+            if (loadedArm)
+            {
+                TEST_EXPECT_TRUE(ctx, loadedArm->hasLimits);
+                TEST_EXPECT_NEAR(ctx, loadedArm->lower, -1.570796, tolerance);
+                TEST_EXPECT_NEAR(ctx, loadedArm->upper, 2.094395, tolerance);
+                TEST_EXPECT_EQ(ctx, loadedArm->unit, "rad");
+                TEST_EXPECT_NEAR(ctx, loadedArm->springFrequencyHz, 25.0, tolerance);
+                TEST_EXPECT_NEAR(ctx, loadedArm->springDampingRatio, 0.85, tolerance);
+            }
+
+            const auto* loadedElev = loadedSidecar.FindJointOverride("elevator_carriage_slider");
+            TEST_EXPECT_TRUE(ctx, loadedElev != nullptr);
+            if (loadedElev)
+            {
+                TEST_EXPECT_TRUE(ctx, loadedElev->hasLimits);
+                TEST_EXPECT_NEAR(ctx, loadedElev->lower, 0.05, tolerance);
+                TEST_EXPECT_NEAR(ctx, loadedElev->upper, 1.25, tolerance);
+                TEST_EXPECT_EQ(ctx, loadedElev->unit, "m");
+                TEST_EXPECT_NEAR(ctx, loadedElev->springFrequencyHz, 35.0, tolerance);
+                TEST_EXPECT_NEAR(ctx, loadedElev->springDampingRatio, 0.95, tolerance);
+            }
+
+            const auto* loadedCont = loadedSidecar.FindJointOverride("intake_roller_joint");
+            TEST_EXPECT_TRUE(ctx, loadedCont != nullptr);
+            if (loadedCont)
+            {
+                TEST_EXPECT_FALSE(ctx, loadedCont->hasLimits);
+                TEST_EXPECT_EQ(ctx, loadedCont->unit, "rad");
+            }
+
+            // Test GetEffectiveLimits fallback to manifest when joint is not overridden
+            RobotManifest manifest;
+            JointDefinition cadJoint;
+            cadJoint.name = "default_cad_joint";
+            cadJoint.limits.hasLimits = true;
+            cadJoint.limits.lower = -0.5;
+            cadJoint.limits.upper = 1.5;
+            cadJoint.limits.unit = "rad";
+            manifest.joints.push_back(cadJoint);
+
+            // Override takes precedence
+            auto effArm = loadedSidecar.GetEffectiveLimits("arm_shoulder_hinge", manifest);
+            TEST_EXPECT_TRUE(ctx, effArm.hasLimits);
+            TEST_EXPECT_NEAR(ctx, effArm.lower, -1.570796, tolerance);
+
+            // Manifest CAD fallback works when no override
+            auto effCad = loadedSidecar.GetEffectiveLimits("default_cad_joint", manifest);
+            TEST_EXPECT_TRUE(ctx, effCad.hasLimits);
+            TEST_EXPECT_NEAR(ctx, effCad.lower, -0.5, tolerance);
+            TEST_EXPECT_NEAR(ctx, effCad.upper, 1.5, tolerance);
+
+            // Unknown joint returns hasLimits = false
+            auto effUnknown = loadedSidecar.GetEffectiveLimits("unknown_joint", manifest);
+            TEST_EXPECT_FALSE(ctx, effUnknown.hasLimits);
+        }
+
+        // =============================================================
+        // SS7: Bumper Configuration Serialization Round-Trip
+        // =============================================================
+        {
+            std::cout << "  -> SS7: Bumper Configuration Serialization Round-Trip\n";
+
+            RobotSidecar sidecar;
+            sidecar.bumpers.enabled = true;
+            sidecar.bumpers.targetLink = "chassis_base";
+            sidecar.bumpers.shape = "u_shape";
+            sidecar.bumpers.lengthM = 0.88;
+            sidecar.bumpers.widthM = 0.86;
+            sidecar.bumpers.heightM = 0.13;
+            sidecar.bumpers.thicknessM = 0.0825;
+            sidecar.bumpers.offsetM = { 0.02, -0.01, 0.095 };
+            sidecar.bumpers.massKg = 6.25;
+            sidecar.bumpers.material = "bumper_fabric";
+            sidecar.bumpers.color = "blue";
+            sidecar.bumpers.cutoutWidthM = 0.42;
+
+            nlohmann::json j = RobotSidecarSerializer::SerializeToJson(sidecar);
+            RobotSchemaLoader loader;
+            bool success = loader.LoadSidecarFromJson(j);
+            TEST_EXPECT_TRUE(ctx, success);
+
+            const auto& loadedBumpers = loader.GetSidecar().bumpers;
+            TEST_EXPECT_TRUE(ctx, loadedBumpers.enabled);
+            TEST_EXPECT_EQ(ctx, loadedBumpers.targetLink, "chassis_base");
+            TEST_EXPECT_EQ(ctx, loadedBumpers.shape, "u_shape");
+            TEST_EXPECT_NEAR(ctx, loadedBumpers.lengthM, 0.88, tolerance);
+            TEST_EXPECT_NEAR(ctx, loadedBumpers.widthM, 0.86, tolerance);
+            TEST_EXPECT_NEAR(ctx, loadedBumpers.heightM, 0.13, tolerance);
+            TEST_EXPECT_NEAR(ctx, loadedBumpers.thicknessM, 0.0825, tolerance);
+            TEST_EXPECT_NEAR(ctx, loadedBumpers.offsetM.x, 0.02, tolerance);
+            TEST_EXPECT_NEAR(ctx, loadedBumpers.offsetM.y, -0.01, tolerance);
+            TEST_EXPECT_NEAR(ctx, loadedBumpers.offsetM.z, 0.095, tolerance);
+            TEST_EXPECT_NEAR(ctx, loadedBumpers.massKg, 6.25, tolerance);
+            TEST_EXPECT_EQ(ctx, loadedBumpers.material, "bumper_fabric");
+            TEST_EXPECT_EQ(ctx, loadedBumpers.color, "blue");
+            TEST_EXPECT_NEAR(ctx, loadedBumpers.cutoutWidthM, 0.42, tolerance);
         }
         std::cout << "[DONE] SchemaSerializationTest" << std::endl;
         }

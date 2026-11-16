@@ -44,10 +44,10 @@ Before exporting a full robot for the first time, you can verify Fusion's intern
 BananaSim calculates weight, CoM ($X, Y, Z$), and tip resistance directly from CAD. Follow these standards:
 
 ### A. Coordinate System Alignment
-* **Front / Intake:** Fusion **$+Z$** (Forward in WPILib NWU)
-* **Left Side:** Fusion **$+X$** (Left in WPILib NWU)
-* **Top / Up:** Fusion **$+Y$** (Up in WPILib NWU)
-* *Tip:* Our team's Fusion frame ($+X$ Left, $+Y$ Up, $+Z$ Forward) is **identical to BananaSim's Engine OpenGL frame**, so exported GLB meshes load with zero axis distortion!
+* **Front / Intake:** Fusion **$+Z$** (Forward of the robot; $-Z$ is Back)
+* **Right Side:** Fusion **$+X$** (Right side of the robot; $-X$ is Left)
+* **Top / Up:** Fusion **$+Y$** (Up towards the ceiling; $-Y$ is Down towards the floor)
+* *Tip:* Our team's Robot & Configurator coordinate frame ($+X$ Right, $+Y$ Up, $+Z$ Forward) maps seamlessly into the Sidecar Configurator and BananaSim engine, ensuring 100% geometric alignment with zero axis distortion!
 
 ### B. Robot Origin & Grounding
 * By default, position the design origin `(0,0,0)` at **frame center on the floor plane ($Y = 0$)**.
@@ -73,6 +73,11 @@ BananaSim calculates weight, CoM ($X, Y, Z$), and tip resistance directly from C
 * **`ZONE_<role>_<name>`:** Non-colliding trigger volumes (beam breaks, intakes, shooters).
 * **Visibility Rule for Proxies:**
   * If visible (eye **ON**): Exported immediately without question.
+  * If hidden (eye **OFF**): The exporter will prompt you during export to confirm whether each hidden proxy should be included!
+
+### G. FRC Bumpers (CAD vs Sidecar)
+* You do **not** need to model bumpers in CAD! The Sidecar Configurator includes a built-in **Parametric FRC Bumpers** generator that provisions legal perimeter or U-shaped bumper colliders, inertial mass, and viewport wireframes with one click.
+* If you *do* model CAD bumpers, tag them with `COL_bumper_*` to exclude them from visual meshes while maintaining collision geometries.
   * If hidden (eye **OFF**): The exporter will prompt you during export to confirm whether each hidden proxy should be included!
 
 ---

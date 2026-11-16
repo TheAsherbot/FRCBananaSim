@@ -42,7 +42,7 @@ namespace FRCBananaSim::Physics
      */
     static bool JoltAssertCallback(const char* expression, const char* message, const char* file, JPH::uint line)
     {
-        SIM_LOG_ERROR("[Jolt Assert] %s:%u: (%s) %s", file, line, expression, (message ? message : ""));
+        SIM_LOG_ERROR("[Jolt Assert] " << (file ? file : "") << ":" << line << ": (" << (expression ? expression : "") << ") " << (message ? message : ""));
         return true;
     }
 #endif

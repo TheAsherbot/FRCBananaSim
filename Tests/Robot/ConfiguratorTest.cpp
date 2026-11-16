@@ -817,7 +817,47 @@ namespace FRCBananaSim::Tests
             state.RunLinter();
             TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
 
-            // 6. Round-trip serialization & reload
+            // 6. REV Through Bore Encoder Validation (Dual-channel quadrature and collision)
+            SensorConfig revEnc;
+            revEnc.name = "arm_through_bore";
+            revEnc.type = "rev_through_bore";
+            revEnc.dioChannel = 2;
+            revEnc.secondaryDioChannel = 2; // Deliberate Channel A == Channel B collision!
+            revEnc.customStringParams["encoderMode"] = "quadrature";
+            revEnc.targetJoint = "arm_shoulder_hinge";
+            revEnc.sensorToMechanismRatio = 1.0;
+            revEnc.cpr = 8192;
+            revEnc.offsetRad = 0.0;
+            state.sidecar.sensors.push_back(revEnc);
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty()); // Must detect Channel A == Channel B collision!
+
+            // Fix Channel B to unique DIO channel 3
+            state.sidecar.sensors.back().secondaryDioChannel = 3;
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 7. AndyMark LIDAR-3 / CAN Lidar Validation
+            SensorConfig lidar;
+            lidar.name = "intake_lidar";
+            lidar.type = "andymark_lidar3";
+            lidar.bus = "rio";
+            lidar.canId = 35;
+            lidar.parentLink = "base_link";
+            lidar.triggerMin = 5.0;  // Deliberate min > max error!
+            lidar.triggerMax = 4.0;
+            lidar.mountOffsetM = { 0.10, 0.05, 0.20 };
+            lidar.customNumericParams["noiseStdDevM"] = 0.005;
+            state.sidecar.sensors.push_back(lidar);
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty()); // Must catch Min Range >= Max Range error!
+
+            // Fix LIDAR min range to 0.03m
+            state.sidecar.sensors.back().triggerMin = 0.03;
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 8. Round-trip serialization & reload
             std::string tempSidecar = "test_cf11_sidecar.json";
             bool saved = state.SaveSidecar(tempSidecar);
             TEST_EXPECT_TRUE(ctx, saved);
@@ -827,7 +867,7 @@ namespace FRCBananaSim::Tests
             TEST_EXPECT_TRUE(ctx, reloaded);
 
             const auto& loadedSensors = loader.GetSidecar().sensors;
-            TEST_EXPECT_EQ(ctx, loadedSensors.size(), static_cast<size_t>(5));
+            TEST_EXPECT_EQ(ctx, loadedSensors.size(), static_cast<size_t>(7));
 
             // Verify CANcoder
             const auto* sCancoder = loader.GetSidecar().FindSensor("wrist_encoder");
@@ -895,6 +935,35 @@ namespace FRCBananaSim::Tests
                 TEST_EXPECT_NEAR(ctx, sImu->gyroNoiseStdDevRadS, 0.002, 1e-6);
                 TEST_EXPECT_NEAR(ctx, sImu->gyroBiasRandomWalkRadS2, 0.00005, 1e-6);
                 TEST_EXPECT_NEAR(ctx, sImu->accelNoiseStdDevMS2, 0.015, 1e-6);
+            }
+
+            // Verify REV Through Bore Encoder
+            const auto* sRev = loader.GetSidecar().FindSensor("arm_through_bore");
+            TEST_EXPECT_TRUE(ctx, sRev != nullptr);
+            if (sRev)
+            {
+                TEST_EXPECT_EQ(ctx, sRev->type, std::string("rev_through_bore"));
+                TEST_EXPECT_EQ(ctx, sRev->dioChannel, 2);
+                TEST_EXPECT_EQ(ctx, sRev->secondaryDioChannel, 3);
+                TEST_EXPECT_EQ(ctx, sRev->targetJoint, std::string("arm_shoulder_hinge"));
+                TEST_EXPECT_EQ(ctx, sRev->cpr, 8192);
+                TEST_EXPECT_NEAR(ctx, sRev->sensorToMechanismRatio, 1.0, 1e-6);
+            }
+
+            // Verify AndyMark LIDAR 3
+            const auto* sLidar = loader.GetSidecar().FindSensor("intake_lidar");
+            TEST_EXPECT_TRUE(ctx, sLidar != nullptr);
+            if (sLidar)
+            {
+                TEST_EXPECT_EQ(ctx, sLidar->type, std::string("andymark_lidar3"));
+                TEST_EXPECT_EQ(ctx, sLidar->canId, 35);
+                TEST_EXPECT_EQ(ctx, sLidar->bus, std::string("rio"));
+                TEST_EXPECT_EQ(ctx, sLidar->parentLink, std::string("base_link"));
+                TEST_EXPECT_NEAR(ctx, sLidar->triggerMin, 0.03, 1e-6);
+                TEST_EXPECT_NEAR(ctx, sLidar->triggerMax, 4.0, 1e-6);
+                TEST_EXPECT_NEAR(ctx, sLidar->mountOffsetM.x, 0.10, 1e-6);
+                TEST_EXPECT_NEAR(ctx, sLidar->mountOffsetM.y, 0.05, 1e-6);
+                TEST_EXPECT_NEAR(ctx, sLidar->mountOffsetM.z, 0.20, 1e-6);
             }
 
             // Cleanup
@@ -982,6 +1051,184 @@ namespace FRCBananaSim::Tests
             // 15. Gearbox reduction fraction on ratio field: 1/9
             TEST_EXPECT_TRUE(ctx, ParseUnitExpression("1/9", "Velocity Ratio (slave / master)##CoupRatio", val));
             TEST_EXPECT_NEAR(ctx, val, 1.0 / 9.0, 1e-4);
+        }
+
+        // =============================================================
+        // 10. CF10: Joint Limit Overrides and Linter Validation
+        // =============================================================
+        {
+            std::cout << "  -> CF10: Joint Limit Overrides and Linter Validation\n";
+
+            ConfiguratorState state;
+            bool ok = state.LoadCADFolder(refPath);
+            TEST_EXPECT_TRUE(ctx, ok);
+
+            // Initially Reference2026 has zero errors
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 1. Add valid override for an existing joint
+            JointLimitOverride validOv;
+            validOv.hasLimits = true;
+            validOv.lower = -1.57;
+            validOv.upper = 1.57;
+            validOv.unit = "rad";
+            state.sidecar.jointOverrides["arm_shoulder_hinge"] = validOv;
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // Verify effective limits reflects the override
+            auto eff = state.sidecar.GetEffectiveLimits("arm_shoulder_hinge", state.manifest);
+            TEST_EXPECT_TRUE(ctx, eff.hasLimits);
+            TEST_EXPECT_NEAR(ctx, eff.lower, -1.57, 1e-4);
+            TEST_EXPECT_NEAR(ctx, eff.upper, 1.57, 1e-4);
+
+            // 2. Add invalid limits: lower > upper
+            JointLimitOverride invalidOv;
+            invalidOv.hasLimits = true;
+            invalidOv.lower = 2.5;
+            invalidOv.upper = 0.5;
+            state.sidecar.jointOverrides["arm_shoulder_hinge"] = invalidOv;
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty());
+            bool foundLimitError = false;
+            for (const auto& err : state.linterErrors)
+            {
+                if (err.find("Joint Limits Error") != std::string::npos) foundLimitError = true;
+            }
+            TEST_EXPECT_TRUE(ctx, foundLimitError);
+
+            // Revert back to valid
+            state.sidecar.jointOverrides["arm_shoulder_hinge"] = validOv;
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 3. Add orphan joint override
+            JointLimitOverride orphanOv;
+            orphanOv.hasLimits = true;
+            state.sidecar.jointOverrides["non_existent_joint_xyz"] = orphanOv;
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty());
+            bool foundOrphanError = false;
+            for (const auto& err : state.linterErrors)
+            {
+                if (err.find("Orphan Joint Override") != std::string::npos) foundOrphanError = true;
+            }
+            TEST_EXPECT_TRUE(ctx, foundOrphanError);
+
+            // Remove orphan override
+            state.sidecar.jointOverrides.erase("non_existent_joint_xyz");
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 4. Test Save and Reload of sidecar with jointOverrides
+            std::string tempSidecar = (std::filesystem::temp_directory_path() / "test_sidecar_limits.json").string();
+            bool saveOk = state.SaveSidecar(tempSidecar);
+            TEST_EXPECT_TRUE(ctx, saveOk);
+
+            ConfiguratorState reloadState;
+            reloadState.manifest = state.manifest;
+            reloadState.isCadLoaded = true;
+            bool reloadOk = reloadState.LoadSidecar(tempSidecar);
+            TEST_EXPECT_TRUE(ctx, reloadOk);
+            TEST_EXPECT_TRUE(ctx, reloadState.sidecar.FindJointOverride("arm_shoulder_hinge") != nullptr);
+            const auto* reloadedArmOv = reloadState.sidecar.FindJointOverride("arm_shoulder_hinge");
+            TEST_EXPECT_TRUE(ctx, reloadedArmOv->hasLimits);
+            TEST_EXPECT_NEAR(ctx, reloadedArmOv->lower, -1.57, 1e-4);
+            TEST_EXPECT_NEAR(ctx, reloadedArmOv->upper, 1.57, 1e-4);
+
+            std::filesystem::remove(tempSidecar);
+        }
+
+        // =============================================================
+        // 11. CF12: Bumper Configuration and Linter Validation
+        // =============================================================
+        {
+            std::cout << "  -> CF12: Bumper Configuration and Linter Validation\n";
+
+            ConfiguratorState state;
+            bool ok = state.LoadCADFolder(refPath);
+            TEST_EXPECT_TRUE(ctx, ok);
+
+            // Initially Reference2026 has zero errors
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 1. Configure valid perimeter bumpers
+            state.sidecar.bumpers.enabled = true;
+            state.sidecar.bumpers.targetLink = "base_link";
+            state.sidecar.bumpers.shape = "perimeter";
+            state.sidecar.bumpers.lengthM = 0.85;
+            state.sidecar.bumpers.widthM = 0.85;
+            state.sidecar.bumpers.heightM = 0.127;
+            state.sidecar.bumpers.thicknessM = 0.0825;
+            state.sidecar.bumpers.massKg = 6.0;
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 2. Invalid target link
+            state.sidecar.bumpers.targetLink = "missing_chassis_link";
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty());
+            bool foundTargetError = false;
+            for (const auto& err : state.linterErrors)
+            {
+                if (err.find("Bumper Target Link Error") != std::string::npos) foundTargetError = true;
+            }
+            TEST_EXPECT_TRUE(ctx, foundTargetError);
+
+            // Revert target link
+            state.sidecar.bumpers.targetLink = "base_link";
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 3. Non-positive dimensions error
+            state.sidecar.bumpers.lengthM = -0.5;
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty());
+            state.sidecar.bumpers.lengthM = 0.85;
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 4. Excessive wall thickness error
+            state.sidecar.bumpers.thicknessM = 0.50; // 0.50 * 2 = 1.0 > 0.85
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty());
+            state.sidecar.bumpers.thicknessM = 0.0825;
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 5. Overweight warning (> 15 lbs / 6.804 kg)
+            state.sidecar.bumpers.massKg = 8.0;
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty()); // No hard error
+            bool foundWeightWarn = false;
+            for (const auto& w : state.linterWarnings)
+            {
+                if (w.find("Bumper Rule Warning") != std::string::npos) foundWeightWarn = true;
+            }
+            TEST_EXPECT_TRUE(ctx, foundWeightWarn);
+            state.sidecar.bumpers.massKg = 6.0;
+            state.RunLinter();
+
+            // 6. Test Save and Reload of sidecar with bumpers
+            std::string tempSidecar = (std::filesystem::temp_directory_path() / "test_sidecar_bumpers.json").string();
+            bool saveOk = state.SaveSidecar(tempSidecar);
+            TEST_EXPECT_TRUE(ctx, saveOk);
+
+            ConfiguratorState reloadState;
+            reloadState.manifest = state.manifest;
+            reloadState.isCadLoaded = true;
+            bool reloadOk = reloadState.LoadSidecar(tempSidecar);
+            TEST_EXPECT_TRUE(ctx, reloadOk);
+            TEST_EXPECT_TRUE(ctx, reloadState.sidecar.bumpers.enabled);
+            TEST_EXPECT_EQ(ctx, reloadState.sidecar.bumpers.targetLink, "base_link");
+            TEST_EXPECT_EQ(ctx, reloadState.sidecar.bumpers.shape, "perimeter");
+            TEST_EXPECT_NEAR(ctx, reloadState.sidecar.bumpers.lengthM, 0.85, 1e-4);
+            TEST_EXPECT_NEAR(ctx, reloadState.sidecar.bumpers.widthM, 0.85, 1e-4);
+            TEST_EXPECT_NEAR(ctx, reloadState.sidecar.bumpers.heightM, 0.127, 1e-4);
+            TEST_EXPECT_NEAR(ctx, reloadState.sidecar.bumpers.thicknessM, 0.0825, 1e-4);
+            TEST_EXPECT_NEAR(ctx, reloadState.sidecar.bumpers.massKg, 6.0, 1e-4);
+
+            std::filesystem::remove(tempSidecar);
         }
     }
 }

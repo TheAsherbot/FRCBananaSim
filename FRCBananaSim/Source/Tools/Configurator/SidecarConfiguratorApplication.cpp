@@ -19,6 +19,8 @@
 #include "Tools/Configurator/Panels/CADViewportPanel.h"
 #include "Tools/Configurator/Panels/InspectorPanel.h"
 #include "Tools/Configurator/Panels/LinterPanel.h"
+#include "Tools/Configurator/Panels/ConfiguratorWidgets.h"
+#include <nlohmann/json.hpp>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -120,6 +122,55 @@ int main(int argc, char* argv[])
     CADViewportPanel viewportPanel;
     InspectorPanel inspectorPanel;
     LinterPanel linterPanel;
+
+    // Panel Dimensions & Splitter State
+    constexpr float kDefaultHierarchyWidth = 340.0f;
+    constexpr float kDefaultInspectorWidth = 490.0f;
+    constexpr float kDefaultBottomHeight = 150.0f;
+
+    float hierarchyWidth = kDefaultHierarchyWidth;
+    float inspectorWidth = kDefaultInspectorWidth;
+    float bottomHeight = kDefaultBottomHeight;
+
+    std::string settingsPath = "FRCBananaSim/Resources/Config/configurator_settings.json";
+    if (!std::filesystem::exists(settingsPath))
+    {
+        settingsPath = "../FRCBananaSim/Resources/Config/configurator_settings.json";
+    }
+    if (std::filesystem::exists(settingsPath))
+    {
+        try
+        {
+            std::ifstream sf(settingsPath);
+            if (sf.is_open())
+            {
+                nlohmann::json sj;
+                sf >> sj;
+                if (sj.contains("hierarchyWidth")) hierarchyWidth = sj["hierarchyWidth"].get<float>();
+                if (sj.contains("inspectorWidth")) inspectorWidth = sj["inspectorWidth"].get<float>();
+                if (sj.contains("bottomHeight")) bottomHeight = sj["bottomHeight"].get<float>();
+            }
+        }
+        catch (...) {}
+    }
+
+    auto savePanelSizes = [&]() {
+        try
+        {
+            nlohmann::json sj;
+            if (std::filesystem::exists(settingsPath))
+            {
+                std::ifstream sf(settingsPath);
+                if (sf.is_open()) sf >> sj;
+            }
+            sj["hierarchyWidth"] = hierarchyWidth;
+            sj["inspectorWidth"] = inspectorWidth;
+            sj["bottomHeight"] = bottomHeight;
+            std::ofstream sf(settingsPath);
+            if (sf.is_open()) sf << sj.dump(2);
+        }
+        catch (...) {}
+    };
 
     // Buffer for folder opening
     char folderPathBuf[512] = "FRCBananaSim/Resources/Robots/Reference2026";
@@ -346,37 +397,81 @@ int main(int argc, char* argv[])
         ImGui::Separator();
 
         // -------------------------------------------------------------
-        // B. Main Middle Area (3 Columns: Hierarchy, Viewport, Inspector)
+        // B. Main Middle Area (3 Columns + 2 Draggable Vertical Splitters)
         // -------------------------------------------------------------
-        float bottomHeight = 150.0f;
-        float middleHeight = static_cast<float>(fbHeight) - 44.0f - bottomHeight - 24.0f;
-        if (middleHeight < 200.0f) middleHeight = 200.0f;
+        constexpr float splitterThickness = 6.0f;
+        float spacing = ImGui::GetStyle().ItemSpacing.x;
 
-        float hierarchyWidth = 340.0f;
-        float inspectorWidth = 490.0f;
-        float viewportWidth = static_cast<float>(fbWidth) - hierarchyWidth - inspectorWidth - 28.0f;
-        if (viewportWidth < 200.0f) viewportWidth = 200.0f;
+        float availHeight = static_cast<float>(fbHeight) - 44.0f - 24.0f;
+        float maxBottomH = std::max(50.0f, availHeight - 180.0f);
+        bottomHeight = std::clamp(bottomHeight, 60.0f, maxBottomH);
+
+        float middleHeight = availHeight - bottomHeight - splitterThickness - spacing;
+        if (middleHeight < 150.0f) middleHeight = 150.0f;
+
+        float totalAvailWidth = ImGui::GetContentRegionAvail().x;
+        float minHierarchyW = 180.0f;
+        float minInspectorW = 280.0f;
+        float minViewportW = 200.0f;
+
+        float maxHierarchyW = std::max(minHierarchyW, totalAvailWidth - minInspectorW - minViewportW - (2.0f * splitterThickness) - (4.0f * spacing));
+        hierarchyWidth = std::clamp(hierarchyWidth, minHierarchyW, maxHierarchyW);
+
+        float maxInspectorW = std::max(minInspectorW, totalAvailWidth - hierarchyWidth - minViewportW - (2.0f * splitterThickness) - (4.0f * spacing));
+        inspectorWidth = std::clamp(inspectorWidth, minInspectorW, maxInspectorW);
+
+        float viewportWidth = totalAvailWidth - hierarchyWidth - inspectorWidth - (2.0f * splitterThickness) - (4.0f * spacing);
+        if (viewportWidth < minViewportW)
+        {
+            viewportWidth = minViewportW;
+            inspectorWidth = std::max(minInspectorW, totalAvailWidth - hierarchyWidth - viewportWidth - (2.0f * splitterThickness) - (4.0f * spacing));
+        }
 
         // 1. Left Column: CAD Hierarchy
         ImGui::BeginChild("HierarchyChild", ImVec2(hierarchyWidth, middleHeight), true);
         hierarchyPanel.Render(state);
         ImGui::EndChild();
 
-        ImGui::SameLine();
+        ImGui::SameLine(0.0f, spacing);
+
+        // Splitter 1: Hierarchy <-> Viewport
+        if (Splitter("##SplitterHV", true, splitterThickness, &hierarchyWidth,
+            minHierarchyW, maxHierarchyW, kDefaultHierarchyWidth, false))
+        {
+            savePanelSizes();
+        }
+
+        ImGui::SameLine(0.0f, spacing);
 
         // 2. Middle Column: 3D CAD Preview Viewport
         ImGui::BeginChild("ViewportChild", ImVec2(viewportWidth, middleHeight), true);
         viewportPanel.Render(state);
         ImGui::EndChild();
 
-        ImGui::SameLine();
+        ImGui::SameLine(0.0f, spacing);
+
+        // Splitter 2: Viewport <-> Inspector (Invert delta: dragging left widens inspector out!)
+        if (Splitter("##SplitterVI", true, splitterThickness, &inspectorWidth,
+            minInspectorW, maxInspectorW, kDefaultInspectorWidth, true))
+        {
+            savePanelSizes();
+        }
+
+        ImGui::SameLine(0.0f, spacing);
 
         // 3. Right Column: Subsystem Inspector
         ImGui::BeginChild("InspectorChild", ImVec2(0.0f, middleHeight), true);
         inspectorPanel.Render(state);
         ImGui::EndChild();
 
-        ImGui::Separator();
+        // -------------------------------------------------------------
+        // Horizontal Splitter: Middle Area <-> Bottom Linter
+        // -------------------------------------------------------------
+        if (Splitter("##SplitterMB", false, splitterThickness, &bottomHeight,
+            60.0f, maxBottomH, kDefaultBottomHeight, true))
+        {
+            savePanelSizes();
+        }
 
         // -------------------------------------------------------------
         // C. Bottom Dock: Diagnostics & Schema Linter

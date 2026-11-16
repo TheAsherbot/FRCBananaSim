@@ -162,14 +162,15 @@ namespace FRCBananaSim::Tools::Configurator
                 ballast.massKg = static_cast<double>(std::max(0.0f, bMass));
             }
 
-            // Ballast Center of Mass Offset (NWU)
+            // Ballast Center of Mass Offset (+X=Right, +Y=Up, +Z=Front)
             float offX = static_cast<float>(ballast.offsetM.x);
             float offY = static_cast<float>(ballast.offsetM.y);
             float offZ = static_cast<float>(ballast.offsetM.z);
 
-            if (SliderWithDirectInput("Offset X (m)", &offX, -2.0f, 2.0f, "%.3f", 100.0f, 60.0f)) ballast.offsetM.x = offX;
-            if (SliderWithDirectInput("Offset Y (m)", &offY, -2.0f, 2.0f, "%.3f", 100.0f, 60.0f)) ballast.offsetM.y = offY;
-            if (SliderWithDirectInput("Offset Z (m)", &offZ, -2.0f, 2.0f, "%.3f", 100.0f, 60.0f)) ballast.offsetM.z = offZ;
+            ImGui::TextDisabled("Ballast Offset (+X=Right, +Y=Up, +Z=Front):");
+            if (SliderWithDirectInput("Offset X (Left [-] / Right [+]) (m)", &offX, -2.0f, 2.0f, "%.3f", 100.0f, 60.0f)) ballast.offsetM.x = offX;
+            if (SliderWithDirectInput("Offset Y (Down [-] / Up [+]) (m)", &offY, -2.0f, 2.0f, "%.3f", 100.0f, 60.0f)) ballast.offsetM.y = offY;
+            if (SliderWithDirectInput("Offset Z (Back [-] / Front [+]) (m)", &offZ, -2.0f, 2.0f, "%.3f", 100.0f, 60.0f)) ballast.offsetM.z = offZ;
 
             double deltaM = static_cast<double>(benchMassKg) - totalCadMass;
             if (ImGui::Button("Set Ballast = Deficit"))

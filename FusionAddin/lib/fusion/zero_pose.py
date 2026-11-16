@@ -7,7 +7,7 @@ NOTE: adsk objects (Joint, JointMotion, ...) are NOT hashable, so they must neve
 as set elements or dict keys. We dedupe on `entityToken` strings and store plain lists.
 """
 
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Set, Tuple
 from banana_core.diagnostics import DiagnosticCollector
 
 try:
@@ -72,9 +72,10 @@ class ZeroPoseGuard:
     resets them to zero, and restores them on exit (including on exceptions).
     """
 
-    def __init__(self, design: Any, collector: DiagnosticCollector):
+    def __init__(self, design: Any, collector: DiagnosticCollector, progress_dialog: Optional[Any] = None):
         self.design = design
         self.collector = collector
+        self.progress_dialog = progress_dialog
         # list of (motion, kind, original_value) where kind is 'revolute' or 'slider'
         self._saved: List[Tuple[Any, str, float]] = []
         self.normalized_joints: List[str] = []
@@ -106,8 +107,23 @@ class ZeroPoseGuard:
         except Exception:
             pass
 
+        if self.progress_dialog:
+            self.progress_dialog.progressValue = 2
+            self.progress_dialog.message = "Verifying design state and timeline health..."
+            if IN_FUSION:
+                try:
+                    adsk.doEvents()
+                except Exception:
+                    pass
+
         error_names: List[str] = []
-        for item in _safe_iter(timeline):
+        timeline_items = _safe_iter(timeline)
+        for idx, item in enumerate(timeline_items):
+            if idx % 30 == 0 and IN_FUSION:
+                try:
+                    adsk.doEvents()
+                except Exception:
+                    pass
             try:
                 state = item.healthState
             except Exception:
@@ -160,6 +176,15 @@ class ZeroPoseGuard:
             seen.add(key)
             joints.append(j)
 
+        if self.progress_dialog:
+            self.progress_dialog.progressValue = 3
+            self.progress_dialog.message = "Collecting assembly joints..."
+            if IN_FUSION:
+                try:
+                    adsk.doEvents()
+                except Exception:
+                    pass
+
         # 1. allJoints and allAsBuiltJoints from root (all assembly context proxies)
         try:
             for j in _safe_iter(_safe_attr(root, "allJoints")):
@@ -184,9 +209,22 @@ class ZeroPoseGuard:
         except Exception:
             pass
 
-        # 3. occurrences fallback
+        # 3. occurrences fallback (with external design deduplication)
+        seen_ext_designs = set()
         try:
-            for occ in _safe_iter(_safe_attr(root, "allOccurrences")):
+            occs = _safe_iter(_safe_attr(root, "allOccurrences"))
+            total_occs = len(occs)
+            for idx, occ in enumerate(occs):
+                if self.progress_dialog and total_occs > 0 and idx % 15 == 0:
+                    if getattr(self.progress_dialog, "wasCancelled", False):
+                        raise ExportAborted("Export cancelled by user.")
+                    self.progress_dialog.message = f"Scanning occurrences for joints: {idx + 1}/{total_occs}..."
+                    if IN_FUSION:
+                        try:
+                            adsk.doEvents()
+                        except Exception:
+                            pass
+
                 try:
                     if _safe_attr(occ, "isSuppressed", False) or not _safe_attr(occ, "isLightBulbOn", True) or not _safe_attr(occ, "isVisible", True):
                         continue
@@ -215,20 +253,23 @@ class ZeroPoseGuard:
                     except Exception:
                         pass
 
-                    # External referenced design check
+                    # External referenced design check (check each external design ONCE, not hundreds of times)
                     try:
                         p_design = _safe_attr(comp, "parentDesign")
                         if p_design is not None and p_design != self.design:
-                            ext_root = _safe_attr(p_design, "rootComponent")
-                            if ext_root:
-                                for j in _safe_iter(_safe_attr(ext_root, "allJoints")):
-                                    add(j)
-                                for j in _safe_iter(_safe_attr(ext_root, "allAsBuiltJoints")):
-                                    add(j)
-                                for j in _safe_iter(_safe_attr(ext_root, "joints")):
-                                    add(j)
-                                for j in _safe_iter(_safe_attr(ext_root, "asBuiltJoints")):
-                                    add(j)
+                            des_key = str(id(p_design))
+                            if des_key not in seen_ext_designs:
+                                seen_ext_designs.add(des_key)
+                                ext_root = _safe_attr(p_design, "rootComponent")
+                                if ext_root:
+                                    for j in _safe_iter(_safe_attr(ext_root, "allJoints")):
+                                        add(j)
+                                    for j in _safe_iter(_safe_attr(ext_root, "allAsBuiltJoints")):
+                                        add(j)
+                                    for j in _safe_iter(_safe_attr(ext_root, "joints")):
+                                        add(j)
+                                    for j in _safe_iter(_safe_attr(ext_root, "asBuiltJoints")):
+                                        add(j)
                     except Exception:
                         pass
                 except Exception:
@@ -243,15 +284,26 @@ class ZeroPoseGuard:
     def __enter__(self):
         if not IN_FUSION or not self.design:
             return self
+
         # Raises ExportAborted before touching any joint, so nothing needs restoring.
         self._check_design_clean()
 
-
-
-
-
+        joints_to_check = self._collect_joints()
+        total_j = len(joints_to_check)
         failed: List[str] = []
-        for j in self._collect_joints():
+
+        for idx, j in enumerate(joints_to_check):
+            if self.progress_dialog and total_j > 0 and idx % 2 == 0:
+                if getattr(self.progress_dialog, "wasCancelled", False):
+                    raise ExportAborted("Export cancelled by user.")
+                self.progress_dialog.progressValue = 4 + int(4 * (idx / total_j))
+                self.progress_dialog.message = f"Checking joint {idx + 1}/{total_j} resting pose..."
+                if IN_FUSION:
+                    try:
+                        adsk.doEvents()
+                    except Exception:
+                        pass
+
             try:
                 if _safe_attr(j, "isSuppressed", False):
                     continue
@@ -283,12 +335,24 @@ class ZeroPoseGuard:
             except Exception:
                 continue
 
-
         if self._saved:
+            if self.progress_dialog:
+                self.progress_dialog.progressValue = 8
+                self.progress_dialog.message = f"Normalizing {len(self._saved)} joint(s) to zero and recomputing design..."
+                if IN_FUSION:
+                    try:
+                        adsk.doEvents()
+                    except Exception:
+                        pass
             try:
                 self.design.computeAll()
             except Exception:
                 pass
+            if IN_FUSION:
+                try:
+                    adsk.doEvents()
+                except Exception:
+                    pass
             shown = ", ".join(self.normalized_joints[:5])
             more = f" and {len(self.normalized_joints) - 5} more" if len(self.normalized_joints) > 5 else ""
             self.collector.info(

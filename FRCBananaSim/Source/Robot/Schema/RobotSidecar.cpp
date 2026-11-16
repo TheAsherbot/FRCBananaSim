@@ -4,6 +4,7 @@
  */
 
 #include "Robot/Schema/RobotSidecar.h"
+#include "Robot/Schema/RobotManifest.h"
 
 namespace FRCBananaSim::Robot::Schema
 {
@@ -77,5 +78,43 @@ namespace FRCBananaSim::Robot::Schema
             }
         }
         return nullptr;
+    }
+
+    const JointLimitOverride* RobotSidecar::FindJointOverride(const std::string& jointName) const
+    {
+        auto it = jointOverrides.find(jointName);
+        return (it != jointOverrides.end()) ? &it->second : nullptr;
+    }
+
+    JointLimitOverride* RobotSidecar::FindJointOverride(const std::string& jointName)
+    {
+        auto it = jointOverrides.find(jointName);
+        return (it != jointOverrides.end()) ? &it->second : nullptr;
+    }
+
+    JointLimitOverride RobotSidecar::GetEffectiveLimits(const std::string& jointName, const RobotManifest& manifest) const
+    {
+        auto it = jointOverrides.find(jointName);
+        if (it != jointOverrides.end())
+        {
+            return it->second;
+        }
+
+        const auto* j = manifest.FindJoint(jointName);
+        if (j)
+        {
+            JointLimitOverride ov;
+            ov.hasLimits = j->limits.hasLimits;
+            ov.lower = j->limits.lower;
+            ov.upper = j->limits.upper;
+            ov.unit = j->limits.unit;
+            ov.springFrequencyHz = (j->limits.springFrequencyHz > 0.0) ? j->limits.springFrequencyHz : 40.0;
+            ov.springDampingRatio = (j->limits.springDampingRatio > 0.0) ? j->limits.springDampingRatio : 1.0;
+            return ov;
+        }
+
+        JointLimitOverride def;
+        def.hasLimits = false;
+        return def;
     }
 }

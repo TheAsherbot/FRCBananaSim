@@ -216,6 +216,12 @@ def run_export_dialog(app: Any, ui: Any):
                 100,
                 1,
             )
+            # Immediately force Fusion to draw the dialog window on screen!
+            if IN_FUSION:
+                try:
+                    adsk.doEvents()
+                except Exception:
+                    pass
         except Exception:
             progress_dialog = None
 
@@ -271,9 +277,7 @@ def run_export_dialog(app: Any, ui: Any):
     app.log(f"FRCBananaExporter: starting export of '{robot_name}'...")
 
     try:
-        with ZeroPoseGuard(design, collector):
-            update_progress(5, "Verifying zero pose and joint positions...")
-
+        with ZeroPoseGuard(design, collector, progress_dialog=progress_dialog):
             # --- Read CAD ---
             update_progress(10, "Scanning assembly occurrences and bodies...")
             assembly = read_assembly(

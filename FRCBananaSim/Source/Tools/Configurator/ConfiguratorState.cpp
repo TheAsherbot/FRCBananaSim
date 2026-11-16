@@ -353,6 +353,32 @@ namespace FRCBananaSim::Tools::Configurator
         imu.parentLink = rootLinkName;
         sidecar.sensors.push_back(imu);
 
+        // 5. Seed Parametric FRC Bumpers (enabled if no CAD bumpers present)
+        bool hasCadBumpers = false;
+        for (const auto& l : manifest.links)
+        {
+            for (const auto& col : l.colliders)
+            {
+                if (col.name.find("bumper") != std::string::npos || col.material == "bumper_fabric")
+                {
+                    hasCadBumpers = true;
+                    break;
+                }
+            }
+        }
+        sidecar.bumpers.enabled = !hasCadBumpers;
+        sidecar.bumpers.targetLink = rootLinkName;
+        sidecar.bumpers.shape = "box";
+        sidecar.bumpers.lengthM = 0.85;
+        sidecar.bumpers.widthM = 0.85;
+        sidecar.bumpers.heightM = 0.127;
+        sidecar.bumpers.thicknessM = 0.0825;
+        sidecar.bumpers.offsetM = glm::dvec3(0.0, 0.09, 0.0); // +Y Up: 0.09m elevation
+        sidecar.bumpers.massKg = 6.0;
+        sidecar.bumpers.material = "bumper_fabric";
+        sidecar.bumpers.color = "red";
+        sidecar.bumpers.cutoutWidthM = 0.40;
+
         isSidecarLoaded = true;
         sidecarVersion++;
         statusMessage = "Auto-generated starter sidecar with Swerve, " +
@@ -485,11 +511,48 @@ namespace FRCBananaSim::Tools::Configurator
             if (mech.role == "arm" || mech.role == "elevator" || mech.role == "wrist")
             {
                 const auto* j = manifest.FindJoint(mech.targetJoint);
-                if (j && !j->limits.hasLimits)
+                if (j)
                 {
-                    linterWarnings.push_back("Joint '" + j->name +
-                        "' targeted by mechanism '" + mech.name + "' has no physical limits configured in CAD.");
+                    auto eff = sidecar.GetEffectiveLimits(mech.targetJoint, manifest);
+                    if (!eff.hasLimits)
+                    {
+                        linterWarnings.push_back("Joint '" + j->name +
+                            "' targeted by mechanism '" + mech.name + "' has no physical limits configured in CAD or sidecar overrides.");
+                    }
                 }
+            }
+            else if (mech.role == "differential" && mech.targetJoints.size() >= 2)
+            {
+                for (size_t i = 0; i < 2; ++i)
+                {
+                    const auto& jName = mech.targetJoints[i];
+                    if (!jName.empty() && manifest.FindJoint(jName))
+                    {
+                        auto eff = sidecar.GetEffectiveLimits(jName, manifest);
+                        if (!eff.hasLimits)
+                        {
+                            linterWarnings.push_back("Joint '" + jName +
+                                "' (output " + (i == 0 ? "A/pitch" : "B/roll") + ") targeted by differential '" +
+                                mech.name + "' has no physical limits configured in CAD or sidecar overrides.");
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4b. Joint Limit Overrides Validation
+        for (const auto& [jointName, ov] : sidecar.jointOverrides)
+        {
+            if (!manifest.FindJoint(jointName))
+            {
+                linterErrors.push_back("Orphan Joint Override: Joint '" + jointName +
+                    "' referenced in jointOverrides does not exist in CAD manifest.");
+            }
+            else if (ov.hasLimits && ov.lower > ov.upper)
+            {
+                linterErrors.push_back("Joint Limits Error: Joint '" + jointName +
+                    "' lower limit (" + std::to_string(ov.lower) + ") cannot be greater than upper limit (" +
+                    std::to_string(ov.upper) + ").");
             }
         }
 
@@ -663,7 +726,16 @@ namespace FRCBananaSim::Tools::Configurator
             }
 
             // DIO Channel Validation
-            if (sensor.type == "beam_break" || (sensor.type == "limit_switch" && sensor.attachToControllerCanId == 0))
+            bool checkPrimaryDio = false;
+            if (sensor.type == "beam_break" ||
+                (sensor.type == "limit_switch" && sensor.attachToControllerCanId == 0) ||
+                (sensor.type == "rev_through_bore" && sensor.attachToControllerCanId == 0) ||
+                (sensor.type == "andymark_lidar3" && sensor.bus == "dio_pwm"))
+            {
+                checkPrimaryDio = true;
+            }
+
+            if (checkPrimaryDio)
             {
                 if (sensor.dioChannel > 31)
                 {
@@ -685,7 +757,40 @@ namespace FRCBananaSim::Tools::Configurator
                 }
             }
 
-            // Limit switch hardware-attached controller validation
+            // REV Through Bore Secondary DIO (Quadrature Channel B)
+            if (sensor.type == "rev_through_bore" && sensor.attachToControllerCanId == 0)
+            {
+                bool isQuad = (sensor.customStringParams.count("encoderMode") && sensor.customStringParams.at("encoderMode") == "quadrature")
+                    || (sensor.secondaryDioChannel > 0);
+                if (isQuad)
+                {
+                    if (sensor.secondaryDioChannel > 31)
+                    {
+                        linterErrors.push_back("DIO Channel Out of Range: REV Through Bore '" + sensor.name +
+                            "' specifies Channel B DIO " + std::to_string(sensor.secondaryDioChannel) + " (valid [0..31]).");
+                    }
+                    else if (sensor.secondaryDioChannel == sensor.dioChannel)
+                    {
+                        linterErrors.push_back("DIO Channel Collision: REV Through Bore '" + sensor.name +
+                            "' Channel A and Channel B cannot share the same DIO channel (" + std::to_string(sensor.dioChannel) + ").");
+                    }
+                    else
+                    {
+                        auto it = dioMap.find(sensor.secondaryDioChannel);
+                        if (it != dioMap.end())
+                        {
+                            linterErrors.push_back("DIO Channel Collision: Channel " + std::to_string(sensor.secondaryDioChannel) +
+                                " is claimed by both '" + it->second + "' and '" + sensor.name + " (Channel B)'.");
+                        }
+                        else
+                        {
+                            dioMap[sensor.secondaryDioChannel] = sensor.name + " (Channel B)";
+                        }
+                    }
+                }
+            }
+
+            // Limit switch & REV Through Bore hardware-attached controller validation
             if (sensor.type == "limit_switch" && sensor.attachToControllerCanId > 0)
             {
                 if (activeControllerCanIds.find(sensor.attachToControllerCanId) == activeControllerCanIds.end())
@@ -693,6 +798,26 @@ namespace FRCBananaSim::Tools::Configurator
                     linterWarnings.push_back("Limit Switch '" + sensor.name +
                         "' is attached to motor controller CAN ID " + std::to_string(sensor.attachToControllerCanId) +
                         ", which is not assigned to any swerve module or mechanism.");
+                }
+            }
+            else if (sensor.type == "rev_through_bore" && sensor.attachToControllerCanId > 0)
+            {
+                if (activeControllerCanIds.find(sensor.attachToControllerCanId) == activeControllerCanIds.end())
+                {
+                    linterWarnings.push_back("REV Through Bore Encoder '" + sensor.name +
+                        "' is attached to SPARK data port CAN ID " + std::to_string(sensor.attachToControllerCanId) +
+                        ", which is not assigned to any swerve module or mechanism.");
+                }
+            }
+
+            // LIDAR Range Validation
+            if ((sensor.type == "andymark_lidar3" || sensor.type == "laser_can") && sensor.triggerMax > 0.0)
+            {
+                if (sensor.triggerMin >= sensor.triggerMax)
+                {
+                    linterErrors.push_back("LIDAR Range Error: Sensor '" + sensor.name + "' Min Range (" +
+                        std::to_string(sensor.triggerMin) + " m) must be strictly less than Max Range (" +
+                        std::to_string(sensor.triggerMax) + " m).");
                 }
             }
 
@@ -719,15 +844,57 @@ namespace FRCBananaSim::Tools::Configurator
                 }
             }
 
-            // CANcoder joint type check
-            if (sensor.type == "cancoder" && !sensor.targetJoint.empty())
+            // Rotary encoder joint type checks
+            if ((sensor.type == "cancoder" || sensor.type == "rev_through_bore") && !sensor.targetJoint.empty())
             {
                 const auto* j = manifest.FindJoint(sensor.targetJoint);
                 if (j && j->type == "prismatic")
                 {
-                    linterWarnings.push_back("CANcoder '" + sensor.name +
-                        "' is bound to prismatic joint '" + sensor.targetJoint + "'. CANcoders typically measure angular revolute motion.");
+                    std::string label = (sensor.type == "cancoder") ? "CANcoder '" : "REV Through Bore Encoder '";
+                    linterWarnings.push_back(label + sensor.name +
+                        "' is bound to prismatic joint '" + sensor.targetJoint + "'. Rotary encoders measure angular revolute motion.");
                 }
+            }
+        }
+
+        // 9. Bumper Configuration Validation
+        if (sidecar.bumpers.enabled)
+        {
+            if (!sidecar.bumpers.targetLink.empty() && !manifest.FindLink(sidecar.bumpers.targetLink))
+            {
+                linterErrors.push_back("Bumper Target Link Error: targetLink '" +
+                    sidecar.bumpers.targetLink + "' does not exist in CAD manifest.");
+            }
+
+            if (sidecar.bumpers.lengthM <= 0.0 || sidecar.bumpers.widthM <= 0.0 || sidecar.bumpers.heightM <= 0.0)
+            {
+                linterErrors.push_back("Bumper Dimensions Error: Length, width, and height must be strictly positive.");
+            }
+
+            if (sidecar.bumpers.shape == "perimeter" || sidecar.bumpers.shape == "u_shape")
+            {
+                if (sidecar.bumpers.thicknessM <= 0.0 ||
+                    sidecar.bumpers.thicknessM * 2.0 >= sidecar.bumpers.lengthM ||
+                    sidecar.bumpers.thicknessM * 2.0 >= sidecar.bumpers.widthM)
+                {
+                    linterErrors.push_back("Bumper Thickness Error: Wall thickness must be positive and less than half of outer bumper dimensions.");
+                }
+            }
+
+            if (sidecar.bumpers.shape == "u_shape" && sidecar.bumpers.cutoutWidthM <= 0.0)
+            {
+                linterWarnings.push_back("Bumper Cutout Warning: Front cutout width is zero or negative.");
+            }
+
+            if (sidecar.bumpers.massKg > 6.804) // > 15 lbs
+            {
+                linterWarnings.push_back("Bumper Rule Warning: Bumper mass exceeds standard FRC 15 lb limit (" +
+                    std::to_string(static_cast<int>(sidecar.bumpers.massKg * 2.20462)) + " lbs).");
+            }
+            if (sidecar.bumpers.heightM < 0.10)
+            {
+                linterWarnings.push_back("Bumper Rule Warning: Bumper height (" +
+                    std::to_string(static_cast<int>(sidecar.bumpers.heightM * 39.3701)) + " in) is less than standard FRC 5-inch requirement.");
             }
         }
     }

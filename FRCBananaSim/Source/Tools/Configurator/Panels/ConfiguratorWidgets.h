@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Tools/Configurator/ConfiguratorState.h"
 #include <imgui/imgui.h>
 #include <string>
 #include <unordered_map>
@@ -528,5 +529,422 @@ namespace FRCBananaSim::Tools::Configurator
             ImGui::TextDisabled("Note: CTRE and REV define positive shaft rotation opposite to each other when viewing the shaft face.");
             ImGui::EndTooltip();
         }
+    }
+
+    /**
+     * @brief Renders an interactive editor for joint physical hardstops/limits.
+     *        Allows enabling/disabling limits, adjusting lower/upper ranges (with automatic
+     *        degree/inch live readouts and unit expressions), compliance spring tuning,
+     *        and one-click revert to CAD defaults.
+     */
+    inline bool RenderJointLimitEditor(ConfiguratorState& state, const std::string& jointName, const char* idPrefix = "")
+    {
+        if (jointName.empty())
+        {
+            ImGui::TextDisabled("No target joint specified.");
+            return false;
+        }
+
+        const auto* joint = state.manifest.FindJoint(jointName);
+        bool isPrismatic = (joint && joint->type == "prismatic");
+        const char* defaultUnit = isPrismatic ? "m" : "rad";
+
+        Robot::Schema::JointLimitOverride eff = state.sidecar.GetEffectiveLimits(jointName, state.manifest);
+        const Robot::Schema::JointLimitOverride* existingOverride = state.sidecar.FindJointOverride(jointName);
+        bool isOverridden = (existingOverride != nullptr);
+
+        bool modified = false;
+
+        ImGui::PushID(idPrefix);
+        ImGui::PushID(jointName.c_str());
+
+        ImGui::BeginGroup();
+
+        // Header line: Title, Status Badge, and Revert Button
+        ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), "Joint Hardstop Limits & Motion Range:");
+        ImGui::SameLine();
+        if (isOverridden)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.84f, 0.0f, 1.0f), "[Override Active]");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Reset to CAD##HeaderReset"))
+            {
+                state.sidecar.jointOverrides.erase(jointName);
+                state.sidecarVersion++;
+                state.RunLinter();
+                eff = state.sidecar.GetEffectiveLimits(jointName, state.manifest);
+                existingOverride = state.sidecar.FindJointOverride(jointName);
+                isOverridden = false;
+                modified = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Reset hardstops to the exact values found in CAD.");
+            }
+        }
+        else
+        {
+            ImGui::TextDisabled(eff.hasLimits ? "[CAD Defaults]" : "[CAD Unbounded]");
+        }
+
+        // Checkbox: Enable Limits
+        bool limitsEnabled = eff.hasLimits;
+        if (ImGui::Checkbox("Enable Hardstops##LimitsEnabled", &limitsEnabled))
+        {
+            auto& ov = state.sidecar.jointOverrides[jointName];
+            ov = eff;
+            ov.hasLimits = limitsEnabled;
+            if (ov.unit.empty()) ov.unit = defaultUnit;
+            if (limitsEnabled && std::abs(ov.lower - ov.upper) < 1e-6)
+            {
+                if (isPrismatic)
+                {
+                    ov.lower = 0.0;
+                    ov.upper = 1.0;
+                }
+                else
+                {
+                    ov.lower = -3.14159;
+                    ov.upper = 3.14159;
+                }
+            }
+            state.sidecarVersion++;
+            state.RunLinter();
+            modified = true;
+        }
+
+        if (limitsEnabled)
+        {
+            float lowerVal = static_cast<float>(eff.lower);
+            float upperVal = static_cast<float>(eff.upper);
+
+            if (isPrismatic)
+            {
+                // Linear elevator / slider
+                float sMin = std::min(-2.0f, std::min(lowerVal, upperVal) - 0.5f);
+                float sMax = std::max(5.0f, std::max(lowerVal, upperVal) + 0.5f);
+
+                if (SliderWithDirectInput("Lower Limit (m)##LowerLim", &lowerVal, sMin, sMax, "%.3f m", 90.0f))
+                {
+                    auto& ov = state.sidecar.jointOverrides[jointName];
+                    ov = eff;
+                    ov.hasLimits = true;
+                    ov.lower = lowerVal;
+                    ov.unit = "m";
+                    state.sidecarVersion++;
+                    state.RunLinter();
+                    modified = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(%.2f in)", lowerVal / 0.0254f);
+
+                if (SliderWithDirectInput("Upper Limit (m)##UpperLim", &upperVal, sMin, sMax, "%.3f m", 90.0f))
+                {
+                    auto& ov = state.sidecar.jointOverrides[jointName];
+                    ov = eff;
+                    ov.hasLimits = true;
+                    ov.upper = upperVal;
+                    ov.unit = "m";
+                    state.sidecarVersion++;
+                    state.RunLinter();
+                    modified = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(%.2f in)", upperVal / 0.0254f);
+            }
+            else
+            {
+                // Angular revolute / continuous joint
+                constexpr float kRadToDeg = 180.0f / 3.14159265358979323846f;
+                float sMin = std::min(-6.283f, std::min(lowerVal, upperVal) - 1.0f);
+                float sMax = std::max(6.283f, std::max(lowerVal, upperVal) + 1.0f);
+
+                if (SliderWithDirectInput("Lower Limit (rad)##LowerLim", &lowerVal, sMin, sMax, "%.3f rad", 90.0f))
+                {
+                    auto& ov = state.sidecar.jointOverrides[jointName];
+                    ov = eff;
+                    ov.hasLimits = true;
+                    ov.lower = lowerVal;
+                    ov.unit = "rad";
+                    state.sidecarVersion++;
+                    state.RunLinter();
+                    modified = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(%.1f deg)", lowerVal * kRadToDeg);
+
+                if (SliderWithDirectInput("Upper Limit (rad)##UpperLim", &upperVal, sMin, sMax, "%.3f rad", 90.0f))
+                {
+                    auto& ov = state.sidecar.jointOverrides[jointName];
+                    ov = eff;
+                    ov.hasLimits = true;
+                    ov.upper = upperVal;
+                    ov.unit = "rad";
+                    state.sidecarVersion++;
+                    state.RunLinter();
+                    modified = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(%.1f deg)", upperVal * kRadToDeg);
+            }
+
+            if (lowerVal > upperVal)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Warning: Lower limit cannot exceed upper limit!");
+            }
+
+            // CAD Baseline Reference & Prominent Reset Button
+            ImGui::Spacing();
+            if (joint)
+            {
+                if (joint->limits.hasLimits)
+                {
+                    if (isPrismatic)
+                    {
+                        ImGui::TextColored(ImVec4(0.65f, 0.75f, 0.90f, 1.0f),
+                            "CAD Value: [%.3f to %.3f] m (%.2f to %.2f in)",
+                            joint->limits.lower, joint->limits.upper,
+                            joint->limits.lower / 0.0254, joint->limits.upper / 0.0254);
+                    }
+                    else
+                    {
+                        constexpr double kR2D = 180.0 / 3.14159265358979323846;
+                        ImGui::TextColored(ImVec4(0.65f, 0.75f, 0.90f, 1.0f),
+                            "CAD Value: [%.3f to %.3f] rad (%.1f° to %.1f°)",
+                            joint->limits.lower, joint->limits.upper,
+                            joint->limits.lower * kR2D, joint->limits.upper * kR2D);
+                    }
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.65f, 0.75f, 0.90f, 1.0f),
+                        "CAD Value: Continuous / Unbounded (no physical stops in CAD)");
+                }
+
+                if (isOverridden)
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.75f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.55f, 0.88f, 1.0f));
+                    if (ImGui::Button("Reset to CAD Values##ResetLimitsBtn", ImVec2(180.0f, 24.0f)))
+                    {
+                        state.sidecar.jointOverrides.erase(jointName);
+                        state.sidecarVersion++;
+                        state.RunLinter();
+                        modified = true;
+                    }
+                    ImGui::PopStyleColor(2);
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Discards custom sidecar overrides and restores the exact joint limits imported from the CAD model.");
+                    }
+                }
+                else
+                {
+                    ImGui::BeginDisabled();
+                    ImGui::Button("Matches CAD Values##ResetLimitsBtnDisabled", ImVec2(180.0f, 24.0f));
+                    ImGui::EndDisabled();
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    {
+                        ImGui::SetTooltip("Current hardstop limits already match the values defined in the CAD model.");
+                    }
+                }
+            }
+            ImGui::Spacing();
+
+            // Compliance Spring (Collapsible)
+            if (ImGui::TreeNode("Compliance Spring Hardstop##SpringOpts"))
+            {
+                ImGui::TextDisabled("Physics limit stop compliance (Jolt physics):");
+                float freqVal = static_cast<float>(eff.springFrequencyHz);
+                if (SliderWithDirectInput("Spring Freq (Hz)##SpringFreq", &freqVal, 0.0f, 100.0f, "%.1f Hz", 90.0f))
+                {
+                    auto& ov = state.sidecar.jointOverrides[jointName];
+                    ov = eff;
+                    ov.springFrequencyHz = freqVal;
+                    state.sidecarVersion++;
+                    state.RunLinter();
+                    modified = true;
+                }
+
+                float dampVal = static_cast<float>(eff.springDampingRatio);
+                if (SliderWithDirectInput("Damping Ratio##SpringDamp", &dampVal, 0.0f, 5.0f, "%.2f", 90.0f))
+                {
+                    auto& ov = state.sidecar.jointOverrides[jointName];
+                    ov = eff;
+                    ov.springDampingRatio = dampVal;
+                    state.sidecarVersion++;
+                    state.RunLinter();
+                    modified = true;
+                }
+                ImGui::TreePop();
+            }
+        }
+        else
+        {
+            ImGui::TextDisabled("  Joint is continuous / unbounded (no physical hardstops).");
+            if (joint && joint->limits.hasLimits)
+            {
+                ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.75f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.55f, 0.88f, 1.0f));
+                if (ImGui::Button("Reset to CAD Limits##ResetUnboundedToCAD"))
+                {
+                    state.sidecar.jointOverrides.erase(jointName);
+                    state.sidecarVersion++;
+                    state.RunLinter();
+                    modified = true;
+                }
+                ImGui::PopStyleColor(2);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Restores the original physical hardstops configured in the CAD model.");
+                }
+            }
+            else if (isOverridden)
+            {
+                ImGui::SameLine();
+                if (ImGui::Button("Reset to CAD Values##ResetUnboundedOverride"))
+                {
+                    state.sidecar.jointOverrides.erase(jointName);
+                    state.sidecarVersion++;
+                    state.RunLinter();
+                    modified = true;
+                }
+            }
+        }
+
+        ImGui::EndGroup();
+
+        ImGui::PopID();
+        ImGui::PopID();
+
+        return modified;
+    }
+
+    /**
+     * @brief Conditionally places next item on same line if there is enough remaining width,
+     *        otherwise wraps around naturally to the next line.
+     * @param neededWidth Estimated width required for next item in pixels.
+     * @param spacing Horizontal spacing in pixels (-1 for default style spacing).
+     */
+    inline void AutoWrapSameLine(float neededWidth, float spacing = -1.0f)
+    {
+        float avail = ImGui::GetContentRegionAvail().x;
+        float effectiveSpacing = (spacing >= 0.0f) ? spacing : ImGui::GetStyle().ItemSpacing.x;
+        if (avail >= neededWidth + effectiveSpacing)
+        {
+            ImGui::SameLine(0.0f, spacing);
+        }
+    }
+
+    /**
+     * @brief Begins a labeled option row, keeping option 1 on the same line if space permits,
+     *        or dropping to the next line if space is constrained.
+     */
+    inline void BeginOptionRow(const char* labelText, float firstItemWidth = 180.0f)
+    {
+        float avail = ImGui::GetContentRegionAvail().x;
+        float labelW = ImGui::CalcTextSize(labelText).x;
+        float needed = labelW + ImGui::GetStyle().ItemSpacing.x + firstItemWidth;
+        ImGui::Text("%s", labelText);
+        if (avail >= needed)
+        {
+            ImGui::SameLine(0.0f, 8.0f);
+        }
+    }
+
+    /**
+     * @brief Interactive draggable panel splitter separator.
+     *        Allows user to drag panels in/out to resize them.
+     *        Double-clicking resets the panel dimension to its default position.
+     * @param id Unique ImGui string identifier.
+     * @param vertical True for vertical splitter (resizing left/right width), False for horizontal splitter (resizing top/bottom height).
+     * @param thickness Thickness of splitter bar in pixels (e.g. 5.0f - 6.0f).
+     * @param size Pointer to the dimension value being resized.
+     * @param minSize Minimum clamped size.
+     * @param maxSize Maximum clamped size.
+     * @param defaultSize Default position to restore when double-clicked.
+     * @param invertDelta True if dragging right/down decreases the size (e.g. right-anchored inspector or bottom-anchored linter).
+     * @return True if size was modified this frame.
+     */
+    inline bool Splitter(const char* id, bool vertical, float thickness, float* size,
+        float minSize, float maxSize, float defaultSize, bool invertDelta = false)
+    {
+        if (!size) return false;
+
+        ImGuiIO& io = ImGui::GetIO();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        ImVec2 sizeVec = vertical ?
+            ImVec2(thickness, ImGui::GetContentRegionAvail().y) :
+            ImVec2(ImGui::GetContentRegionAvail().x, thickness);
+
+        ImGui::InvisibleButton(id, sizeVec);
+        bool isHovered = ImGui::IsItemHovered();
+        bool isActive = ImGui::IsItemActive();
+
+        if (isHovered || isActive)
+        {
+            ImGui::SetMouseCursor(vertical ? ImGuiMouseCursor_ResizeEW : ImGuiMouseCursor_ResizeNS);
+        }
+
+        bool modified = false;
+
+        // Double-click resets to default position
+        if (isHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            *size = defaultSize;
+            modified = true;
+        }
+        else if (isActive)
+        {
+            float mouseDelta = vertical ? io.MouseDelta.x : io.MouseDelta.y;
+            if (invertDelta) mouseDelta = -mouseDelta;
+
+            if (mouseDelta != 0.0f)
+            {
+                float newSize = std::clamp(*size + mouseDelta, minSize, maxSize);
+                if (newSize != *size)
+                {
+                    *size = newSize;
+                    modified = true;
+                }
+            }
+        }
+
+        // Visual rendering
+        ImVec2 pMin = ImGui::GetItemRectMin();
+        ImVec2 pMax = ImGui::GetItemRectMax();
+
+        ImU32 col = isActive ? IM_COL32(80, 160, 255, 255) :
+            (isHovered ? IM_COL32(65, 130, 220, 220) : IM_COL32(40, 44, 52, 255));
+        drawList->AddRectFilled(pMin, pMax, col);
+
+        // Center grip dots
+        if (vertical)
+        {
+            float midY = (pMin.y + pMax.y) * 0.5f;
+            float midX = (pMin.x + pMax.x) * 0.5f;
+            ImU32 dotCol = isActive ? IM_COL32(255, 255, 255, 240) : (isHovered ? IM_COL32(200, 220, 255, 200) : IM_COL32(90, 95, 110, 180));
+            drawList->AddCircleFilled(ImVec2(midX, midY - 10.0f), 1.5f, dotCol);
+            drawList->AddCircleFilled(ImVec2(midX, midY),         1.5f, dotCol);
+            drawList->AddCircleFilled(ImVec2(midX, midY + 10.0f), 1.5f, dotCol);
+        }
+        else
+        {
+            float midX = (pMin.x + pMax.x) * 0.5f;
+            float midY = (pMin.y + pMax.y) * 0.5f;
+            ImU32 dotCol = isActive ? IM_COL32(255, 255, 255, 240) : (isHovered ? IM_COL32(200, 220, 255, 200) : IM_COL32(90, 95, 110, 180));
+            drawList->AddCircleFilled(ImVec2(midX - 10.0f, midY), 1.5f, dotCol);
+            drawList->AddCircleFilled(ImVec2(midX,         midY), 1.5f, dotCol);
+            drawList->AddCircleFilled(ImVec2(midX + 10.0f, midY), 1.5f, dotCol);
+        }
+
+        if (isHovered)
+        {
+            ImGui::SetTooltip("Drag to resize. Double-click to reset default (%.0f px).", defaultSize);
+        }
+
+        return modified;
     }
 }

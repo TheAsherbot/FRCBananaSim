@@ -26,7 +26,7 @@ namespace FRCBananaSim::Tools::Configurator
 
     private:
         char newSensorNameBuf[64]{ "NewSensor" };
-        int newSensorTypeIdx{ 0 }; // 0: imu_pigeon2, 1: imu_navx, 2: cancoder, 3: beam_break, 4: limit_switch, 5: analog_input, 6: laser_can, 7: color_sensor, 8: custom
+        int newSensorTypeIdx{ 0 }; // 0: imu_pigeon2, 1: imu_navx, 2: cancoder, 3: beam_break, 4: limit_switch, 5: analog_input, 6: laser_can, 7: color_sensor, 8: rev_through_bore, 9: andymark_lidar3, 10: custom
         char searchFilterBuf[64]{ "" };
     };
 }

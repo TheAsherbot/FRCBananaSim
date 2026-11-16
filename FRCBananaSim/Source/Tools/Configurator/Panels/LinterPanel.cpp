@@ -40,7 +40,8 @@ namespace FRCBananaSim::Tools::Configurator
         ImGui::TextDisabled("Status: %s", state.statusMessage.c_str());
 
         // Error / warning lists in child window
-        ImGui::BeginChild("LinterMessageList", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::BeginChild("LinterMessageList", ImVec2(0.0f, 0.0f), false);
+        ImGui::PushTextWrapPos(0.0f);
 
         for (const auto& err : state.linterErrors)
         {
@@ -57,6 +58,7 @@ namespace FRCBananaSim::Tools::Configurator
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No validation errors or topology conflicts found.");
         }
 
+        ImGui::PopTextWrapPos();
         ImGui::EndChild();
     }
 }

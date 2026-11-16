@@ -16,6 +16,7 @@ The **Sidecar Configurator** is a dedicated graphical application designed for F
    - [Saving and Exporting](#saving-and-exporting)
 5. [3D CAD Viewport & Camera Navigation](#5-3d-cad-viewport--camera-navigation)
    - [Viewport Controls & Navigation Presets](#viewport-controls--navigation-presets)
+   - [Coordinate Frame & 3D Axes Convention](#coordinate-frame--3d-axes-convention)
    - [Camera Settings Modal](#camera-settings-modal)
    - [Gold Selection Highlighting & HUD Overlay](#gold-selection-highlighting--hud-overlay)
 6. [CAD Hierarchy Panel](#6-cad-hierarchy-panel)
@@ -23,6 +24,7 @@ The **Sidecar Configurator** is a dedicated graphical application designed for F
    - [Two-Line Segmented Navigation Bar](#two-line-segmented-navigation-bar)
    - [Swerve Drivetrain Panel](#swerve-drivetrain-panel)
    - [Mechanisms Panel (1-DOF Mechanisms & 2-DOF Differentials)](#mechanisms-panel-1-dof-mechanisms--2-dof-differential-wrists)
+   - [Parametric FRC Bumpers Panel](#parametric-frc-bumpers-panel)
    - [Mechanical Couplings & Linkages Panel](#mechanical-couplings--linkages-panel)
    - [Sensor Suite Panel (IMUs, CANcoders, Beam Breaks, Limit Switches, Analog)](#sensor-suite-panel-imus-cancoders-beam-breaks-limit-switches-analog)
    - [Mass Reconciliation & Ballast Calibration](#mass-reconciliation--ballast-calibration)
@@ -158,6 +160,33 @@ Navigate the 3D scene using mouse controls:
 | **Blender** | Middle Mouse Button Drag | <kbd>Shift</kbd> + Middle Mouse Button | Mouse Scroll Wheel |
 | **CAD Standard** | Right Mouse Button Drag | Middle Mouse Button Drag | Mouse Scroll Wheel |
 
+### Coordinate Frame & 3D Axes Convention
+
+Across the entire Sidecar Configurator application, all 3D viewports, sliders, offset editors, and numeric inspector readouts follow a **unified, human-intuitive Robot Coordinate System**:
+
+| Axis | Vector Direction | Robot Relative Meaning | Viewport Color & Triad Label |
+| :---: | :---: | :--- | :--- |
+| **$+X$** | Positive X | **Right side of the robot** ($-X$ is Left) | 🔴 **Red Arrow** (`+X (Right)`) |
+| **$+Y$** | Positive Y | **Up towards ceiling** ($-Y$ is Down towards carpet) | 🟢 **Green Arrow** (`+Y (Up)`) |
+| **$+Z$** | Positive Z | **Front / Forward of the robot** ($-Z$ is Back / Reverse) | 🔵 **Blue Arrow** (`+Z (Front)`) |
+
+```
+                 +Y (Up / Ceiling) [Green]
+                 ▲
+                 │
+                 │   ▲ +Z (Front / Forward) [Blue]
+                 │  /
+                 │ /
+                 └────────► +X (Right Side) [Red]
+```
+
+- **In-Scene Triad & Status Bar**:
+  - The 3D viewport toolbar dynamically reminds you: `Axes: +X Right (Red) | +Y Up (Green) | +Z Front (Blue)`.
+  - In-scene 3D origin arrows render billboarded arrowhead text labels (`+X (Right)`, `+Y (Up)`, `+Z (Front)`).
+- **Physical Consistency Across All Panels**:
+  - Link Center of Mass coordinates ($X, Y, Z$), Collider bounding box dimensions & origins, and Joint motion axes are automatically presented in this Robot Coordinate Frame.
+  - When you adjust any $X, Y, Z$ offset (e.g. Swerve Module positions, Sensor mounts, or Ballast locations), positive values always move the component **Right ($+X$)**, **Up ($+Y$)**, or **Forward ($+Z$)**.
+
 ### Camera Settings Modal
 Click **Camera Settings** in the top toolbar to adjust:
 - **Navigation Preset**: Switch between Fusion 360, Blender, or CAD Standard.
@@ -188,7 +217,7 @@ The left panel displays the structural tree ingested from `manifest.json`:
 ## 7. Subsystem Inspector Panels
 
 The right panel features a clean **two-line segmented navigation bar** giving rapid access to all robot subsystems without text truncation or cramped single-line clipping:
-- **Line 1 (Kinematics & Actuation)**: `[ CAD Selection ]` `[ Swerve Drive ]` `[ Mechanisms ]`
+- **Line 1 (Kinematics & Actuation)**: `[ CAD Selection ]` `[ Swerve Drive ]` `[ Mechanisms ]` `[ Bumpers ]`
 - **Line 2 (Linkages, Sensors & Calibrations)**: `[ Couplings ]` `[ Sensors ]` `[ Mass & Scale ]`
 
 ### Unified Single-Control Numeric Sliders & Automatic Unit Conversion
@@ -240,11 +269,19 @@ Every numeric parameter across all inspector panels uses a **single unified cont
   - Enter physical caliper measurements (diameter in $mm$ or radius in $m$) of worn or brand-new tread wheels (e.g. 98.5 mm).
   - Automatically calculates the exact effective radius ($m$) and applies it to all modules.
 - **4-Module Matrix (Front-Left, Front-Right, Back-Left, Back-Right)**:
-  - $X, Y$ chassis offset coordinates ($m$).
+  - **Symmetrical Axle Geometry Helper**: Enter **Wheelbase (Z / Front-Back)** ($m$) and **Trackwidth (X / Left-Right)** ($m$) to automatically place all 4 modules symmetrically:
+    - **FL**: $(-X\text{ Left}, +Z\text{ Front})$
+    - **FR**: $(+X\text{ Right}, +Z\text{ Front})$
+    - **BL**: $(-X\text{ Left}, -Z\text{ Back})$
+    - **BR**: $(+X\text{ Right}, -Z\text{ Back})$
+  - **Per-Module Position Sliders (+X=Right, +Y=Up, +Z=Front)**:
+    - `Pos X (Left [-] / Right [+]) (m)`
+    - `Pos Y (Elevation / Up [+]) (m)`
+    - `Pos Z (Back [-] / Front [+]) (m)`
   - Drive Motor CAN ID & Steer Motor CAN ID.
   - CAN Bus Assignment: **`roboRIO (rio)`** vs **`CANivore (canivore)`**.
   - Inversion toggles for drive and steer motors.
-  - Absolute steering encoder offset ($rad$).
+  - Absolute steering encoder offset ($rad$ or $deg$).
 
 ### Mechanisms Panel (1-DOF Mechanisms & 2-DOF Differential Wrists)
 Configure arms, elevators, flywheels, intakes, wrists, turrets, and differentials:
@@ -292,8 +329,57 @@ Configure arms, elevators, flywheels, intakes, wrists, turrets, and differential
   - Mechanical Efficiency ($\eta \in [0.5, 1.0]$).
   - Coulomb Friction ($N\cdot m$) and Viscous Damping ($N\cdot m \cdot s / rad$).
 - **Role-Specific Parameters**:
-  - Flywheel: Rotor moment of inertia ($kg\cdot m^2$), shooter wheel mount offset ($X, Y, Z$ in meters).
+  - Flywheel: Rotor moment of inertia ($kg\cdot m^2$), shooter wheel mount offset ($X=\text{Right}, Y=\text{Up}, Z=\text{Front}$ in meters), and spin axis vector ($+X=\text{Right}, +Y=\text{Up}, +Z=\text{Front}$).
   - Elevator: Drum radius ($m$), carriage mass ($kg$), constant spring assist force ($N$).
+
+### Parametric FRC Bumpers Panel
+
+Configure physical FRC bumpers parametrically without needing them modeled in CAD. This enables realistic chassis-to-chassis impacts, field boundary collisions, center-of-mass shift, and bumper zone legality verification:
+
+- **Bumper Enable Toggle**: Instantly activate or deactivate virtual bumper physics colliders and visual wireframes.
+- **Target Link Binding**: Dropdown selecting the rigid link where bumpers mount (defaults to `base_link` chassis).
+- **Parametric Bumper Shapes**:
+  - **`perimeter` (Standard FRC Box Frame)**: 4 individual rectangular bumper colliders enclosing the entire robot perimeter (Front, Back, Left, Right).
+  - **`u_shape` (Intake Cutout)**: 3-sided bumper frame (Left, Right, Back) with a front opening cutout of width $W_{\text{cutout}}$ for ground-pickup intakes.
+  - **`box`**: Single solid bounding box enclosing the robot outer footprint.
+- **Parametric Dimensions & Offsets (+X=Right, +Y=Up, +Z=Front)**:
+  - **Outer Width (X / Left-Right)** ($m$ or $in$): Total lateral span of bumper exterior.
+  - **Outer Length (Z / Front-Back)** ($m$ or $in$): Total longitudinal span of bumper exterior.
+  - **Bumper Height (Y / Up-Down)** ($m$ or $in$): Vertical height of the bumper wood and pool noodle structure (Standard FRC rule is $5.0\text{ inches} = 0.127\text{ m}$).
+  - **Wall Thickness** ($m$ or $in$): Thickness of plywood backing plus foam noodles (Standard FRC rule is $3.25\text{ inches} = 0.08255\text{ m}$).
+  - **Front Cutout Width (X / Left-Right)** ($m$ or $in$): Width of the front opening for `u_shape` intake frames.
+  - **Center Offset X (Left [-] / Right [+])** ($m$): Lateral centering offset.
+  - **Center Offset Y (Elevation / Up [+])** ($m$): Height of the bumper centerline above the robot floor plane.
+  - **Center Offset Z (Back [-] / Front [+])** ($m$): Longitudinal centering offset.
+- **Real-Time FRC Bumper Zone Legal Verification**:
+  - Evaluates the bumper's bottom edge elevation $Y_{\text{bottom}} = \text{offset}_Y - \text{height}_Y / 2$ and top edge elevation $Y_{\text{top}} = \text{offset}_Y + \text{height}_Y / 2$ above the carpet floor ($Y=0$).
+  - Displays instant visual badges:
+    - 🟢 `[LEGAL in 0.5" - 7.5" Zone (Y Above Floor)]`: Both bottom and top edges remain inside the legal FRC bumper zone ($0.0127\text{ m}$ to $0.1905\text{ m}$).
+    - 🔴 `[ILLEGAL: Bumpers exceed 0.5" - 7.5" FRC Bumper Zone!]`: Warns when bumper elevation violates competition rules.
+    - 🟢 `[LEGAL Mass (<= 15 lbs)]` vs 🔴 `[ILLEGAL Mass (> 15 lbs / 6.804 kg)]`: Monitors total bumper assembly weight.
+- **One-Click Helpers**:
+  - **`Fit to Swerve Module Footprint`**: Calculates maximum module absolute $(X, Z)$ positions, adds standard wheel radius plus $3.25\text{ inch}$ bumper thickness margin, and sizes Outer Width ($X$) and Outer Length ($Z$) automatically.
+  - **COTS Thickness & Height Shortcuts**: One-click buttons to set standard FRC 5" height and 3.25" thickness.
+- **Physics Collider & Inertia Ingestion**:
+  - When enabled, `RobotAssembler` constructs exact oriented Jolt collision boxes for each perimeter segment and adds composite mass and rotational inertia to the chassis body.
+  - Viewport renders a real-time colored wireframe (Blue, Red, or Black) matching bumper placement.
+- **JSON Schema in `sidecar.json`**:
+  ```json
+  "bumpers": {
+    "enabled": true,
+    "targetLink": "base_link",
+    "shape": "perimeter",
+    "length_m": 0.884,
+    "width_m": 0.884,
+    "height_m": 0.127,
+    "thickness_m": 0.08255,
+    "cutoutWidth_m": 0.400,
+    "offset_m": [0.0, 0.090, 0.0],
+    "mass_kg": 6.804,
+    "material": "bumper_fabric",
+    "color": "blue"
+  }
+  ```
 
 ### Mechanical Couplings & Linkages Panel
 Dedicated subsystem inspector for mechanical transmissions between joints and kinematic loop closures:
@@ -309,7 +395,7 @@ Dedicated subsystem inspector for mechanical transmissions between joints and ki
 - **Four-Bar Kinematic Loops (`four_bar_loop`)**:
   - Models closed planar four-bar linkages without expensive physics solver iterations.
   - Joint Chain: Crank joint (driven), Coupler joint, and Follower joint (all from CAD).
-  - Loop Closures: Closure parent link, closure child link, 3D parent anchor point ($X, Y, Z$), 3D child anchor point ($X, Y, Z$), and closure rotation axis vector.
+  - Loop Closures: Closure parent link, closure child link, 3D parent anchor point ($X=\text{Right}, Y=\text{Up}, Z=\text{Front}$ in meters), 3D child anchor point ($X=\text{Right}, Y=\text{Up}, Z=\text{Front}$ in meters), and closure rotation axis vector.
 - **Solver Modes**:
   - `analytic_coupled`: Direct high-speed closed-form constraint solver running at 100x real-time speed.
   - `jolt_constraint`: Jolt multi-body constraint fallback.
@@ -319,11 +405,11 @@ Author and calibrate all sensory instrumentation for autonomous navigation, mech
 - **CTRE Pigeon 2.0 (`imu_pigeon2`)**:
   - 6-axis IMU reporting yaw, pitch, roll, angular rates, and 3-axis linear accelerations.
   - CAN ID and CAN Bus assignment (`roboRIO (rio)` vs `CANivore (canivore)`).
-  - Rigid mounting to any CAD parent link with 3D offset coordinates ($X, Y, Z$ in meters).
+  - Rigid mounting to any CAD parent link with 3D offset coordinates ($+X=\text{Right}, +Y=\text{Up}, +Z=\text{Front}$ in meters).
   - Real-world stochastic noise modeling: Gyro noise standard deviation ($rad/s$), gyro bias random walk ($rad/s^2$), and accelerometer noise ($m/s^2$).
 - **Kauai Labs navX2 (`imu_navx`)**:
   - 6-axis IMU supporting `SPI (Onboard)`, `I2C (Onboard)`, or `I2C (MXP Extension)` bus interfaces.
-  - Mount parent link and 3D offset coordinates ($X, Y, Z$ in meters).
+  - Mount parent link and 3D offset coordinates ($+X=\text{Right}, +Y=\text{Up}, +Z=\text{Front}$ in meters).
   - Drift and noise parameters.
 - **CTRE CANcoder (`cancoder`)**:
   - Absolute magnetic angular encoder over CAN (`rio` vs `canivore`).
@@ -343,7 +429,7 @@ Author and calibrate all sensory instrumentation for autonomous navigation, mech
   - Dynamic joint binding for continuous analog potentiometers and pressure transducers.
   - Direct 0V to 5V linear span calibration (`Min Value @ 0V` to `Max Value @ 5V`).
 - **LaserCAN (`laser_can`) & Color Sensor V3 (`color_sensor`)**:
-  - Grapple LaserCAN TOF distance sensing with CAN ID, CAN bus, and 3D link offset.
+  - Grapple LaserCAN TOF distance sensing with CAN ID, CAN bus, and 3D link offset ($+X=\text{Right}, +Y=\text{Up}, +Z=\text{Front}$).
   - REV Color Sensor V3 over I2C (`Onboard` vs `MXP`) with 7-bit device address.
 - **Diagnostic Sensor Linter Rules**:
   - Real-time detection of duplicate CAN IDs across swerve, mechanisms, and sensors.
@@ -355,7 +441,11 @@ Author and calibrate all sensory instrumentation for autonomous navigation, mech
 Reconcile the difference between your theoretical CAD model weight and the real-world scale weight without modifying CAD files:
 - **Scale Weight Input**: Input the robot's physical weight as measured on inspection scales ($kg$ or $lbs$) and see real-time weight deficit or surplus.
 - **Mode A (Proportional Robot Scaling)**: Uniformly scales all link masses and rotational inertia tensors by a global multiplier ($M_{\text{effective}} = M_{\text{cad}} \times \text{multiplier}$).
-- **Mode B (Unmodeled Ballast Offset)**: Injects concentrated point masses (e.g. 12V battery, radio, wire harness, brass ballast weights) onto a specific target link at a 3D coordinate $[X, Y, Z]$, updating center of mass and parallel-axis inertia without phantom collider shapes.
+- **Mode B (Unmodeled Ballast Offset)**: Injects concentrated point masses (e.g. 12V battery, radio, wire harness, brass ballast weights) onto a specific target link at 3D offset coordinates ($+X=\text{Right}, +Y=\text{Up}, +Z=\text{Front}$ in meters):
+  - `Offset X (Left [-] / Right [+]) (m)`
+  - `Offset Y (Down [-] / Up [+]) (m)`
+  - `Offset Z (Back [-] / Front [+]) (m)`
+  - Updates center of mass and parallel-axis inertia without phantom collider shapes.
 - **Mode C (Individual Component Mass Overrides)**: Directly override the mass of specific individual links (e.g. fabricated parts differing from CAD). Individual overrides scale that link's rotational inertia proportionally ($I_{\text{new}} = I_{\text{cad}} \times (m_{\text{new}} / m_{\text{cad}})$) while leaving all other links governed by Mode A or raw CAD.
 
 ---

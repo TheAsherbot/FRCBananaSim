@@ -129,7 +129,8 @@ namespace FRCBananaSim::Tools::Configurator
             Mechanisms,
             Couplings,
             Sensors,
-            MassReconciliation
+            MassReconciliation,
+            Bumpers
         };
         ActiveInspectorTab activeInspectorTab{ ActiveInspectorTab::CADSelection };
 

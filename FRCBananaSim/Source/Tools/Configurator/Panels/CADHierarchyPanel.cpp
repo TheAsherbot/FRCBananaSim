@@ -82,6 +82,17 @@ namespace FRCBananaSim::Tools::Configurator
                 state.selectedLink.clear();
                 state.selectedJoint.clear();
             }
+
+            bool isBumperSelected = (state.activeInspectorTab == ConfiguratorState::ActiveInspectorTab::Bumpers);
+            std::string bumperLabel = state.sidecar.bumpers.enabled ?
+                ("Bumpers (" + state.sidecar.bumpers.shape + ", " + state.sidecar.bumpers.color + ")") :
+                "Bumpers (Disabled)";
+            if (ImGui::Selectable(bumperLabel.c_str(), isBumperSelected))
+            {
+                state.activeInspectorTab = ConfiguratorState::ActiveInspectorTab::Bumpers;
+                state.selectedLink.clear();
+                state.selectedJoint.clear();
+            }
         }
 
         // 3. Links Section
@@ -148,14 +159,32 @@ namespace FRCBananaSim::Tools::Configurator
                 ImGui::Indent(14.0f);
                 ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s -> %s",
                     joint.parentLink.c_str(), joint.childLink.c_str());
-                if (joint.limits.hasLimits)
+                auto effLimits = state.sidecar.GetEffectiveLimits(joint.name, state.manifest);
+                bool isOverridden = (state.sidecar.FindJointOverride(joint.name) != nullptr);
+
+                if (effLimits.hasLimits)
                 {
-                    ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "[%.2f, %.2f] %s",
-                        joint.limits.lower, joint.limits.upper, joint.limits.unit.c_str());
+                    if (isOverridden)
+                    {
+                        ImGui::TextColored(ImVec4(0.3f, 0.85f, 1.0f, 1.0f), "[%.2f, %.2f] %s [Override]",
+                            effLimits.lower, effLimits.upper, effLimits.unit.c_str());
+                    }
+                    else
+                    {
+                        ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "[%.2f, %.2f] %s",
+                            effLimits.lower, effLimits.upper, effLimits.unit.c_str());
+                    }
                 }
                 else
                 {
-                    ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "[Continuous / Unbounded]");
+                    if (isOverridden)
+                    {
+                        ImGui::TextColored(ImVec4(0.3f, 0.85f, 1.0f, 1.0f), "[Continuous / Unbounded] [Override]");
+                    }
+                    else
+                    {
+                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "[Continuous / Unbounded]");
+                    }
                 }
                 ImGui::Unindent(14.0f);
             }

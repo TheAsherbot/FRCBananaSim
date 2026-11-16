@@ -820,25 +820,25 @@ namespace FRCBananaSim::Tools::Configurator
             if (swerve.modules.size() != 4)
             {
                 swerve.modules.clear();
-                swerve.modules.push_back({ "FrontLeft",  {  0.28,  0.28, 0.0 }, 1, 2, 21, "rio", 0, 1 });
-                swerve.modules.push_back({ "FrontRight", {  0.28, -0.28, 0.0 }, 3, 4, 22, "rio", 2, 3 });
-                swerve.modules.push_back({ "BackLeft",   { -0.28,  0.28, 0.0 }, 5, 6, 23, "rio", 4, 5 });
-                swerve.modules.push_back({ "BackRight",  { -0.28, -0.28, 0.0 }, 7, 8, 24, "rio", 6, 7 });
+                swerve.modules.push_back({ "FrontLeft",  { -0.28, 0.0,  0.28 }, 1, 2, 21, "rio", 0, 1 });
+                swerve.modules.push_back({ "FrontRight", {  0.28, 0.0,  0.28 }, 3, 4, 22, "rio", 2, 3 });
+                swerve.modules.push_back({ "BackLeft",   { -0.28, 0.0, -0.28 }, 5, 6, 23, "rio", 4, 5 });
+                swerve.modules.push_back({ "BackRight",  {  0.28, 0.0, -0.28 }, 7, 8, 24, "rio", 6, 7 });
             }
 
             // Symmetrical Layout Helper with Sliders + Direct Input
-            ImGui::TextDisabled("Symmetrical Axle Geometry Helper:");
-            SliderWithDirectInput("Wheelbase (m)", &wheelbaseM, 0.20f, 1.20f, "%.3f");
-            SliderWithDirectInput("Trackwidth (m)", &trackwidthM, 0.20f, 1.20f, "%.3f");
+            ImGui::TextDisabled("Symmetrical Axle Geometry Helper (+X=Right, +Y=Up, +Z=Front):");
+            SliderWithDirectInput("Wheelbase (Z / Front-Back) (m)", &wheelbaseM, 0.20f, 1.20f, "%.3f");
+            SliderWithDirectInput("Trackwidth (X / Left-Right) (m)", &trackwidthM, 0.20f, 1.20f, "%.3f");
 
             if (ImGui::Button("Apply Symmetrical Positions"))
             {
-                double hX = wheelbaseM * 0.5;
-                double hY = trackwidthM * 0.5;
-                swerve.modules[0].posM = {  hX,  hY, 0.0 }; // FL (+X, +Y)
-                swerve.modules[1].posM = {  hX, -hY, 0.0 }; // FR (+X, -Y)
-                swerve.modules[2].posM = { -hX,  hY, 0.0 }; // BL (-X, +Y)
-                swerve.modules[3].posM = { -hX, -hY, 0.0 }; // BR (-X, -Y)
+                double hX = trackwidthM * 0.5;
+                double hZ = wheelbaseM * 0.5;
+                swerve.modules[0].posM = { -hX, 0.0,  hZ }; // FL (-X Left,  +Z Front)
+                swerve.modules[1].posM = {  hX, 0.0,  hZ }; // FR (+X Right, +Z Front)
+                swerve.modules[2].posM = { -hX, 0.0, -hZ }; // BL (-X Left,  -Z Back)
+                swerve.modules[3].posM = {  hX, 0.0, -hZ }; // BR (+X Right, -Z Back)
             }
 
             ImGui::Spacing();
@@ -853,16 +853,21 @@ namespace FRCBananaSim::Tools::Configurator
 
                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "[Module %zu: %s]", i, mod.name.c_str());
 
-                // Position Sliders + Direct Input
+                // Position Sliders + Direct Input (+X=Right, +Y=Up, +Z=Front)
                 float posX = static_cast<float>(mod.posM.x);
                 float posY = static_cast<float>(mod.posM.y);
-                if (SliderWithDirectInput("Pos X (m)", &posX, -1.0f, 1.0f, "%.3f", 85.0f, 55.0f))
+                float posZ = static_cast<float>(mod.posM.z);
+                if (SliderWithDirectInput("Pos X (Left [-] / Right [+]) (m)", &posX, -1.0f, 1.0f, "%.3f", 85.0f, 55.0f))
                 {
                     mod.posM.x = posX;
                 }
-                if (SliderWithDirectInput("Pos Y (m)", &posY, -1.0f, 1.0f, "%.3f", 85.0f, 55.0f))
+                if (SliderWithDirectInput("Pos Y (Elevation / Up [+]) (m)", &posY, -1.0f, 1.0f, "%.3f", 85.0f, 55.0f))
                 {
                     mod.posM.y = posY;
+                }
+                if (SliderWithDirectInput("Pos Z (Back [-] / Front [+]) (m)", &posZ, -1.0f, 1.0f, "%.3f", 85.0f, 55.0f))
+                {
+                    mod.posM.z = posZ;
                 }
 
                 // CAN Bus Selector

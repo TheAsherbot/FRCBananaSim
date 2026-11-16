@@ -7,5 +7,8 @@
   "orbitSensitivity": 0.4000000059604645,
   "panSensitivity": 0.0024999999441206455,
   "preset": 0,
+  "recentRobots": [
+    "FRCBananaSim/Resources/Robots\\Reference2026"
+  ],
   "zoomSensitivity": 0.20000000298023224
 }

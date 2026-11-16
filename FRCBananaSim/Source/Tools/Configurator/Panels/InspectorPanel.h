@@ -15,6 +15,7 @@ namespace FRCBananaSim::Tools::Configurator
     class CouplingsPanel;
     class SensorPanel;
     class MassReconciliationPanel;
+    class BumperPanel;
 
     class InspectorPanel
     {
@@ -37,5 +38,6 @@ namespace FRCBananaSim::Tools::Configurator
         std::unique_ptr<CouplingsPanel> couplingsPanel;
         std::unique_ptr<SensorPanel> sensorPanel;
         std::unique_ptr<MassReconciliationPanel> massReconciliationPanel;
+        std::unique_ptr<BumperPanel> bumperPanel;
     };
 }

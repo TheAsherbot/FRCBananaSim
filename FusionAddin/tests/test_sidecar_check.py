@@ -116,6 +116,68 @@ class TestSidecarCheck(unittest.TestCase):
         self.assertEqual(len(infos), 1)
         self.assertEqual(infos[0].target, "extra_unpowered_hinge")
 
+    def test_joint_overrides_validation(self):
+        collector = DiagnosticCollector()
+        override_sidecar = {
+            "jointOverrides": {
+                "arm_shoulder_hinge": {
+                    "hasLimits": True,
+                    "lower": -1.57,
+                    "upper": 2.09,
+                    "unit": "rad"
+                },
+                "nonexistent_joint_hinge": {
+                    "hasLimits": True,
+                    "lower": 0.0,
+                    "upper": 1.0
+                },
+                "arm_wrist_hinge": {
+                    "hasLimits": True,
+                    "lower": 3.0,
+                    "upper": 1.0  # Invalid: lower > upper
+                }
+            }
+        }
+        cross_check_sidecar(
+            override_sidecar,
+            self.valid_links,
+            self.valid_joints,
+            self.valid_zones,
+            "base_link",
+            collector,
+        )
+        warnings = [d for d in collector.diagnostics if d.code == "W501"]
+        # Should have 2 warnings:
+        # 1: nonexistent_joint_hinge was not found in exported tree joints
+        # 2: arm_wrist_hinge has lower limit greater than upper limit
+        self.assertEqual(len(warnings), 2)
+        targets = [w.target for w in warnings]
+        self.assertIn("nonexistent_joint_hinge", targets)
+        self.assertIn("arm_wrist_hinge", targets)
+
+    def test_bumper_validation(self):
+        collector = DiagnosticCollector()
+        bumper_sidecar = {
+            "bumpers": {
+                "enabled": True,
+                "targetLink": "nonexistent_chassis_link",
+                "shape": "invalid_shape_style"
+            }
+        }
+        cross_check_sidecar(
+            bumper_sidecar,
+            self.valid_links,
+            self.valid_joints,
+            self.valid_zones,
+            "base_link",
+            collector,
+        )
+        warnings = [d for d in collector.diagnostics if d.code == "W501"]
+        self.assertEqual(len(warnings), 2)
+        targets = [w.target for w in warnings if w.target]
+        self.assertIn("nonexistent_chassis_link", targets)
+        self.assertTrue(any("invalid_shape_style" in w.message for w in warnings))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -90,35 +90,35 @@ For complete multi-mechanism robots, configuration data is partitioned into thre
 
 ---
 
-### B. Our Team's Coordinate System in Fusion 360
+### B. Our Team's Coordinate System in Fusion 360 & Sidecar Configurator
 
-Our team models robots using this exact orientation in Fusion 360:
+Across CAD authoring, the Sidecar Configurator, and BananaSim simulation, our team adheres to this exact human-intuitive Robot Coordinate Orientation:
 
-| Direction | Fusion 360 Axis | Robot Meaning |
+| Direction | Coordinate Axis | Robot Relative Meaning |
 | :--- | :--- | :--- |
-| **Front / Intake** | **$+Z$** | Front of the robot (intake side) |
-| **Left Side** | **$+X$** | Left side of the robot (Fusion's "Right" ViewCube face) |
-| **Top / Up** | **$+Y$** | Top of the robot (pointing up to the ceiling) |
+| **Front / Intake** | **$+Z$** | Front / Forward of the robot (intake side; $-Z$ is Back / Reverse) |
+| **Right Side** | **$+X$** | Right side of the robot ($-X$ is Left side) |
+| **Top / Up** | **$+Y$** | Top of the robot (pointing up to the ceiling; $-Y$ is Down towards floor) |
 
 ```
                +Y (Up / Ceiling)
                ▲
                │
-               │   ▲ +Z (Forward / Intake)
+               │   ▲ +Z (Forward / Front)
                │  /
                │ /
-               └────────► +X (Robot Left Side)
+               └────────► +X (Robot Right Side)
 ```
 
 ```mermaid
 flowchart LR
-    CAD["Fusion 360 CAD<br>+Z = Fwd, +X = Left, +Y = Up"] -->|"Fusion Exporter<br>(x_N = z_F, y_N = x_F, z_N = y_F)"| NWU["Schema v1 manifest.json<br>WPILib NWU Standard<br>+X = Fwd, +Y = Left, +Z = Up"]
-    NWU -->|"RobotSchemaLoader<br>(x_E = y_N, y_E = z_N, z_E = x_N)"| Engine["BananaSim Engine & GLB<br>OpenGL Frame<br>+X = Left, +Y = Up, +Z = Fwd"]
+    CAD["Fusion 360 CAD<br>+Z = Front, +X = Right, +Y = Up"] -->|"Fusion Exporter<br>(x_NWU = z_F, y_NWU = -x_F, z_NWU = y_F)"| NWU["Schema v1 manifest.json<br>WPILib NWU Standard<br>+X = Fwd, +Y = Left, +Z = Up"]
+    NWU -->|"RobotSchemaLoader / Configurator<br>(x_Rob = -y_NWU, y_Rob = z_NWU, z_Rob = x_NWU)"| Engine["Sidecar Configurator & Engine<br>Robot Frame / OpenGL<br>+X = Right, +Y = Up, +Z = Front"]
 ```
 
 > [!TIP]
-> **The Free Alignment:**  
-> Notice that our team's Fusion coordinate frame ($+X$ Left, $+Y$ Up, $+Z$ Forward) is **identical to BananaSim's Engine OpenGL coordinate frame**! The exporter maps Fusion into standard WPILib NWU for `manifest.json`, and the engine converts NWU back to Engine space, preserving 100% orientation fidelity without any axis inversion.
+> **Unified Coordinates Throughout Sidecar Configurator:**  
+> All 3D viewport triads, offset fields (Swerve modules, Ballast offsets, Sensor mounts), and inspector readouts adhere to this exact frame: **+X is Right**, **+Y is Up**, and **+Z is Front**. What you see in the viewport aligns 100% with your physical robot intuition!
 
 ---
 
@@ -1134,3 +1134,15 @@ This table lists every single property read by `RobotSpawner` and `SwerveDrivetr
 | **`mechanisms[i].controllers`** | `ControllerConfig` | — | Array of `vendor`, `canId`, `canBus`, `inverted`, and `role`. Number of controllers sets `motorCount` (length 2 for differential mechanisms: `[motor_a, motor_b]`). |
 | **`couplings[i].type`** | `CouplingConfig::type` | string | `"elevator_cascade"`, `"elevator_continuous"`, `"four_bar_loop"`, or `"power_coupling"`. |
 | **`sensors[i].type`** | `SensorConfig::type` | string | `"imu_pigeon2"`, `"cancoder"`, `"limit_switch"`, `"beam_break"`, `"analog_input"`, or `"laser_can"`. |
+| **`bumpers.enabled`** | `BumperSidecarConfig::enabled` | bool | Toggle parametric FRC bumper colliders & mass ingestion. |
+| **`bumpers.targetLink`** | `BumperSidecarConfig::targetLink` | string | Target chassis link for rigid bumper mounting (e.g. `"base_link"`). |
+| **`bumpers.shape`** | `BumperSidecarConfig::shape` | string | Bumper collider topology: `"perimeter"` (4-sided frame), `"u_shape"` (3-sided with front cutout), or `"box"` (bounding box). |
+| **`bumpers.width_m`** | `BumperSidecarConfig::width_m` | $\text{m}$ | Outer bumper width along Robot X-axis (Left-Right span). |
+| **`bumpers.length_m`** | `BumperSidecarConfig::length_m` | $\text{m}$ | Outer bumper length along Robot Z-axis (Front-Back span). |
+| **`bumpers.height_m`** | `BumperSidecarConfig::height_m` | $\text{m}$ | Bumper vertical height along Robot Y-axis (Standard FRC: $5.0\text{"} = 0.127\text{ m}$). |
+| **`bumpers.thickness_m`** | `BumperSidecarConfig::thickness_m` | $\text{m}$ | Bumper wall thickness including plywood and foam noodles (Standard FRC: $3.25\text{"} = 0.08255\text{ m}$). |
+| **`bumpers.cutoutWidth_m`** | `BumperSidecarConfig::cutoutWidth_m` | $\text{m}$ | Front intake opening cutout width along X-axis for `"u_shape"`. |
+| **`bumpers.offset_m`** | `BumperSidecarConfig::offset_m` | $\text{m}$ | `[X, Y, Z]` mounting offset relative to target link origin (+X Right, +Y Up, +Z Front). |
+| **`bumpers.mass_kg`** | `BumperSidecarConfig::mass_kg` | $\text{kg}$ | Total bumper assembly mass (FRC max limit: $15.0\text{ lbs} \approx 6.804\text{ kg}$). |
+| **`bumpers.material`** | `BumperSidecarConfig::material` | string | Surface contact material key in `materials.json` (e.g. `"bumper_fabric"`). |
+| **`bumpers.color`** | `BumperSidecarConfig::color` | string | Viewport visualization wireframe color (`"blue"`, `"red"`, `"black"`). |

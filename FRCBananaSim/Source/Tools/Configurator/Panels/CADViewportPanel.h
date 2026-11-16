@@ -46,6 +46,7 @@ namespace FRCBananaSim::Tools::Configurator
     public:
         CADViewportPanel();
 
+
         /**
          * @brief Renders the interactive 3D CAD preview viewport.
          * @param state Active configurator state.
@@ -100,5 +101,7 @@ namespace FRCBananaSim::Tools::Configurator
         ImVec2 ProjectToScreen(const glm::vec3& worldPos, const glm::mat4& viewProj, const ImVec2& viewOrigin, const ImVec2& viewSize);
         void DrawWireframeBox(ImDrawList* drawList, const glm::vec3& center, const glm::vec3& halfExtents, const glm::quat& orientation, const glm::mat4& viewProj, const ImVec2& viewOrigin, const ImVec2& viewSize, ImU32 color);
         void DrawJointAxis(ImDrawList* drawList, const glm::vec3& origin, const glm::vec3& axis, float lowerLimit, float upperLimit, bool hasLimits, bool isRevolute, const glm::mat4& viewProj, const ImVec2& viewOrigin, const ImVec2& viewSize, bool isSelected);
+        void DrawOrientationGizmo(ImDrawList* drawList, const glm::mat4& view, const ImVec2& viewOrigin, const ImVec2& viewSize);
     };
 }
+
