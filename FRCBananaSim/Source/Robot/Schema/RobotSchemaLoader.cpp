@@ -140,6 +140,41 @@ namespace FRCBananaSim::Robot::Schema
         return Validate();
     }
 
+    bool RobotSchemaLoader::LoadRobotFromStrings(std::string_view manifestJson, std::string_view sidecarJson, std::string_view materialsJson)
+    {
+        ClearDiagnostics();
+        try
+        {
+            nlohmann::json mJson = nlohmann::json::parse(manifestJson);
+            if (!LoadManifestFromJson(mJson))
+            {
+                return false;
+            }
+
+            if (!sidecarJson.empty())
+            {
+                nlohmann::json sJson = nlohmann::json::parse(sidecarJson);
+                if (!LoadSidecarFromJson(sJson))
+                {
+                    return false;
+                }
+            }
+
+            if (!materialsJson.empty())
+            {
+                nlohmann::json matJson = nlohmann::json::parse(materialsJson);
+                materialLibrary.LoadFromJson(matJson);
+            }
+
+            return Validate();
+        }
+        catch (const std::exception& e)
+        {
+            errors.push_back(std::string("Exception parsing JSON strings: ") + e.what());
+            return false;
+        }
+    }
+
     bool RobotSchemaLoader::LoadManifestFromFile(const std::string& filepath)
     {
         std::ifstream file(filepath);

@@ -71,6 +71,11 @@
 #include <vector>
 #include <iostream>
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#endif
+
 using namespace FRCBananaSim::Core::ECS::Core;
 using namespace FRCBananaSim::Core::ECS::Components;
 using namespace FRCBananaSim::Physics::Components;
@@ -269,11 +274,23 @@ static void RenderSceneDebugDraw(Scene& scene, bool showColliders, bool showWhee
 
 static int RunStandaloneGame()
 {
+    // Initialize Telemetry Subsystem
+    FRCBananaSim::Telemetry::TelemetryManager::Get().Initialize();
+    FRCBananaSim::Telemetry::TelemetryManager::Get().SetMode(FRCBananaSim::Telemetry::TelemetryMode::Minimal);
+
     // 1. Initialize Hardware Renderer (1600x900 OpenGL 3.3 Core)
     FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Robot Comp 2 Shootout");
     if (!renderer.IsValid())
     {
         SIM_LOG_FATAL("Failed to initialize OpenGL renderer window");
+#ifdef _WIN32
+        MessageBoxW(nullptr,
+            L"Failed to initialize OpenGL 3.3 Core Profile renderer window.\n\n"
+            L"Please verify that your graphics drivers are installed and support OpenGL 3.3+.",
+            L"FRC Banana Simulator - Error",
+            MB_OK | MB_ICONERROR);
+#endif
+        FRCBananaSim::Telemetry::TelemetryManager::Get().Shutdown();
         return -1;
     }
 
@@ -282,6 +299,13 @@ static int RunStandaloneGame()
     if (!joltContext.Initialize())
     {
         SIM_LOG_FATAL("Failed to initialize Jolt Physics Context");
+#ifdef _WIN32
+        MessageBoxW(nullptr,
+            L"Failed to initialize physics engine (Jolt Physics).",
+            L"FRC Banana Simulator - Error",
+            MB_OK | MB_ICONERROR);
+#endif
+        FRCBananaSim::Telemetry::TelemetryManager::Get().Shutdown();
         return -1;
     }
 
@@ -299,6 +323,14 @@ static int RunStandaloneGame()
             if (!game.Initialize())
             {
                 SIM_LOG_FATAL("Failed to initialize BananaGame with Robot Comp 2");
+#ifdef _WIN32
+                MessageBoxW(nullptr,
+                    L"Failed to initialize BananaGame with Robot Comp 2.",
+                    L"FRC Banana Simulator - Error",
+                    MB_OK | MB_ICONERROR);
+#endif
+                joltContext.Shutdown();
+                FRCBananaSim::Telemetry::TelemetryManager::Get().Shutdown();
                 return -1;
             }
 
@@ -337,6 +369,7 @@ static int RunStandaloneGame()
 
     // 5. Clean teardown in reverse initialization order
     joltContext.Shutdown();
+    FRCBananaSim::Telemetry::TelemetryManager::Get().Shutdown();
 
     SIM_LOG_INFO("[FRCBananaSim] Standalone game exited cleanly.");
     return 0;

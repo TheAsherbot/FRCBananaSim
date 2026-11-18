@@ -5,6 +5,12 @@
 
 #include "Game/BananaGame.h"
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#endif
+#include "Robot/Schema/EmbeddedRobotData.h"
+
 #include "Core/ECS/Components/TransformComponent.h"
 #include "Core/ECS/Components/HierarchyComponent.h"
 #include "Physics/PhysicsConfig.h"
@@ -43,6 +49,21 @@ using namespace FRCBananaSim::Robot::Drivetrain::Components;
 using namespace FRCBananaSim::Robot::Mechanisms::Components;
 using namespace FRCBananaSim::Robot::Sensors::Components;
 using namespace FRCBananaSim::Interaction::Components;
+
+static std::string GetExecutableDirectory()
+{
+#ifdef _WIN32
+    wchar_t exePath[MAX_PATH];
+    DWORD len = GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    if (len > 0)
+    {
+        std::error_code ec;
+        std::filesystem::path p(exePath);
+        return p.parent_path().string();
+    }
+#endif
+    return "";
+}
 
 namespace FRCBananaSim::Game
 {
@@ -124,6 +145,16 @@ namespace FRCBananaSim::Game
         }
         m_arenaEntities.clear();
 
+        // 4b. Destroy custom robot visual meshes cleanly
+        for (Entity e : m_robotVisualEntities)
+        {
+            if (m_scene.IsEntityValid(e))
+            {
+                m_scene.DestroyEntity(e);
+            }
+        }
+        m_robotVisualEntities.clear();
+
         // 5. Destroy robot link bodies cleanly via physics system and destroy entities
         for (auto& [name, entity] : m_robot.linkEntities)
         {
@@ -148,7 +179,7 @@ namespace FRCBananaSim::Game
         }
         m_robot.linkEntities.clear();
 
-        // Destroy chassis entity if valid
+        // Destroy chassis entity if still valid
         if (m_scene.IsEntityValid(m_robot.chassisEntity))
         {
             if (m_robot.physicsSystem)
@@ -156,8 +187,8 @@ namespace FRCBananaSim::Game
                 m_robot.physicsSystem->DestroyBody(m_robot.chassisEntity);
             }
             m_scene.DestroyEntity(m_robot.chassisEntity);
-            m_robot.chassisEntity = invalidEntity;
         }
+        m_robot.chassisEntity = invalidEntity;
 
         // Destroy remaining robot entities (mechanisms, sensors, contact zones)
         for (auto& [name, entity] : m_robot.mechanismEntities)
@@ -198,61 +229,56 @@ namespace FRCBananaSim::Game
         SIM_LOG_INFO("[BananaGame] Initializing Robot Comp 2 Arcade Shootout Game...");
 
         // 1. Locate Robot Comp 2 CAD & Sidecar resources
-        std::string manifestPath = "FRCBananaSim/Resources/Robots/Robot Comp 2/manifest.json";
-        std::string sidecarPath = "FRCBananaSim/Resources/Robots/Robot Comp 2/sidecar.json";
+        std::string manifestPath = "FRCBananaSim/Resources/Robots/Comp 2 Robot EDITED/manifest.json";
+        std::string sidecarPath = "FRCBananaSim/Resources/Robots/Comp 2 Robot EDITED/sidecar.json";
         std::string materialsPath = "FRCBananaSim/Resources/Config/materials.json";
 
-        const std::vector<std::string> searchPrefixes = {
+        std::string exeDir = GetExecutableDirectory();
+        std::vector<std::string> searchPrefixes = {
             "", "../", "../../", "../../../", "../../../../", "FRCBananaSim/"
         };
+        if (!exeDir.empty())
+        {
+            searchPrefixes.insert(searchPrefixes.begin(), exeDir + "/../../FRCBananaSim/");
+            searchPrefixes.insert(searchPrefixes.begin(), exeDir + "/../");
+            searchPrefixes.insert(searchPrefixes.begin(), exeDir + "/FRCBananaSim/");
+            searchPrefixes.insert(searchPrefixes.begin(), exeDir + "/");
+        }
 
         bool foundRobot = false;
+        std::error_code ec;
         for (const auto& prefix : searchPrefixes)
         {
             std::string editCandidate = prefix + "Resources/Robots/Comp 2 Robot EDITED/manifest.json";
             std::string editPrefixCandidate = prefix + "FRCBananaSim/Resources/Robots/Comp 2 Robot EDITED/manifest.json";
-            if (std::filesystem::exists(editCandidate))
+            if (std::filesystem::exists(editCandidate, ec))
             {
                 manifestPath = editCandidate;
                 sidecarPath = prefix + "Resources/Robots/Comp 2 Robot EDITED/sidecar.json";
                 materialsPath = prefix + "Resources/Config/materials.json";
                 foundRobot = true;
-                SIM_LOG_INFO("[BananaGame] Loaded edited robot: " << manifestPath);
+                SIM_LOG_INFO("[BananaGame] Loaded edited robot from disk: " << manifestPath);
                 break;
             }
-            if (std::filesystem::exists(editPrefixCandidate))
+            if (std::filesystem::exists(editPrefixCandidate, ec))
             {
                 manifestPath = editPrefixCandidate;
                 sidecarPath = prefix + "FRCBananaSim/Resources/Robots/Comp 2 Robot EDITED/sidecar.json";
                 materialsPath = prefix + "FRCBananaSim/Resources/Config/materials.json";
                 foundRobot = true;
-                SIM_LOG_INFO("[BananaGame] Loaded edited robot: " << manifestPath);
+                SIM_LOG_INFO("[BananaGame] Loaded edited robot from disk: " << manifestPath);
                 break;
             }
-            std::string candidate = prefix + manifestPath;
-            if (std::filesystem::exists(candidate))
+            std::string candidate = prefix + "Resources/Robots/Robot Comp 2/manifest.json";
+            if (std::filesystem::exists(candidate, ec))
             {
                 manifestPath = candidate;
-                sidecarPath = prefix + "FRCBananaSim/Resources/Robots/Robot Comp 2/sidecar.json";
-                materialsPath = prefix + "FRCBananaSim/Resources/Config/materials.json";
-                foundRobot = true;
-                break;
-            }
-            std::string directCandidate = prefix + "Resources/Robots/Robot Comp 2/manifest.json";
-            if (std::filesystem::exists(directCandidate))
-            {
-                manifestPath = directCandidate;
                 sidecarPath = prefix + "Resources/Robots/Robot Comp 2/sidecar.json";
                 materialsPath = prefix + "Resources/Config/materials.json";
                 foundRobot = true;
+                SIM_LOG_INFO("[BananaGame] Loaded robot from disk: " << manifestPath);
                 break;
             }
-        }
-
-        if (!foundRobot)
-        {
-            SIM_LOG_FATAL("[BananaGame] Could not locate Robot Comp 2 resources at: " << manifestPath);
-            return false;
         }
 
         // 2. Assemble Robot Comp 2 in World Space
@@ -260,11 +286,31 @@ namespace FRCBananaSim::Game
         const glm::vec3 spawnPos(0.0f, 0.20f, -2.5f); // Centered on carpet, facing forward toward goal (+Z)
         const glm::quat spawnRot(1.0f, 0.0f, 0.0f, 0.0f);
 
-        m_robot = assembler.AssembleFromFiles(manifestPath, sidecarPath, materialsPath, spawnPos, spawnRot);
-        if (!m_robot.isSuccess)
+        if (foundRobot)
         {
-            SIM_LOG_FATAL("[BananaGame] Failed to assemble Robot Comp 2: " << m_robot.errorMessage);
-            return false;
+            SIM_LOG_INFO("[BananaGame] Assembling robot from disk files: " << manifestPath);
+            m_robot = assembler.AssembleFromFiles(manifestPath, sidecarPath, materialsPath, spawnPos, spawnRot);
+            if (!m_robot.isSuccess)
+            {
+                SIM_LOG_WARN("[BananaGame] Failed to assemble disk robot files (" << m_robot.errorMessage << "); falling back to embedded data.");
+                foundRobot = false;
+            }
+        }
+
+        if (!foundRobot)
+        {
+            SIM_LOG_INFO("[BananaGame] External robot files not found; assembling self-contained embedded Robot Comp 2 data.");
+            m_robot = assembler.AssembleFromStrings(
+                Robot::Schema::Embedded::kManifestJson,
+                Robot::Schema::Embedded::kSidecarJson,
+                Robot::Schema::Embedded::kMaterialsJson,
+                spawnPos, spawnRot
+            );
+            if (!m_robot.isSuccess)
+            {
+                SIM_LOG_FATAL("[BananaGame] Failed to assemble embedded Robot Comp 2: " << m_robot.errorMessage);
+                return false;
+            }
         }
 
         // Cache initial assembled poses for all links to support flawless resets
@@ -572,6 +618,7 @@ namespace FRCBananaSim::Game
             if (linkEntity == invalidEntity) return;
 
             Entity visual = m_scene.CreateEntity();
+            m_robotVisualEntities.push_back(visual);
             TransformComponent vt;
             vt.position = offset;
             vt.rotation = rot;
@@ -628,6 +675,7 @@ namespace FRCBananaSim::Game
             }
 
             Entity visual = m_scene.CreateEntity();
+            m_robotVisualEntities.push_back(visual);
             TransformComponent vt;
             vt.position = visualOffset;
             vt.rotation = visualRot;
@@ -1873,17 +1921,25 @@ namespace FRCBananaSim::Game
 
     std::string BananaGame::GetHighScoreFilePath() const
     {
+        std::string exeDir = GetExecutableDirectory();
+        std::error_code ec;
+
         const std::vector<std::string> searchPrefixes = {
-            "", "Resources/Config/", "FRCBananaSim/Resources/Config/",
-            "../Resources/Config/", "../../Resources/Config/",
-            "../../FRCBananaSim/Resources/Config/", "../", "../../"
+            exeDir.empty() ? "" : exeDir + "/Resources/Config/",
+            exeDir.empty() ? "" : exeDir + "/",
+            "FRCBananaSim/Resources/Config/",
+            "Resources/Config/",
+            "../../FRCBananaSim/Resources/Config/",
+            "../Resources/Config/",
+            "../", "../../", ""
         };
 
         // If file already exists anywhere in standard search paths, use that exact path
         for (const auto& prefix : searchPrefixes)
         {
+            if (prefix.empty()) continue;
             std::string candidate = prefix + "highscore.json";
-            if (std::filesystem::exists(candidate))
+            if (std::filesystem::exists(candidate, ec))
             {
                 return candidate;
             }
@@ -1892,10 +1948,15 @@ namespace FRCBananaSim::Game
         // If not found yet, prefer writing to Resources/Config/ if that directory exists
         for (const auto& prefix : searchPrefixes)
         {
-            if (!prefix.empty() && std::filesystem::is_directory(prefix))
+            if (!prefix.empty() && std::filesystem::is_directory(prefix, ec))
             {
                 return prefix + "highscore.json";
             }
+        }
+
+        if (!exeDir.empty())
+        {
+            return exeDir + "/highscore.json";
         }
 
         return "highscore.json";

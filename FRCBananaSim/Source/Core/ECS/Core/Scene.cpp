@@ -53,21 +53,23 @@ namespace FRCBananaSim::Core::ECS::Core
 
     void Scene::DestroyEntity(Entity entity)
     {
-        if (entity < entityToIndex.size() && entityToIndex[entity] != invalidIndex)
+        if (entity >= entityToIndex.size() || entityToIndex[entity] == invalidIndex)
         {
-            std::size_t index = entityToIndex[entity];
-            std::size_t lastIndex = entities.size() - 1;
-
-            if (index != lastIndex)
-            {
-                Entity movedEntity = entities[lastIndex];
-                entities[index] = movedEntity;
-                entityToIndex[movedEntity] = index;
-            }
-
-            entities.pop_back();
-            entityToIndex[entity] = invalidIndex;
+            return;
         }
+
+        std::size_t index = entityToIndex[entity];
+        std::size_t lastIndex = entities.size() - 1;
+
+        if (index != lastIndex)
+        {
+            Entity movedEntity = entities[lastIndex];
+            entities[index] = movedEntity;
+            entityToIndex[movedEntity] = index;
+        }
+
+        entities.pop_back();
+        entityToIndex[entity] = invalidIndex;
 
         // Hierarchy fix-up must run *before* components are stripped: it
         // needs to read this entity's own HierarchyComponent, which

@@ -243,6 +243,21 @@ namespace FRCBananaSim::Robot
 
             const glm::quat& worldSpawnOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
 
+        /**
+         * @brief Convenience overload assembling directly from raw JSON strings (for standalone execution).
+         * @param manifestStr Manifest JSON string.
+         * @param sidecarStr Sidecar JSON string.
+         * @param materialsStr Materials JSON string.
+         * @param worldSpawnPosition Spawn point.
+         * @param worldSpawnOrientation Spawn rotation.
+         * @return AssembledRobot.
+         */
+        AssembledRobot AssembleFromStrings(std::string_view manifestStr,
+            std::string_view sidecarStr = "",
+            std::string_view materialsStr = "",
+            const glm::vec3& worldSpawnPosition = glm::vec3(0.0f, 0.20f, 0.0f),
+            const glm::quat& worldSpawnOrientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f));
+
 
 
         /**
