@@ -18,6 +18,9 @@
     <ClCompile Include="Source\Main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Game\BananaGame.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Utils\Log.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -215,6 +218,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\Game\BananaGame.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Utils\Log.h">
       <Filter>Header Files</Filter>
     </ClInclude>

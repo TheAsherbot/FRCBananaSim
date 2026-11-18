@@ -159,10 +159,14 @@ namespace FRCBananaSim::Game
 
         // Configure Initial Camera Position
         auto& camera = m_renderer.GetCamera();
-        camera.SetMode(Renderer::Camera::Mode::Orbit);
-        camera.orbitTarget = spawnPos + glm::vec3(0.0f, 0.4f, 0.0f);
+        camera.SetMode(Renderer::Camera::Mode::FreeFly);
         m_smoothCameraPos = spawnPos + glm::vec3(0.0f, 2.2f, -3.8f);
         m_smoothCameraTarget = spawnPos + glm::vec3(0.0f, 0.4f, 1.0f);
+        camera.position = m_smoothCameraPos;
+        camera.orbitTarget = m_smoothCameraTarget;
+        glm::vec3 initDir = glm::normalize(camera.orbitTarget - camera.position);
+        camera.pitchDegrees = glm::degrees(std::asin(std::clamp(initDir.y, -0.999f, 0.999f)));
+        camera.yawDegrees = glm::degrees(std::atan2(initDir.z, initDir.x));
 
         SIM_LOG_INFO("[BananaGame] Robot Comp 2 Arcade Shootout Game initialized successfully!");
         return true;
@@ -346,7 +350,7 @@ namespace FRCBananaSim::Game
     void BananaGame::SetupRobotVisuals()
     {
         auto attachVisual = [&](Entity linkEntity, PrimitiveShape shape, const glm::vec3& color,
-                                const glm::vec3& fallbackScale = glm::vec3(0.04f),
+                                const glm::vec3& fallbackScale = glm::vec3(0.08f),
                                 const glm::vec3& fallbackOffset = glm::vec3(0.0f))
         {
             if (linkEntity == invalidEntity) return;
@@ -354,14 +358,29 @@ namespace FRCBananaSim::Game
             auto* linkT = m_scene.GetComponent<TransformComponent>(linkEntity);
             if (!linkT) return;
 
+            linkT->scale = glm::vec3(1.0f);
+            auto* linkWt = m_scene.GetComponent<WorldTransformComponent>(linkEntity);
+            if (linkWt) linkWt->worldScale = glm::vec3(1.0f);
+
             auto* col = m_scene.GetComponent<ColliderComponent>(linkEntity);
             glm::vec3 visualOffset = col ? col->localOffset : fallbackOffset;
             glm::quat visualRot = col ? col->localRotation : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
             glm::vec3 visualScale = fallbackScale;
 
-            if (col && col->shape == ColliderShape::Box)
+            if (col)
             {
-                visualScale = col->boxHalfExtents * 2.0f;
+                if (col->shape == ColliderShape::Box)
+                {
+                    visualScale = col->boxHalfExtents * 2.0f;
+                }
+                else if (col->shape == ColliderShape::Cylinder || col->shape == ColliderShape::Capsule)
+                {
+                    visualScale = glm::vec3(col->radius * 2.0f, col->halfHeight * 2.0f, col->radius * 2.0f);
+                }
+                else if (col->shape == ColliderShape::Sphere)
+                {
+                    visualScale = glm::vec3(col->radius * 2.0f);
+                }
             }
 
             Entity visual = m_scene.CreateEntity();
@@ -377,21 +396,7 @@ namespace FRCBananaSim::Game
             vwt.worldScale = visualScale;
             m_scene.AddComponent(visual, vwt);
 
-            HierarchyComponent vh;
-            vh.parent = linkEntity;
-            m_scene.AddComponent(visual, vh);
-
-            auto* linkH = m_scene.GetComponent<HierarchyComponent>(linkEntity);
-            if (linkH)
-            {
-                linkH->children.push_back(visual);
-            }
-            else
-            {
-                HierarchyComponent newH;
-                newH.children.push_back(visual);
-                m_scene.AddComponent(linkEntity, newH);
-            }
+            m_scene.SetParent(visual, linkEntity);
 
             MeshComponent mesh;
             mesh.shape = shape;
@@ -451,6 +456,11 @@ namespace FRCBananaSim::Game
             {
                 // Intake Grip Rollers (Grippy Purple/Red)
                 attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.78f, 0.25f, 0.40f));
+            }
+            else
+            {
+                // Other Robot Links (Anodized Dark Gray)
+                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.42f, 0.45f, 0.48f));
             }
         }
     }
@@ -1073,7 +1083,7 @@ namespace FRCBananaSim::Game
 
         if (m_camMode == CameraMode::FollowRobot)
         {
-            camera.SetMode(Renderer::Camera::Mode::Orbit);
+            camera.SetMode(Renderer::Camera::Mode::FreeFly);
 
             // Position camera smoothly behind and above robot, looking forward
             glm::vec3 targetCamPos = robotPos - (robotFwd * 3.4f) + glm::vec3(0.0f, 1.85f, 0.0f);
@@ -1085,13 +1095,21 @@ namespace FRCBananaSim::Game
 
             camera.position = m_smoothCameraPos;
             camera.orbitTarget = m_smoothCameraTarget;
+
+            glm::vec3 dir = glm::normalize(m_smoothCameraTarget - m_smoothCameraPos);
+            camera.pitchDegrees = glm::degrees(std::asin(std::clamp(dir.y, -0.999f, 0.999f)));
+            camera.yawDegrees = glm::degrees(std::atan2(dir.z, dir.x));
         }
         else if (m_camMode == CameraMode::DriverStation)
         {
             // Fixed Driver Station View from Alliance Wall
-            camera.SetMode(Renderer::Camera::Mode::Orbit);
+            camera.SetMode(Renderer::Camera::Mode::FreeFly);
             camera.position = glm::vec3(0.0f, 2.10f, -6.8f);
             camera.orbitTarget = robotPos + glm::vec3(0.0f, 0.40f, 0.0f);
+
+            glm::vec3 dir = glm::normalize(camera.orbitTarget - camera.position);
+            camera.pitchDegrees = glm::degrees(std::asin(std::clamp(dir.y, -0.999f, 0.999f)));
+            camera.yawDegrees = glm::degrees(std::atan2(dir.z, dir.x));
         }
         else
         {
@@ -1103,7 +1121,12 @@ namespace FRCBananaSim::Game
 
     void BananaGame::Render3D()
     {
-        // 1. Draw Ballistic Trajectory Trails for Flying Balls
+        // 1. Render all solid 3D meshes (Field carpet, arena perimeter walls, goal post & backboard, balls, robot links)
+        m_scene.RenderUpdateSystems();
+        if (m_robot.flywheelSystem) m_robot.flywheelSystem->RenderUpdate();
+        if (m_robot.swerveSystem) m_robot.swerveSystem->RenderUpdate();
+
+        // 2. Draw Ballistic Trajectory Trails for Flying Balls
         for (const auto& [entity, trail] : m_ballTrails)
         {
             if (trail.size() < 2) continue;
@@ -1115,7 +1138,7 @@ namespace FRCBananaSim::Game
             }
         }
 
-        // 2. Draw Target Goal Rim Highlight & Flash FX
+        // 3. Draw Target Goal Rim Highlight & Flash FX
         glm::vec3 hoopColor = (m_goalFlashTimer > 0.0f)
             ? glm::vec3(1.0f, 1.0f, 1.0f) // Bright white flash on score
             : glm::vec3(0.98f, 0.85f, 0.12f); // Vibrant Yellow Rim
@@ -1129,6 +1152,9 @@ namespace FRCBananaSim::Game
             glm::vec3 p2 = m_goalCenter + glm::vec3(std::cos(theta2) * m_goalRadius, 0.0f, std::sin(theta2) * m_goalRadius);
             Utils::DebugDraw::Line(p1, p2, hoopColor, true);
         }
+
+        // 4. Flush Line Buffer to GPU
+        m_renderer.FlushDebugDraw();
     }
 
     void BananaGame::RenderUI()

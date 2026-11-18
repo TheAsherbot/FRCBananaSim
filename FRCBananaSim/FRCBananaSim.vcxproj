@@ -204,6 +204,7 @@
     <ClCompile Include="Source\Robot\Drivetrain\Model\TireContactModel.cpp" />
     <ClCompile Include="Source\Robot\Drivetrain\Systems\SwerveDriveSystem.cpp" />
     <ClCompile Include="Source\Main.cpp" />
+    <ClCompile Include="Source\Game\BananaGame.cpp" />
     <ClCompile Include="Source\Physics\JoltContext.cpp" />
     <ClCompile Include="Source\Physics\Systems\JointSystem.cpp" />
     <ClCompile Include="Source\Physics\Systems\PhysicsDebugDrawSystem.cpp" />
@@ -272,6 +273,7 @@
     <ClInclude Include="Source\Core\Parameters\ParameterValue.h" />
     <ClInclude Include="Source\Core\Units\Units.h" />
     <ClInclude Include="Source\Playground\PlaygroundScene.h" />
+    <ClInclude Include="Source\Game\BananaGame.h" />
     <ClInclude Include="Source\Interaction\GamePieceSpec.h" />
     <ClInclude Include="Source\Interaction\Components\GamePieceComponent.h" />
     <ClInclude Include="Source\Interaction\ShooterSqueezeModel.h" />

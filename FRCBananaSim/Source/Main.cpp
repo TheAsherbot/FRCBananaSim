@@ -331,8 +331,13 @@ int main(int argc, char* argv[])
                 }
 
                 renderer.BeginFrame();
-
                 game.Update(dt);
+            });
+
+        engine.SetRenderCallback([&](double alpha)
+            {
+                if (renderer.ShouldClose()) return;
+
                 game.Render3D();
                 game.RenderUI();
 
