@@ -13,6 +13,7 @@
 #include <glm/mat3x3.hpp>
 
 #include <cstdint>
+#include <ostream>
 
 namespace FRCBananaSim::Physics::Components
 {
@@ -26,6 +27,17 @@ namespace FRCBananaSim::Physics::Components
         Kinematic = 1, ///< Controlled programmatically (e.g. driven mechanisms, animation).
         Dynamic = 2    ///< Fully simulated by Jolt forces, gravity, and contacts.
     };
+
+    inline std::ostream& operator<<(std::ostream& os, const BodyMotionType& type)
+    {
+        switch (type)
+        {
+        case BodyMotionType::Static: return os << "Static";
+        case BodyMotionType::Kinematic: return os << "Kinematic";
+        case BodyMotionType::Dynamic: return os << "Dynamic";
+        default: return os << "Unknown";
+        }
+    }
 
     /**
      * @struct RigidBodyComponent
@@ -45,6 +57,8 @@ namespace FRCBananaSim::Physics::Components
         bool allowSleeping{ true };                                               ///< Whether Jolt can put the body to sleep when stationary (false for chassis).
         bool hasCustomInertia{ false };                                           ///< Whether custom rotational inertia tensor override is provided.
         glm::mat3 inertiaTensor{ 1.0f };                                          ///< Custom 3x3 rotational inertia tensor in local body frame (kg*m^2).
+        bool hasCustomCenterOfMass{ false };                                      ///< Whether custom center-of-mass offset override is provided.
+        glm::vec3 centerOfMassOffset{ 0.0f, 0.0f, 0.0f };                         ///< Custom CoM translation in local body frame (m).
         glm::vec3 linearVelocity{ 0.0f, 0.0f, 0.0f };                             ///< Current linear velocity in m/s.
         glm::vec3 angularVelocity{ 0.0f, 0.0f, 0.0f };                            ///< Current rotational velocity in rad/s.
         uint32_t collisionGroupID{ 0 };                                           ///< Collision group ID (0 = default/invalid group, >=1 = robot group).

@@ -117,6 +117,56 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         elevator.stages[0].currentPositionM = x1;
         elevator.stages[0].currentVelocityMps = v1;
 
+        // 3b. Servo Actuation Branch
+        if (elevator.actuatorType == ActuatorType::Servo)
+        {
+            double G = std::max(elevator.gearRatio, 1e-4);
+            double thetaServo = (x1 / rDrum) * G;
+            double omegaServo = (v1 / rDrum) * G;
+            double effInertia = std::max(elevator.lumpedEffectiveMassKg * (rDrum / G) * (rDrum / G), 0.0001);
+
+            double tauServo = elevator.servoModel.CalculateTorque(thetaServo, omegaServo, effInertia, dt);
+            elevator.statorCurrentA = elevator.servoModel.CalculateCurrent(omegaServo);
+
+            double fServo = (tauServo * G * elevator.efficiency) / rDrum;
+            double dLin = elevator.viscousDampingNspm;
+
+            bool joltGravActive = true;
+            if (elevator.stages[0].stageEntity != invalidEntity)
+            {
+                auto* stageRb = scene.GetComponent<Physics::Components::RigidBodyComponent>(elevator.stages[0].stageEntity);
+                if (stageRb && stageRb->gravityFactor == 0.0f)
+                {
+                    joltGravActive = false;
+                }
+            }
+
+            double fDelivered = fServo + elevator.springPreloadForceN + (joltGravActive ? 0.0 : effectiveGravityLoadN) - (dLin * v1);
+            elevator.appliedLinearForceN = fDelivered;
+
+            stage1Joint->appliedForce = static_cast<float>(fDelivered);
+            stage1Joint->targetVelocity = 0.0f;
+            stage1Joint->motorMode = JointMotorMode::Torque;
+
+            if (elevator.riggingMode == ElevatorRiggingMode::Cascade)
+            {
+                double a1 = (fDelivered + effectiveGravityLoadN) / elevator.lumpedEffectiveMassKg;
+                double predV = v1 + a1 * dt;
+                ProcessCascadeRigging(elevator, x1, v1, predV);
+            }
+            else if (elevator.riggingMode == ElevatorRiggingMode::Continuous)
+            {
+                ProcessContinuousRigging(elevator, fDelivered);
+            }
+            else
+            {
+                elevator.totalCarriageHeightM = x1;
+                elevator.totalCarriageVelocityMps = v1;
+            }
+
+            return;
+        }
+
         // 4. Commanded Force and Back-EMF Linear Damping
         double appliedV = elevator.commandedVoltage;
         auto affine = motor.CalculateAffineTorqueTerms(appliedV);

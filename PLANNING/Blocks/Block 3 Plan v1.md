@@ -42,6 +42,9 @@ This Revision 2 updates the external plan to reconcile directly with the existin
 7. **Test Framework Alignment**:  
    All new test suites are authored using `TestFramework.h` and registered in `Tests/MainTests.cpp` under `FRCBananaSim_Tests`.
 
+8. **Generic 2-DOF Differential Mechanism Separation (`DifferentialMechanismSystem`)**:  
+   Differential transmissions (such as 2-DOF bevel wrists, CoreXY gantries, and base-driven coupled arms) couple two actuators to two kinematic joints through off-diagonal velocity transformation matrices ($\mathbf{T}_{mq}$). Rather than overloading single-DOF `MechanismSystem`, differential mechanisms operate through a dedicated `DifferentialMechanismSystem` and pure ECS data component `DifferentialComponent`. This preserves strict ECS separation, isolates $2\times 2$ semi-implicit matrix mathematics, allocates two distinct motor slots in `SimInputs`/`SimOutputs`, and drives Jolt hinge constraints via velocity targets to prevent open-loop torque inertia divergence.
+
 ---
 
 ### Core Metrics & Gates 2 & 3 Acceptance Criteria
@@ -51,7 +54,7 @@ This Revision 2 updates the external plan to reconcile directly with the existin
 | **Timeline** | October 30 – November 5, 2026 (7 Days) |
 | **Prerequisites** | Block 1 & Block 2 complete; Analytic Swerve (`SwerveDrivetrainModel`, 24/24 passing), `DCMotorModel`, `BatteryModel`, `JointSystem`, `ParameterStore`, `Units`, and `HALSimWebSocketServer` v0 operational. |
 | **Primary Deliverables** | 1. **Robot Data Schema v1**: Formal JSON schema (`manifest.json`, `sidecar.json`, `materials.json`) featuring pairwise contact friction/restitution matrix + `RobotSchemaLoader` and `RobotAssembler`.<br>2. **Mechanisms**: Single/cascade/continuous Elevators, single/double-jointed Arms with hard stops, closed-loop Four-Bar linkage, unified `PowerCoupling` transmissions (gears, timing belts, roller chains, cables) with efficiency and backlash, and 1D ODE Flywheels.<br>3. **Sensor Suite**: 8-channel Analog inputs ($0\text{--}5\text{ V}$), custom I²C/SPI/CAN sensors via generic parameter dictionaries, gear-scaled & quantized Encoders (`CANcoder`), 6-axis IMU (`Pigeon2` / `navX`) with specific force, bias, and noise, Limit Switches, and `ObjectLayers::SENSOR` Beam Breaks. ...
-| **Gate 2a (Mechanism Stability)** | A complete robot (analytic swerve + 4-bar intake + 2-stage elevator + double-jointed arm + flywheel) loads from Schema v1 JSON and runs all mechanisms simultaneously for **5 simulated minutes (60,000 steps at 200 Hz)** with zero NaNs, energy ledger closure within $1.5\%$, and four-bar loop drift **$< 1.5\text{ mm}$** under a $15\text{ kg}$ load. |
+| **Gate 2a (Mechanism Stability)** | A complete robot (analytic swerve + 4-bar intake + 2-stage elevator + double-jointed arm + flywheel + 2-DOF differential wrist) loads from Schema v1 JSON and runs all mechanisms simultaneously for **5 simulated minutes (60,000 steps at 200 Hz)** with zero NaNs, energy ledger closure within $1.5\%$, and four-bar loop drift **$< 1.5\text{ mm}$** under a $15\text{ kg}$ load. |
 | **Gate 2b (`SimDevice` Lockstep)** | Real C++ robot subsystem code drives all mechanisms via `halsim_ws` lockstep (`PauseTiming()` + `StepTiming(20_ms)`) at both `1x` and `10x` speeds. If Phoenix 6 background threads drift at `10x`, the built-in deterministic `OnControllerPIDModel` fallback activates cleanly. |
 | **Gate 3 (Schema v1 Freeze)** | Schema v1 is frozen and passes round-trip validation by **Nov 5** so the Block 4 Fusion exporter starts on schedule on Nov 6. |
 
@@ -93,14 +96,17 @@ flowchart TD
         ElecSys["ElectricalSystem (Aggregated Bus Current & V_bus Solve Across All Motors)"]
         SwerveSys["SwerveDriveSystem (Analytic 6-DOF Model + TerrainProbe)"]
         MechSys["MechanismSystem (Elevators, Arms, 4-Bars, Couplings)"]
+        DiffSys["DifferentialMechanismSystem (Coupled 2x2 Semi-Implicit Dynamics)"]
         FlywheelSys["FlywheelSystem (Semi-Implicit 1D Rotational ODE + Recoil)"]
         MassSys["CompositeMassSystem (Dynamic Robot CG & Inertia -> Swerve)"]
 
         SimInputs --> ElecSys
         ElecSys -->|"V_terminal"| SwerveSys
         ElecSys -->|"V_terminal"| MechSys
+        ElecSys -->|"V_terminal"| DiffSys
         ElecSys -->|"V_terminal"| FlywheelSys
         MechSys --> MassSys
+        DiffSys --> MassSys
         MassSys -->|"SetMassProperties(M, I, cg)"| SwerveSys
     end
 
@@ -110,6 +116,7 @@ flowchart TD
 
         SwerveSys <--> Jolt
         MechSys <--> Jolt
+        DiffSys <--> Jolt
         FlywheelSys -->|"Reaction Torque"| Jolt
         Jolt --> SensorSys
         FlywheelSys --> SensorSys
@@ -256,6 +263,48 @@ Because `SwerveDrivetrainModel` solves the 6-DOF chassis equations using total r
 4. **Beam Breaks (`BeamBreakComponent`):**
    * Associates a DIO channel with an `ObjectLayers::SENSOR` volume collider (`isSensor = true`).
    * Any dynamic body on `ObjectLayers::MOVING` intersecting the zone sets `isBroken = true` after a $10\text{ ms}$ debounce filter, writing to `SimOutputs::digitalInputs`.
+
+---
+
+### 3.9 Generic 2-DOF Differential Mechanisms (Differential Wrists, CoreXY, Coupled Arms)
+
+Differential transmissions couple two actuators to two mechanical degrees of freedom through gear clusters or belt loops. This achieves dramatic distal mass reduction and constructive torque summation.
+
+#### 1. Kinematic Velocity Transformations
+Let generalized joint velocities be $\dot{\mathbf{q}} = [\dot{q}_1, \dot{q}_2]^T$ and motor rotor velocities be $\boldsymbol{\omega}_m = [\omega_{mA}, \omega_{mB}]^T$. The kinematic coupling is defined by linear transformation matrix $\mathbf{T}_{mq} \in \mathbb{R}^{2 \times 2}$ and its inverse $\mathbf{T}_{qm} = \mathbf{T}_{mq}^{-1}$:
+$$\boldsymbol{\omega}_m = \mathbf{T}_{mq} \dot{\mathbf{q}}, \qquad \dot{\mathbf{q}} = \mathbf{T}_{qm} \boldsymbol{\omega}_m$$
+$$\boldsymbol{\theta}_m = \mathbf{T}_{mq} \mathbf{q}, \qquad \mathbf{q} = \mathbf{T}_{qm} \boldsymbol{\theta}_m$$
+
+*   **Symmetric Bevel Differential Wrist (Pitch $G_p$, Roll $G_r$):**
+    $$\mathbf{T}_{mq} = \begin{pmatrix} G_p & G_r \\ G_p & -G_r \end{pmatrix}, \qquad \mathbf{T}_{qm} = \begin{pmatrix} \frac{1}{2 G_p} & \frac{1}{2 G_p} \\ \frac{1}{2 G_r} & -\frac{1}{2 G_r} \end{pmatrix}$$
+*   **CoreXY / H-Bot Cartesian Gantry ($X$ and $Y$ Pulley Radius $r_p$):**
+    $$\mathbf{T}_{mq} = \frac{1}{r_p}\begin{pmatrix} G_x & G_y \\ G_x & -G_y \end{pmatrix}, \qquad \mathbf{T}_{qm} = r_p \begin{pmatrix} \frac{1}{2 G_x} & \frac{1}{2 G_x} \\ \frac{1}{2 G_y} & -\frac{1}{2 G_y} \end{pmatrix}$$
+*   **Base-Driven Concentric Coupled Arm (Shoulder $G_1$, Elbow $G_2$):**
+    $$\mathbf{T}_{mq} = \begin{pmatrix} G_1 & 0 \\ G_2 & G_2 \end{pmatrix}, \qquad \mathbf{T}_{qm} = \begin{pmatrix} \frac{1}{G_1} & 0 \\ -\frac{1}{G_1} & \frac{1}{G_2} \end{pmatrix}$$
+
+#### 2. Dual Torque Formulation & Principle of Virtual Work
+By conservation of power across the transmission without instantaneous loss ($P = \boldsymbol{\tau}_m^T \boldsymbol{\omega}_m = \boldsymbol{\tau}_q^T \dot{\mathbf{q}}$), the dual transformation mapping motor torques to generalized joint torques is the exact **transpose** of $\mathbf{T}_{mq}$:
+$$\boldsymbol{\tau}_q = \mathbf{T}_{mq}^T \boldsymbol{\tau}_m = \begin{pmatrix} T_{11} & T_{21} \\ T_{12} & T_{22} \end{pmatrix} \begin{pmatrix} \tau_{mA} \\ \tau_{mB} \end{pmatrix}$$
+For a symmetric bevel wrist:
+$$\boldsymbol{\tau}_q = \begin{pmatrix} G_p & G_p \\ G_r & -G_r \end{pmatrix} \begin{pmatrix} \tau_{mA} \\ \tau_{mB} \end{pmatrix} = \begin{pmatrix} G_p (\tau_{mA} + \tau_{mB}) \\ G_r (\tau_{mA} - \tau_{mB}) \end{pmatrix}$$
+When both motors output equal positive torque ($\tau_{mA} = \tau_{mB} = \tau$), pitch torque doubles ($\tau_{\text{pitch}} = 2 G_p \tau$) while roll torque cancels completely ($\tau_{\text{roll}} = 0$). When motors output opposing torque ($\tau_{mA} = -\tau_{mB} = \tau$), pitch torque cancels and pure roll torque is produced ($\tau_{\text{roll}} = 2 G_r \tau$).
+
+#### 3. Coupled Reflected Rotor Inertia
+The kinetic energy stored in the rotating motor armatures ($T_{\text{rotors}} = \frac{1}{2} \boldsymbol{\omega}_m^T \mathbf{J}_{\text{rotor}} \boldsymbol{\omega}_m$) maps into joint coordinates as:
+$$\mathbf{M}_{\text{reflected}} = \mathbf{T}_{mq}^T \mathbf{J}_{\text{rotor}} \mathbf{T}_{mq}$$
+where $\mathbf{J}_{\text{rotor}} = \operatorname{diag}(N_A J_{rA}, N_B J_{rB})$. For identical motors in a symmetric bevel cluster, the cross-coupling inertia terms cancel identically:
+$$\mathbf{M}_{\text{reflected}} = \begin{pmatrix} 2 N_m J_r G_p^2 & 0 \\ 0 & 2 N_m J_r G_r^2 \end{pmatrix}$$
+Total effective joint inertia is $\mathbf{M}_{\text{eff}} = \mathbf{M}_{\text{reflected}} + \mathbf{M}_{\text{CAD\_links}}$.
+
+#### 4. Coupled Semi-Implicit 2-DOF Dynamics & Velocity Motor Mode Delivery
+Each motor generates stall command torque and velocity damping:
+$$\boldsymbol{\tau}_m = \boldsymbol{\tau}_{\text{cmd}} - \mathbf{D}_m \boldsymbol{\omega}_m, \qquad \mathbf{D}_m = \operatorname{diag}(D_{mA}, D_{mB})$$
+Projected into joint space via $\mathbf{D}_q = \mathbf{T}_{mq}^T \mathbf{D}_m \mathbf{T}_{mq} + \operatorname{diag}(b_1, b_2)$:
+$$\boldsymbol{\tau}_{\text{drive}} = \mathbf{T}_{mq}^T (\boldsymbol{\tau}_{\text{cmd}} \cdot \eta) + \boldsymbol{\tau}_{\text{grav}} - \mathbf{D}_q \dot{\mathbf{q}}^t$$
+To prevent open-loop torque instability arising from the $35\times$ disparity between reflected rotor inertia ($M_{\text{eff}} \approx 0.042\text{ kg}\cdot\text{m}^2$) and Jolt CAD shape inertia ($I_{\text{Jolt}} \approx 0.00125\text{ kg}\cdot\text{m}^2$), the system integrates velocity implicitly:
+$$(\mathbf{M}_{\text{eff}} + \Delta t \mathbf{D}_q) \Delta \dot{\mathbf{q}} = \Delta t \boldsymbol{\tau}_{\text{drive}}$$
+$$\dot{\mathbf{q}}^{t+\Delta t} = \dot{\mathbf{q}}^t + \Delta \dot{\mathbf{q}}$$
+The resulting target velocity $\dot{\mathbf{q}}^{t+\Delta t}$ is injected directly into Jolt's `JointComponent` via `JointMotorMode::Velocity` with torque limits clamped to the combined stator current limits ($2 N_m G \tau_{\text{stator}}$). Jolt's internal PGS solver solves the exact contact and constraint impulses with zero numerical chatter or divergence.
 
 ---
 
@@ -507,8 +556,26 @@ Data is partitioned into three JSON files:
       ]
     },
     {
+      "name": "arm_wrist_differential",
+      "role": "differential",
+      "differentialType": "SymmetricBevel",
+      "targetJoints": [ "arm_wrist_hinge", "arm_wrist_roll_hinge" ],
+      "motorPresets": [ "KrakenX44", "KrakenX44" ],
+      "motorCounts": [ 1, 1 ],
+      "gearRatios": [ 40.0, 30.0 ],
+      "efficiency": 0.95,
+      "statorCurrentLimit_A": 60.0,
+      "supplyCurrentLimit_A": 40.0,
+      "coulombFriction": [ 0.35, 0.20 ],
+      "viscousDamping": [ 0.04, 0.02 ],
+      "controllers": [
+        { "vendor": "CTRE_TalonFX", "canId": 15, "canBus": "canivore", "inverted": false, "role": "motor_a" },
+        { "vendor": "CTRE_TalonFX", "canId": 16, "canBus": "canivore", "inverted": false, "role": "motor_b" }
+      ]
+    },
+    {
       "name": "shooter_flywheel",
-      "role": "flywheel",
+      "role": "flywheel", 
       "parentLink": "arm_wrist_link",
       "motorPreset": "KrakenX60",
       "gearRatio": 0.5,
@@ -876,6 +943,7 @@ flowchart LR
        1. `ElectricalSystem::FixedUpdate(dt)`: Aggregates bus current across swerve and mechanisms, updates terminal voltage and brownout latch.
        2. `ElevatorSystem::FixedUpdate(dt)`: Computes linear forces, applies slider forces, enforces cascade/continuous rigging.
        3. `MechanismSystem::FixedUpdate(dt)`: Computes hinge torques for arms and four-bar cranks, updates gear/chain couplings.
+       3b. `DifferentialMechanismSystem::FixedUpdate(dt)`: Solves 2x2 coupled semi-implicit differential dynamics and drives velocity-mode joint targets.
        4. `FlywheelSystem::FixedUpdate(dt)`: Sub-steps 1D rotational ODEs and applies recoil torque to parent Jolt body.
        5. `CompositeMassSystem::FixedUpdate(dt)`: Computes dynamic composite mass/CG/inertia and updates `SwerveDrivetrainModel::SetMassProperties`.
        6. `SwerveDriveSystem::FixedUpdate(dt)`: Steps 6-DOF analytic swerve solver and writes midpoint velocity to Jolt chassis.
@@ -937,14 +1005,19 @@ FRCBananaSim/
 │           │   ├── Components/
 │           │   │   ├── ArmComponent.h                [NEW]
 │           │   │   ├── CouplingComponent.h           [NEW]
+│           │   │   ├── DifferentialComponent.h       [NEW - Pure ECS Data]
 │           │   │   ├── ElevatorComponent.h           [NEW]
 │           │   │   ├── FlywheelComponent.h           [NEW]
 │           │   │   └── FourBarComponent.h            [NEW]
 │           │   └── Systems/
 │           │       ├── CompositeMassSystem.h & .cpp  [NEW - Dynamic CG/Inertia -> Swerve]
+│           │       ├── DifferentialMechanismSystem.h & .cpp [NEW - Coupled 2-DOF Dynamics]
 │           │       ├── ElevatorSystem.h & .cpp       [NEW]
 │           │       ├── FlywheelSystem.h & .cpp       [NEW]
 │           │       └── MechanismSystem.h & .cpp      [NEW]
+│       ├── Playground/
+│       │   ├── PlaygroundMain.cpp                    [NEW - Visual Testbed Runner]
+│       │   └── PlaygroundScene.h & .cpp              [NEW - Interactive 2-DOF Rig]
 │           ├── RobotAssembler.h & .cpp               [NEW - Full Schema v1 Robot Spawner]
 │           ├── RobotSpawner.h & .cpp                 [KEEP - Legacy Compat]
 │           ├── Schema/
@@ -965,6 +1038,7 @@ FRCBananaSim/
 │               └── Systems/
 │                   └── SensorSystem.h & .cpp         [NEW]
 └── Tests/
+    ├── DifferentialMechanismTest.h & .cpp         [NEW]
     ├── ArmFourBarFlywheelTest.h & .cpp               [NEW]
     ├── ElevatorMechanismTest.h & .cpp                [NEW]
     ├── FullRobotEnduranceTest.h & .cpp               [NEW]
@@ -983,6 +1057,7 @@ All test suites register with `TestFramework.h`, run via `Tests/MainTests.cpp`, 
 |---|---|---|
 | **`RobotSchemaTest`** | `--schema`<br>**TS1:** Parse `Reference2026/manifest.json`, `sidecar.json`, `materials.json`.<br>**TS2:** Coordinate transform round-trip (NWU $\longleftrightarrow$ Engine).<br>**TS3:** Error reporting on malformed JSON (unmatched joint, zero-mass link). | **TS1:** 100% fields populated, zero warnings.<br>**TS2:** Vector identity $\|\mathbf{v} - T^{-1}(T(\mathbf{v}))\| < 10^{-7}\text{ m}$.<br>**TS3:** Loader emits structured diagnostics without crashing. |
 | **`ElevatorMechanismTest`** | `--elevator-mechanism`<br>**TE1:** Single-stage step response ($12\text{ V}$) vs. 1D analytical ODE.<br>**TE2:** 2-stage cascade elevator ($1.2\text{ m}$ travel) with analytic coupling.<br>**TE3:** 2-stage continuous elevator sequential stage lift.<br>**TE4:** Constant-force spring counterbalance & brake mode hold for $30\text{ s}$. | **TE1:** Position/velocity matches analytical curve within $0.5\%$.<br>**TE2:** Stage 2 tracks $2.0 \times x_1$ within $< 0.5\text{ mm}$; zero ringing at stops.<br>**TE3:** Stage 2 lifts to max stop before Stage 1 moves $> 2\text{ mm}$.<br>**TE4:** Creep $< 10^{-6}\text{ m}$ over 6,000 ticks. |
+| **`DifferentialMechanismTest`** | `--differential-mechanism`<br>**TD1:** Kinematic decoupling: Pure Pitch (+6V, +6V) and Pure Roll (+6V, -6V).<br>**TD2:** Dual torque virtual work summation (Stall torque equals $2 \cdot \tau_{\text{stall}} \cdot G_p$).<br>**TD3:** Semi-implicit stability under instantaneous 24V reversal. | **TD1:** Uncommanded axis remains zero ($< 10^{-3}\text{ rad}$); commanded axis articulates smoothly.<br>**TD2:** Pitch torque matches theoretical $2 \tau_0 G_p$ within $0.1\%$; cross-axis torque cancels exactly.<br>**TD3:** Zero NaNs, zero velocity divergence over 100 reversal steps. |
 | **`ArmFourBarFlywheelTest`** | `--arm-fourbar-flywheel`<br>**TA1:** Static gravity torque ($\tau_g = mgL\cos\theta$).<br>**TA2:** Arm $12\text{ V}$ slam into upper hard stop ($+90^\circ$).<br>**TA3:** Closed-loop 4-bar linkage carrying $15\text{ kg}$ load cycled 20 times.<br>**TA4:** Shoulder-wrist chain coupling keeps wrist level ($0^\circ \to 90^\circ$).<br>**TA5:** Dual-Kraken flywheel spin-up and coast-down.<br>**TA6:** Dynamic CG handoff: raise $10\text{ kg}$ elevator $1.0\text{ m}$ during $5\text{ m/s}^2$ swerve launch. | **TA1:** Holding voltage matches theoretical $\tau_g R / (G \eta k_t)$ within $0.5\%$.<br>**TA2:** Penetration $< 0.5^\circ$, settles in $< 0.15\text{ s}$ with zero energy growth.<br>**TA3:** Loop-closure hinge drift strictly **$< 1.5\text{ mm}$**.<br>**TA4:** Wrist world pitch stays within $< 0.2^\circ$ of level.<br>**TA5:** Matches $\omega(t) = \omega_{\text{free}}(1 - e^{-t/\tau})$ within $0.2\%$; parent body receives equal-and-opposite recoil torque.<br>**TA6:** Front-to-rear tire normal load transfer $\Delta N$ increases proportionally to $\Delta h_{\text{CG}}$. |
 | **`SensorSuiteTest`** | `--sensors`<br>**SS1:** `CANcoder` quantization at $\text{CPR} = 4096$ and gear scaling.<br>**SS2:** `Pigeon2` 6-axis IMU on flat ground and $15^\circ$ ramp.<br>**SS3:** `Pigeon2` mounted at $\mathbf{r} = (0.25, 0, 0)\text{ m}$ on spinning chassis ($\omega_z = 4\text{ rad/s}$).<br>**SS4:** Limit switches at elevator top/bottom stops.<br>**SS5:** Beam break `ContactZone` when a sphere passes through at $3\text{ m/s}$. | **SS1:** Quantization step equals $2\pi / 4096\text{ rad}$; zero drift.<br>**SS2:** Flat rest reads $(0, 0, +9.80665\text{ m/s}^2)$; ramp reads $15.0^\circ \pm 0.02^\circ$.<br>**SS3:** Accelerometer reads centripetal $-\omega_z^2 r = -4.00\text{ m/s}^2$ within $1\%$.<br>**SS4:** Sets DIO bits 0/1 and limit triggered flags.<br>**SS5:** Toggles DIO bit 2 cleanly after $10\text{ ms}$ debounce. |
 | **`SimDeviceLockstepTest`** | `--simdevice-lockstep`<br>**SD1:** Dispatch mock `TalonFX[10]`, `SPARK MAX [13]`, `CANcoder[12]`, and `Pigeon2[24]` frames through `SimDeviceDispatcher`.<br>**SD2:** Run 100 lockstep cycles ($2.0\text{ s}$) with `OnControllerPIDModel` in `PositionVoltage` at `1x` and `10x` speeds. | **SD1:** All fields map accurately to `sidecar.json` CAN IDs.<br>**SD2:** `1x` and `10x` trajectories are **bitwise identical**. |
@@ -994,6 +1069,7 @@ All test suites register with `TestFramework.h`, run via `Tests/MainTests.cpp`, 
 
 - [x] **Multi-Motor Scaling Added:** `WithMotorCount(n)` added to `DCMotorModel` and verified against WPILib presets.
 - [x] **Elevators Operational:** Single-stage, cascade (analytic coupling), and continuous rigging implemented with reflected linear rotor mass, Coulomb stick projection, and constant-force spring support.
+- [x] **2-DOF Differential Mechanisms Operational:** Symmetric bevel gear clusters, CoreXY, and coupled arms solved via coupled 2x2 semi-implicit velocity targeting; zero open-loop torque chatter, and verified in isolated visual playground scene (`PlaygroundScene`).
 - [x] **Arms, Four-Bars, Couplings & Flywheels Operational:** Single and double-jointed arms with critically damped hard stops, closed-loop four-bar ($< 1.5\text{ mm}$ drift under $15\text{ kg}$ load), gear/chain couplings, and 1D ODE flywheel running with parent recoil torque and wrist mount offset.
 - [x] **Dynamic Composite Mass Coupled to Swerve:** Dynamic mechanism CG and inertia shifts actively update `SwerveDrivetrainModel::SetMassProperties` while anchoring base chassis height.
 - [x] **Sensors Operational:** Quantized encoders, 6-axis IMU (Gauss-Markov bias, noise, specific force), limit switches, and `ObjectLayers::SENSOR` beam breaks writing to `SimOutputs`.

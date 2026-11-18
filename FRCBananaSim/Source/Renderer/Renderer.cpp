@@ -15,6 +15,7 @@
 #include <GLFW/glfw3.h>
 
 #include <imgui/imgui.h>
+#include <imgui/imgui_internal.h>
 #include <imgui/backend/imgui_impl_glfw.h>
 #include <imgui/backend/imgui_impl_opengl3.h>
 
@@ -65,7 +66,7 @@ void main()
 in vec3 vNormal;
 in vec3 vFragPos;
 
-uniform vec3 uColor;
+uniform vec4 uColor;
 uniform vec3 uLightDir;
 
 out vec4 FragColor;
@@ -74,9 +75,9 @@ void main()
 {
     vec3 normal = normalize(vNormal);
     float diff = max(dot(normal, -uLightDir), 0.0);
-    vec3 ambient = 0.3 * uColor;
-    vec3 diffuse = 0.7 * diff * uColor;
-    FragColor = vec4(ambient + diffuse, 1.0);
+    vec3 ambient = 0.3 * uColor.rgb;
+    vec3 diffuse = 0.7 * diff * uColor.rgb;
+    FragColor = vec4(ambient + diffuse, uColor.a);
 }
 )";
 
@@ -401,6 +402,8 @@ void main()
         SIM_LOG_INFO("OpenGL " << GLVersion.major << "." << GLVersion.minor << " loaded");
 
         glEnable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glViewport(0, 0, width, height);
 
         GLuint meshVS = CompileShader(GL_VERTEX_SHADER, kMeshVertexSrc, "mesh vertex");
@@ -454,11 +457,19 @@ void main()
 
     Renderer::~Renderer()
     {
-        if (impl->valid)
+        if (impl && impl->valid)
         {
-            ImGui_ImplOpenGL3_Shutdown();
-            ImGui_ImplGlfw_Shutdown();
-            ImGui::DestroyContext();
+            if (ImGui::GetCurrentContext())
+            {
+                ImGuiContext& g = *GImGui;
+                if (g.WithinFrameScope)
+                {
+                    ImGui::EndFrame();
+                }
+                ImGui_ImplOpenGL3_Shutdown();
+                ImGui_ImplGlfw_Shutdown();
+                ImGui::DestroyContext();
+            }
 
             glDeleteProgram(impl->meshProgram);
             glDeleteProgram(impl->debugLineProgram);
@@ -472,8 +483,13 @@ void main()
             glDeleteVertexArrays(1, &impl->debugLineVao);
             glDeleteBuffers(1, &impl->debugLineVbo);
 
-            glfwDestroyWindow(impl->window);
+            if (impl->window)
+            {
+                glfwDestroyWindow(impl->window);
+                impl->window = nullptr;
+            }
             glfwTerminate();
+            impl->valid = false;
         }
     }
 
@@ -573,11 +589,22 @@ void main()
         glUniformMatrix4fv(impl->meshLocModel, 1, GL_FALSE, glm::value_ptr(model));
         glUniformMatrix4fv(impl->meshLocView, 1, GL_FALSE, glm::value_ptr(impl->cachedView));
         glUniformMatrix4fv(impl->meshLocProjection, 1, GL_FALSE, glm::value_ptr(impl->cachedProj));
-        glUniform3fv(impl->meshLocColor, 1, glm::value_ptr(mesh.color));
+        glm::vec4 color4(mesh.color, mesh.alpha);
+        glUniform4fv(impl->meshLocColor, 1, glm::value_ptr(color4));
         glUniform3fv(impl->meshLocLightDir, 1, glm::value_ptr(impl->cachedLightDir));
+
+        if (mesh.alpha < 0.999f)
+        {
+            glDepthMask(GL_FALSE);
+        }
 
         glBindVertexArray(it->second.vao);
         glDrawArrays(GL_TRIANGLES, 0, it->second.vertexCount);
+
+        if (mesh.alpha < 0.999f)
+        {
+            glDepthMask(GL_TRUE);
+        }
     }
 
     void Renderer::FlushDebugDraw()

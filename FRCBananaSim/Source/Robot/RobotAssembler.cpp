@@ -11,16 +11,19 @@
 #include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
 #include "Robot/Mechanisms/Components/ElevatorComponent.h"
 #include "Robot/Mechanisms/Components/ArmComponent.h"
+#include "Actuation/Components/ServoComponent.h"
 #include "Robot/Mechanisms/Components/FourBarComponent.h"
 #include "Robot/Mechanisms/Components/FlywheelComponent.h"
 #include "Robot/Mechanisms/Components/CouplingComponent.h"
 #include "Robot/Mechanisms/Components/CompositeMassComponent.h"
+#include "Robot/Mechanisms/Components/DifferentialComponent.h"
 #include "Robot/Sensors/Components/IMUComponent.h"
 #include "Robot/Sensors/Components/EncoderComponent.h"
 #include "Robot/Sensors/Components/LimitSwitchComponent.h"
 #include "Robot/Sensors/Components/BeamBreakComponent.h"
 #include "Robot/Sensors/Components/AnalogInputComponent.h"
 #include "Robot/Sensors/Components/ContactZoneComponent.h"
+#include "Interaction/Systems/RobotGamePieceSystem.h"
 #include "Actuation/Components/BatteryComponent.h"
 #include "Actuation/DCMotorModel.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
@@ -73,6 +76,7 @@ namespace FRCBananaSim::Robot
 
         AssembledRobot result;
         result.robotName = manifest.robotName;
+        result.scene = &scene;
 
         // 1. Spawn Battery Component Entity
         result.batteryEntity = scene.CreateEntity();
@@ -137,6 +141,10 @@ namespace FRCBananaSim::Robot
                 if (pIt != linkPoses.end() && linkPoses.find(mech.visualLink) == linkPoses.end())
                 {
                     glm::vec3 mountOffset(0.0f, 0.06f, 0.06f);
+                    if (glm::length(mech.mountOffsetM) > 1e-6)
+                    {
+                        mountOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(mech.mountOffsetM));
+                    }
                     linkPoses[mech.visualLink] = {
                         pIt->second.worldPos + (pIt->second.worldRot * mountOffset),
                         pIt->second.worldRot
@@ -186,7 +194,24 @@ namespace FRCBananaSim::Robot
             // Add Physical RigidBodyComponent
             Physics::Components::RigidBodyComponent rb;
             rb.motionType = Physics::Components::BodyMotionType::Dynamic;
-            rb.mass = static_cast<float>(link.massKg);
+
+            double effectiveMass = link.massKg;
+            bool hasCustomOverride = false;
+            if (sidecar.massReconciliation.enabled)
+            {
+                auto oIt = sidecar.massReconciliation.linkMassOverrides.find(link.name);
+                if (oIt != sidecar.massReconciliation.linkMassOverrides.end() && oIt->second > 0.0)
+                {
+                    effectiveMass = oIt->second;
+                    hasCustomOverride = true;
+                }
+                else if (sidecar.massReconciliation.linkMassMultiplier > 0.0)
+                {
+                    effectiveMass *= sidecar.massReconciliation.linkMassMultiplier;
+                }
+            }
+
+            rb.mass = static_cast<float>(effectiveMass);
             rb.collisionGroupID = 1; // Robot group: mutual self-collisions disabled via GroupFilterTable
             rb.collisionSubGroupID = linkSubGroupIndex++;
 
@@ -197,13 +222,131 @@ namespace FRCBananaSim::Robot
                 rb.isSensor = true; // Prevent child mechanism links from colliding with ground/chassis
             }
 
-            if (link.inertiaTensor.IsPositiveDefinite())
+            // Inertia tensor calculation
+            glm::dmat3 inertiaNWU(0.0);
+            bool hasInertia = link.inertiaTensor.IsPositiveDefinite();
+            if (hasInertia)
             {
-                glm::dmat3 inertiaNWU = link.inertiaTensor.ToMatrix();
+                inertiaNWU = link.inertiaTensor.ToMatrix();
+                if (hasCustomOverride && link.massKg > 0.0)
+                {
+                    inertiaNWU *= (effectiveMass / link.massKg);
+                }
+                else if (sidecar.massReconciliation.enabled && sidecar.massReconciliation.linkMassMultiplier > 0.0)
+                {
+                    inertiaNWU *= sidecar.massReconciliation.linkMassMultiplier;
+                }
+            }
+
+            glm::dvec3 linkComNWU = link.centerOfMassM;
+
+            // Check for unmodeled ballast injection onto target link (defaulting to root chassis if empty)
+            bool isBallastTarget = false;
+            if (sidecar.massReconciliation.enabled && sidecar.massReconciliation.unmodeledBallast.massKg > 0.0)
+            {
+                const auto& target = sidecar.massReconciliation.unmodeledBallast.targetLink;
+                if ((target.empty() && link.isRoot) || target == link.name)
+                {
+                    isBallastTarget = true;
+                }
+            }
+
+            if (isBallastTarget)
+            {
+                double mBallast = sidecar.massReconciliation.unmodeledBallast.massKg;
+                glm::dvec3 rBallastNWU = sidecar.massReconciliation.unmodeledBallast.offsetM;
+
+                // Reconcile center of mass: c_new = (m0 * c0 + mb * rb) / (m0 + mb)
+                double totalMass = effectiveMass + mBallast;
+                if (totalMass > 1e-9)
+                {
+                    linkComNWU = (effectiveMass * linkComNWU + mBallast * rBallastNWU) / totalMass;
+                }
+                effectiveMass = totalMass;
+                rb.mass = static_cast<float>(effectiveMass);
+
+                // Reconcile inertia via parallel-axis point-mass contribution in NWU:
+                // I_ballast = m_b * ( (r.r)*I - r * r^T )
+                double rSq = glm::dot(rBallastNWU, rBallastNWU);
+                glm::dmat3 iBallastNWU(
+                    mBallast * (rSq - rBallastNWU.x * rBallastNWU.x),
+                    mBallast * (-rBallastNWU.x * rBallastNWU.y),
+                    mBallast * (-rBallastNWU.x * rBallastNWU.z),
+                    mBallast * (-rBallastNWU.y * rBallastNWU.x),
+                    mBallast * (rSq - rBallastNWU.y * rBallastNWU.y),
+                    mBallast * (-rBallastNWU.y * rBallastNWU.z),
+                    mBallast * (-rBallastNWU.z * rBallastNWU.x),
+                    mBallast * (-rBallastNWU.z * rBallastNWU.y),
+                    mBallast * (rSq - rBallastNWU.z * rBallastNWU.z)
+                );
+
+                inertiaNWU += iBallastNWU;
+                hasInertia = true;
+            }
+
+            // Check for bumper mass injection onto target link (defaulting to root chassis if empty)
+            bool isBumperTarget = false;
+            if (sidecar.bumpers.enabled && sidecar.bumpers.massKg > 0.0)
+            {
+                const auto& target = sidecar.bumpers.targetLink;
+                if ((target.empty() && link.isRoot) || target == link.name)
+                {
+                    isBumperTarget = true;
+                }
+            }
+
+            if (isBumperTarget)
+            {
+                double mBumper = sidecar.bumpers.massKg;
+                glm::dvec3 rBumperNWU = Schema::RobotSchemaLoader::ConvertRobotFrameToNWU(sidecar.bumpers.offsetM);
+
+                double totalMass = effectiveMass + mBumper;
+                if (totalMass > 1e-9)
+                {
+                    linkComNWU = (effectiveMass * linkComNWU + mBumper * rBumperNWU) / totalMass;
+                }
+                effectiveMass = totalMass;
+                rb.mass = static_cast<float>(effectiveMass);
+
+                // Rotational inertia of the bumper bounding cuboid in Robot frame (+X Right, +Y Up, +Z Front)
+                double lx = std::max(0.1, sidecar.bumpers.widthM);   // Width across X
+                double ly = std::max(0.05, sidecar.bumpers.heightM); // Height across Y
+                double lz = std::max(0.1, sidecar.bumpers.lengthM);  // Length across Z
+                glm::dmat3 iBumperBodyRobot(0.0);
+                iBumperBodyRobot[0][0] = (mBumper / 12.0) * (ly * ly + lz * lz);
+                iBumperBodyRobot[1][1] = (mBumper / 12.0) * (lx * lx + lz * lz);
+                iBumperBodyRobot[2][2] = (mBumper / 12.0) * (lx * lx + ly * ly);
+
+                glm::dmat3 iBumperBodyNWU = Schema::RobotSchemaLoader::ConvertRobotFrameInertiaToNWU(iBumperBodyRobot);
+
+                // Parallel axis contribution from offset in NWU
+                double rSq = glm::dot(rBumperNWU, rBumperNWU);
+                glm::dmat3 iBumperParallelNWU(
+                    mBumper * (rSq - rBumperNWU.x * rBumperNWU.x),
+                    mBumper * (-rBumperNWU.x * rBumperNWU.y),
+                    mBumper * (-rBumperNWU.x * rBumperNWU.z),
+                    mBumper * (-rBumperNWU.y * rBumperNWU.x),
+                    mBumper * (rSq - rBumperNWU.y * rBumperNWU.y),
+                    mBumper * (-rBumperNWU.y * rBumperNWU.z),
+                    mBumper * (-rBumperNWU.z * rBumperNWU.x),
+                    mBumper * (-rBumperNWU.z * rBumperNWU.y),
+                    mBumper * (rSq - rBumperNWU.z * rBumperNWU.z)
+                );
+
+                inertiaNWU += (iBumperBodyNWU + iBumperParallelNWU);
+                hasInertia = true;
+            }
+
+            if (hasInertia)
+            {
                 glm::dmat3 inertiaEngine = Schema::RobotSchemaLoader::ConvertNWUInertiaToEngine(inertiaNWU);
                 rb.hasCustomInertia = true;
                 rb.inertiaTensor = glm::mat3(inertiaEngine);
             }
+
+            // Set decoupled center of mass in Engine frame
+            rb.hasCustomCenterOfMass = true;
+            rb.centerOfMassOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(linkComNWU));
 
             const auto* mat = materials.GetMaterial(link.material);
             if (mat)
@@ -214,38 +357,168 @@ namespace FRCBananaSim::Robot
 
             scene.AddComponent(linkEntity, rb);
 
-            // Add Primary Collider if defined
-            if (!link.colliders.empty())
+            // Prepare colliders list, optionally injecting virtual bumper colliders
+            std::vector<Schema::ColliderDefinition> effectiveColliders;
+            bool isBumperColliderTarget = false;
+            if (sidecar.bumpers.enabled)
             {
-                const auto& colDef = link.colliders[0];
+                const auto& target = sidecar.bumpers.targetLink;
+                if ((target.empty() && link.isRoot) || target == link.name)
+                {
+                    isBumperColliderTarget = true;
+                }
+            }
+
+            for (const auto& cDef : link.colliders)
+            {
+                // If virtual bumpers are enabled on this target, ignore any existing CAD bumper box
+                if (isBumperColliderTarget &&
+                    (cDef.name.find("bumper") != std::string::npos || cDef.material == "bumper_fabric"))
+                {
+                    continue;
+                }
+                effectiveColliders.push_back(cDef);
+            }
+
+            if (isBumperColliderTarget)
+            {
+                const auto& b = sidecar.bumpers;
+                std::string bMat = b.material.empty() ? "bumper_fabric" : b.material;
+
+                auto addBumperBoxEngine = [&](const std::string& nameSuffix, const glm::dvec3& originRob, const glm::dvec3& dimsRob)
+                {
+                    Schema::ColliderDefinition def;
+                    def.name = "bumper_" + nameSuffix;
+                    def.type = "box";
+                    def.originM = Schema::RobotSchemaLoader::ConvertRobotFrameToNWU(originRob);
+                    def.dimensionsM = glm::abs(Schema::RobotSchemaLoader::ConvertRobotFrameToNWU(dimsRob));
+                    def.material = bMat;
+                    effectiveColliders.push_back(def);
+                };
+
+                if (b.shape == "box")
+                {
+                    addBumperBoxEngine("solid_box", b.offsetM, glm::dvec3(b.widthM, b.heightM, b.lengthM));
+                }
+                else if (b.shape == "perimeter")
+                {
+                    // Front (+Z)
+                    addBumperBoxEngine("front",
+                        glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
+                        glm::dvec3(b.widthM, b.heightM, b.thicknessM));
+                    // Back (-Z)
+                    addBumperBoxEngine("back",
+                        glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z - b.lengthM * 0.5 + b.thicknessM * 0.5),
+                        glm::dvec3(b.widthM, b.heightM, b.thicknessM));
+                    // Left (-X)
+                    double sideLen = std::max(0.01, b.lengthM - 2.0 * b.thicknessM);
+                    addBumperBoxEngine("left",
+                        glm::dvec3(b.offsetM.x - b.widthM * 0.5 + b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                        glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                    // Right (+X)
+                    addBumperBoxEngine("right",
+                        glm::dvec3(b.offsetM.x + b.widthM * 0.5 - b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                        glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                }
+                else if (b.shape == "u_shape")
+                {
+                    // Back (-Z)
+                    addBumperBoxEngine("back",
+                        glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z - b.lengthM * 0.5 + b.thicknessM * 0.5),
+                        glm::dvec3(b.widthM, b.heightM, b.thicknessM));
+                    // Left (-X)
+                    double sideLen = std::max(0.01, b.lengthM - 2.0 * b.thicknessM);
+                    addBumperBoxEngine("left",
+                        glm::dvec3(b.offsetM.x - b.widthM * 0.5 + b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                        glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                    // Right (+X)
+                    addBumperBoxEngine("right",
+                        glm::dvec3(b.offsetM.x + b.widthM * 0.5 - b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                        glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                    // Front corners if cutout is narrower than the inside width
+                    double innerWidth = b.widthM - 2.0 * b.thicknessM;
+                    if (b.cutoutWidthM < innerWidth && innerWidth > 0.02)
+                    {
+                        double cornerW = (innerWidth - b.cutoutWidthM) * 0.5 + b.thicknessM;
+                        // Front-Left (-X, +Z)
+                        addBumperBoxEngine("front_left",
+                            glm::dvec3(b.offsetM.x - (b.widthM - cornerW) * 0.5, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
+                            glm::dvec3(cornerW, b.heightM, b.thicknessM));
+                        // Front-Right (+X, +Z)
+                        addBumperBoxEngine("front_right",
+                            glm::dvec3(b.offsetM.x + (b.widthM - cornerW) * 0.5, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
+                            glm::dvec3(cornerW, b.heightM, b.thicknessM));
+                    }
+                }
+            }
+
+            // Add Colliders if defined (Primary + Sub-colliders for Compound Shape)
+            if (!effectiveColliders.empty())
+            {
                 Physics::Components::ColliderComponent col;
 
-                if (colDef.type == "sphere")
+                auto populateColliderDef = [](const Schema::ColliderDefinition& def,
+                                              Physics::Components::ColliderShape& outShape,
+                                              glm::vec3& outBoxHalfExtents,
+                                              float& outRadius,
+                                              float& outHalfHeight,
+                                              glm::vec3& outOffset,
+                                              glm::quat& outRot)
                 {
-                    col.shape = Physics::Components::ColliderShape::Sphere;
-                    col.radius = static_cast<float>(colDef.dimensionsM.x);
-                }
-                else if (colDef.type == "cylinder")
-                {
-                    col.shape = Physics::Components::ColliderShape::Cylinder;
-                    col.radius = static_cast<float>(colDef.dimensionsM.x);
-                    col.halfHeight = static_cast<float>(colDef.dimensionsM.y * 0.5);
-                }
-                else if (colDef.type == "capsule")
-                {
-                    col.shape = Physics::Components::ColliderShape::Capsule;
-                    col.radius = static_cast<float>(colDef.dimensionsM.x);
-                    col.halfHeight = static_cast<float>(colDef.dimensionsM.y * 0.5);
-                }
-                else
-                {
-                    col.shape = Physics::Components::ColliderShape::Box;
-                    glm::vec3 dimsEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(colDef.dimensionsM));
-                    col.boxHalfExtents = glm::abs(dimsEngine) * 0.5f;
-                }
+                    if (def.type == "sphere")
+                    {
+                        outShape = Physics::Components::ColliderShape::Sphere;
+                        outRadius = static_cast<float>(def.dimensionsM.x);
+                    }
+                    else if (def.type == "cylinder")
+                    {
+                        outShape = Physics::Components::ColliderShape::Cylinder;
+                        outRadius = static_cast<float>(def.dimensionsM.x);
+                        outHalfHeight = static_cast<float>(def.dimensionsM.y * 0.5);
+                    }
+                    else if (def.type == "capsule")
+                    {
+                        outShape = Physics::Components::ColliderShape::Capsule;
+                        outRadius = static_cast<float>(def.dimensionsM.x);
+                        outHalfHeight = static_cast<float>(def.dimensionsM.y * 0.5);
+                    }
+                    else
+                    {
+                        outShape = Physics::Components::ColliderShape::Box;
+                        glm::vec3 dimsEngine = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(def.dimensionsM));
+                        outBoxHalfExtents = glm::abs(dimsEngine) * 0.5f;
+                    }
 
-                col.localOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(colDef.originM));
-                col.localRotation = glm::quat(Schema::RobotSchemaLoader::ConvertNWUQuatToEngine(glm::dquat(colDef.rotationQuat)));
+                    outOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(def.originM));
+                    outRot = glm::quat(Schema::RobotSchemaLoader::ConvertNWUQuatToEngine(glm::dquat(def.rotationQuat)));
+                };
+
+                // Populate primary collider
+                populateColliderDef(
+                    effectiveColliders[0],
+                    col.shape,
+                    col.boxHalfExtents,
+                    col.radius,
+                    col.halfHeight,
+                    col.localOffset,
+                    col.localRotation
+                );
+
+                // Populate additional colliders as compound sub-colliders
+                for (size_t i = 1; i < effectiveColliders.size(); ++i)
+                {
+                    Physics::Components::ColliderPrimitive sub;
+                    populateColliderDef(
+                        effectiveColliders[i],
+                        sub.shape,
+                        sub.boxHalfExtents,
+                        sub.radius,
+                        sub.halfHeight,
+                        sub.localOffset,
+                        sub.localRotation
+                    );
+                    col.subColliders.push_back(sub);
+                }
 
                 scene.AddComponent(linkEntity, col);
             }
@@ -293,27 +566,29 @@ namespace FRCBananaSim::Robot
                 glm::vec3 worldAnchor = parentPose.worldPos + (parentPose.worldRot * originEngine);
                 glm::vec3 worldAxis = glm::normalize(parentPose.worldRot * axisEngine);
 
+                Schema::JointLimitOverride effLimits = sidecar.GetEffectiveLimits(joint.name, manifest);
+
                 if (joint.type == "revolute" || joint.type == "continuous")
                 {
                     jc.type = Physics::Components::JointType::Hinge;
                     jc.SetWorldSpace(worldAnchor, worldAxis);
-                    jc.hasLimits = joint.limits.hasLimits;
-                    if (joint.limits.hasLimits)
+                    jc.hasLimits = effLimits.hasLimits;
+                    if (effLimits.hasLimits)
                     {
-                        jc.minLimit = static_cast<float>(joint.limits.lower);
-                        jc.maxLimit = static_cast<float>(joint.limits.upper);
+                        jc.minLimit = static_cast<float>(effLimits.lower);
+                        jc.maxLimit = static_cast<float>(effLimits.upper);
                         jc.hasLimitSpring = true;
-                        jc.limitSpringFrequency = static_cast<float>(joint.limits.springFrequencyHz > 0.0 ? joint.limits.springFrequencyHz : 40.0);
-                        jc.limitSpringDamping = static_cast<float>(joint.limits.springDampingRatio > 0.0 ? joint.limits.springDampingRatio : 1.0);
+                        jc.limitSpringFrequency = static_cast<float>(effLimits.springFrequencyHz > 0.0 ? effLimits.springFrequencyHz : 40.0);
+                        jc.limitSpringDamping = static_cast<float>(effLimits.springDampingRatio > 0.0 ? effLimits.springDampingRatio : 1.0);
                     }
                 }
                 else if (joint.type == "prismatic")
                 {
                     jc.type = Physics::Components::JointType::Slider;
-                    float minL = static_cast<float>(joint.limits.lower);
-                    float maxL = static_cast<float>(joint.limits.upper);
+                    float minL = static_cast<float>(effLimits.lower);
+                    float maxL = static_cast<float>(effLimits.upper);
                     jc.SetWorldSpaceSlider(worldAnchor, worldAxis, minL, maxL);
-                    jc.hasLimits = joint.limits.hasLimits;
+                    jc.hasLimits = effLimits.hasLimits;
                     jc.motorMode = Physics::Components::JointMotorMode::Position;
                     jc.targetPosition = 0.0f;
                     jc.springFrequency = 100.0f;
@@ -362,6 +637,19 @@ namespace FRCBananaSim::Robot
                 //elev.motorModel = CreateMotorFromPreset(mech.motorPreset, elev.gearRatio, elev.efficiency).WithMotorCount(elev.motorCount);
                 elev.motorModel = CreateMotorFromPreset(mech.motorPreset, elev.gearRatio, elev.efficiency);
 
+                if (mech.actuatorType == "servo")
+                {
+                    elev.actuatorType = Mechanisms::Components::ActuatorType::Servo;
+                    elev.pwmChannel = mech.servo.pwmChannel;
+                    Actuation::ServoMode sMode = (mech.servo.mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                    elev.servoModel = Actuation::ServoModel::FromPreset(mech.servo.preset, sMode);
+
+                    Actuation::Components::ServoComponent sc;
+                                        sc.pwmChannel = elev.pwmChannel;
+                    sc.servoModel = elev.servoModel;
+                    scene.AddComponent(mechEntity, sc);
+                }
+
                 auto jIt = result.jointEntities.find(mech.targetJoint);
                 if (jIt != result.jointEntities.end())
                 {
@@ -393,9 +681,10 @@ namespace FRCBananaSim::Robot
                                 }
                             }
                         }
-                        if (jDef->limits.hasLimits)
+                        Schema::JointLimitOverride effLimits = sidecar.GetEffectiveLimits(jDef->name, manifest);
+                        if (effLimits.hasLimits)
                         {
-                            stage.maxTravelM = jDef->limits.upper - jDef->limits.lower;
+                            stage.maxTravelM = effLimits.upper - effLimits.lower;
                         }
                     }
                     elev.stages.push_back(stage);
@@ -403,7 +692,7 @@ namespace FRCBananaSim::Robot
 
                 scene.AddComponent(mechEntity, elev);
             }
-            else if (mech.role == "arm" || mech.role == "wrist" || mech.role == "four_bar")
+            else if (mech.role == "arm" || mech.role == "wrist" || mech.role == "turret" || mech.role == "four_bar")
             {
                 Mechanisms::Components::ArmComponent arm;
                 arm.name = mech.name;
@@ -416,6 +705,19 @@ namespace FRCBananaSim::Robot
                 arm.motorSlots = { mechSlot };
                 //arm.motorModel = CreateMotorFromPreset(mech.motorPreset, arm.gearRatio, arm.efficiency).WithMotorCount(arm.motorCount);
                 arm.motorModel = CreateMotorFromPreset(mech.motorPreset, arm.gearRatio, arm.efficiency);
+
+                if (mech.actuatorType == "servo")
+                {
+                    arm.actuatorType = Mechanisms::Components::ActuatorType::Servo;
+                    arm.pwmChannel = mech.servo.pwmChannel;
+                    Actuation::ServoMode sMode = (mech.servo.mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                    arm.servoModel = Actuation::ServoModel::FromPreset(mech.servo.preset, sMode);
+
+                    Actuation::Components::ServoComponent sc;
+                                        sc.pwmChannel = arm.pwmChannel;
+                    sc.servoModel = arm.servoModel;
+                    scene.AddComponent(mechEntity, sc);
+                }
 
                 auto jIt = result.jointEntities.find(mech.targetJoint);
                 if (jIt != result.jointEntities.end())
@@ -454,10 +756,11 @@ namespace FRCBananaSim::Robot
                             }
                         }
                     }
-                    if (jDef->limits.hasLimits)
+                    Schema::JointLimitOverride effLimits = sidecar.GetEffectiveLimits(jDef->name, manifest);
+                    if (effLimits.hasLimits)
                     {
-                        arm.minAngleRad = jDef->limits.lower;
-                        arm.maxAngleRad = jDef->limits.upper;
+                        arm.minAngleRad = effLimits.lower;
+                        arm.maxAngleRad = effLimits.upper;
                     }
                 }
 
@@ -470,6 +773,7 @@ namespace FRCBananaSim::Robot
                 fw.gearRatio = mech.gearRatio;
                 fw.motorCount = static_cast<uint32_t>(mech.controllers.empty() ? 1 : mech.controllers.size());
                 fw.flywheelInertiaKgm2 = (mech.flywheelInertiaKgm2 > 1e-9) ? mech.flywheelInertiaKgm2 : 0.0035;
+                fw.rollerRadiusM = (mech.rollerRadiusM > 1e-4) ? mech.rollerRadiusM : 0.0508;
                 fw.efficiency = mech.efficiency;
                 fw.coulombFrictionNm = (mech.coulombFriction > 1e-6) ? mech.coulombFriction : 0.02;
                 fw.viscousDampingNms = (mech.viscousDamping > 1e-9) ? mech.viscousDamping : 0.0001;
@@ -499,9 +803,139 @@ namespace FRCBananaSim::Robot
                 {
                     fw.spinAxis = glm::normalize(spinAxisEng);
                 }
-                fw.visualLocalOffset = glm::vec3(0.0f, 0.06f, 0.06f);
+                glm::vec3 mountOffset(0.0f, 0.06f, 0.06f);
+                if (glm::length(mech.mountOffsetM) > 1e-6)
+                {
+                    mountOffset = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(mech.mountOffsetM));
+                }
+                fw.visualLocalOffset = mountOffset;
 
                 scene.AddComponent(mechEntity, fw);
+            }
+            else if (mech.role == "differential")
+            {
+                Mechanisms::Components::DifferentialComponent diff;
+                diff.name = mech.name;
+
+                // Allocate 2 distinct motor slots: Motor A (slotA) and Motor B (slotB)
+                uint32_t slotA = nextMechanismSlot;
+                if (nextMechanismSlot < Control::MAX_MOTOR_SLOTS) { ++nextMechanismSlot; }
+                uint32_t slotB = nextMechanismSlot;
+                if (nextMechanismSlot < Control::MAX_MOTOR_SLOTS) { ++nextMechanismSlot; }
+
+                diff.motorSlotA = slotA;
+                diff.motorSlotB = slotB;
+
+                diff.efficiency = mech.efficiency;
+                diff.statorCurrentLimitA = mech.statorCurrentLimitA;
+                diff.statorCurrentLimitB = mech.statorCurrentLimitA;
+                diff.supplyCurrentLimitA = mech.supplyCurrentLimitA;
+                diff.supplyCurrentLimitB = mech.supplyCurrentLimitA;
+
+                if (!mech.coulombFrictions.empty())
+                {
+                    diff.coulombFrictionNm.x = mech.coulombFrictions[0];
+                    diff.coulombFrictionNm.y = (mech.coulombFrictions.size() > 1) ? mech.coulombFrictions[1] : mech.coulombFrictions[0];
+                }
+                else
+                {
+                    diff.coulombFrictionNm = { mech.coulombFriction, mech.coulombFriction };
+                }
+
+                if (!mech.viscousDampings.empty())
+                {
+                    diff.viscousDampingNms.x = mech.viscousDampings[0];
+                    diff.viscousDampingNms.y = (mech.viscousDampings.size() > 1) ? mech.viscousDampings[1] : mech.viscousDampings[0];
+                }
+                else
+                {
+                    diff.viscousDampingNms = { mech.viscousDamping, mech.viscousDamping };
+                }
+
+                std::string presetA = (!mech.motorPresets.empty()) ? mech.motorPresets[0] : mech.motorPreset;
+                std::string presetB = (mech.motorPresets.size() > 1) ? mech.motorPresets[1] : mech.motorPreset;
+                diff.motorModelA = CreateMotorFromPreset(presetA, 1.0, 1.0);
+                diff.motorModelB = CreateMotorFromPreset(presetB, 1.0, 1.0);
+
+                if (!mech.statorCurrentLimits.empty())
+                {
+                    diff.statorCurrentLimitA = mech.statorCurrentLimits[0];
+                    diff.statorCurrentLimitB = (mech.statorCurrentLimits.size() > 1) ? mech.statorCurrentLimits[1] : mech.statorCurrentLimits[0];
+                }
+                if (!mech.supplyCurrentLimits.empty())
+                {
+                    diff.supplyCurrentLimitA = mech.supplyCurrentLimits[0];
+                    diff.supplyCurrentLimitB = (mech.supplyCurrentLimits.size() > 1) ? mech.supplyCurrentLimits[1] : mech.supplyCurrentLimits[0];
+                }
+
+                if (mech.actuatorType == "servo")
+                {
+                    diff.actuatorType = Mechanisms::Components::ActuatorType::Servo;
+                    if (mech.servos.size() >= 2)
+                    {
+                        diff.pwmChannelA = mech.servos[0].pwmChannel;
+                        diff.pwmChannelB = mech.servos[1].pwmChannel;
+                        Actuation::ServoMode sModeA = (mech.servos[0].mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                        Actuation::ServoMode sModeB = (mech.servos[1].mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                        diff.servoModelA = Actuation::ServoModel::FromPreset(mech.servos[0].preset, sModeA);
+                        diff.servoModelB = Actuation::ServoModel::FromPreset(mech.servos[1].preset, sModeB);
+                    }
+                    else
+                    {
+                        diff.pwmChannelA = mech.servo.pwmChannel;
+                        diff.pwmChannelB = mech.servo.pwmChannel + 1;
+                        Actuation::ServoMode sMode = (mech.servo.mode == "continuous") ? Actuation::ServoMode::Continuous : Actuation::ServoMode::Positional;
+                        diff.servoModelA = Actuation::ServoModel::FromPreset(mech.servo.preset, sMode);
+                        diff.servoModelB = Actuation::ServoModel::FromPreset(mech.servo.preset, sMode);
+                    }
+
+                    Actuation::Components::ServoComponent scA;
+                                        scA.pwmChannel = diff.pwmChannelA;
+                    scA.servoModel = diff.servoModelA;
+                    scene.AddComponent(mechEntity, scA);
+                }
+
+                // Configure Kinematics (Symmetric Bevel vs Custom Matrix)
+                if (mech.differentialType == "custom_matrix" && mech.couplingMatrix.size() >= 2 && mech.couplingMatrix[0].size() >= 2)
+                {
+                    glm::dmat2 matMq(
+                        mech.couplingMatrix[0][0], mech.couplingMatrix[1][0],
+                        mech.couplingMatrix[0][1], mech.couplingMatrix[1][1]
+                    );
+                    Mechanisms::Systems::DifferentialMechanismSystem::ConfigureCustomMatrix(diff, matMq);
+                }
+                else
+                {
+                    double gp = (!mech.gearRatios.empty()) ? mech.gearRatios[0] : mech.gearRatio;
+                    double gr = (mech.gearRatios.size() > 1) ? mech.gearRatios[1] : mech.gearRatio;
+                    Mechanisms::Systems::DifferentialMechanismSystem::ConfigureSymmetricBevel(diff, gp, gr, false);
+                }
+
+                // Resolve Target Joints and Child Links
+                if (mech.targetJoints.size() >= 2)
+                {
+                    auto jItA = result.jointEntities.find(mech.targetJoints[0]);
+                    if (jItA != result.jointEntities.end()) { diff.jointEntityA = jItA->second; }
+
+                    auto jItB = result.jointEntities.find(mech.targetJoints[1]);
+                    if (jItB != result.jointEntities.end()) { diff.jointEntityB = jItB->second; }
+
+                    const auto* jDefA = manifest.FindJoint(mech.targetJoints[0]);
+                    if (jDefA)
+                    {
+                        auto lItA = result.linkEntities.find(jDefA->childLink);
+                        if (lItA != result.linkEntities.end()) { diff.linkEntityA = lItA->second; }
+                    }
+
+                    const auto* jDefB = manifest.FindJoint(mech.targetJoints[1]);
+                    if (jDefB)
+                    {
+                        auto lItB = result.linkEntities.find(jDefB->childLink);
+                        if (lItB != result.linkEntities.end()) { diff.linkEntityB = lItB->second; }
+                    }
+                }
+
+                scene.AddComponent(mechEntity, diff);
             }
         }
 
@@ -643,18 +1077,54 @@ namespace FRCBananaSim::Robot
             }
         }
 
-        // 8. Spawn Sensors (CANcoders, IMUs, Limit Switches, Beam Breaks, Analog Inputs)
+        // 8. Spawn Contact Zones (Spawned before sensors so beam-breaks can bind directly)
+        // Uses sidecar overrides / custom additions over CAD defaults
+        for (const auto& cz : sidecar.GetEffectiveContactZones(manifest))
+        {
+            Core::ECS::Core::Entity cze = scene.CreateEntity();
+            result.contactZoneEntities[cz.name] = cze;
+
+            Sensors::Components::ContactZoneComponent comp;
+            comp.name = cz.name;
+            comp.role = cz.role;
+            auto lIt = result.linkEntities.find(cz.parentLink);
+            if (lIt != result.linkEntities.end())
+            {
+                comp.parentLink = lIt->second;
+            }
+            comp.localOrigin = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.originM));
+            comp.localRotation = glm::quat(Schema::RobotSchemaLoader::ConvertNWUQuatToEngine(cz.rotationQuat));
+            comp.dimensions = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.dimensionsM));
+            comp.tangentAxis = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.tangentAxis));
+            if (glm::length(comp.tangentAxis) > 1e-4f)
+            {
+                comp.tangentAxis = glm::normalize(comp.tangentAxis);
+            }
+            comp.compressionAxis = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.compressionAxis));
+            if (glm::length(comp.compressionAxis) > 1e-4f)
+            {
+                comp.compressionAxis = glm::normalize(comp.compressionAxis);
+            }
+            comp.nominalGapM = cz.nominalGapM;
+            scene.AddComponent(cze, comp);
+        }
+
+        // 9. Spawn Sensors (CANcoders, IMUs, Limit Switches, Beam Breaks, Analog Inputs)
         for (const auto& s : sidecar.sensors)
         {
             Core::ECS::Core::Entity se = scene.CreateEntity();
             result.sensorEntities[s.name] = se;
 
-            if (s.type == "cancoder")
+            if (s.type == "cancoder" || s.type == "rev_through_bore")
             {
                 Sensors::Components::EncoderComponent enc;
                 enc.name = s.name;
-                enc.bindingType = Sensors::Components::EncoderBindingType::CANcoder;
-                enc.slot = s.canId;
+                enc.bindingType = (s.type == "cancoder")
+                    ? Sensors::Components::EncoderBindingType::CANcoder
+                    : Sensors::Components::EncoderBindingType::JointOnly;
+                enc.slot = (s.type == "cancoder")
+                    ? s.canId
+                    : ((s.bus.find("i2c") != std::string::npos) ? s.i2cAddress : s.dioChannel);
                 auto jIt = result.jointEntities.find(s.targetJoint);
                 if (jIt != result.jointEntities.end())
                 {
@@ -702,7 +1172,15 @@ namespace FRCBananaSim::Robot
                 bb.dioChannel = s.dioChannel;
                 bb.normallyClosed = s.normallyClosed;
                 bb.debounceTimeS = s.debounceTimeS;
-                bb.sensorEntity = se;
+                auto czIt = result.contactZoneEntities.find(s.contactZone);
+                if (czIt != result.contactZoneEntities.end())
+                {
+                    bb.sensorEntity = czIt->second;
+                }
+                else
+                {
+                    bb.sensorEntity = Core::ECS::Core::invalidEntity;
+                }
                 scene.AddComponent(se, bb);
             }
             else if (s.type == "analog_input")
@@ -724,24 +1202,6 @@ namespace FRCBananaSim::Robot
             }
         }
 
-        // 9. Spawn Contact Zones
-        for (const auto& cz : manifest.contactZones)
-        {
-            Core::ECS::Core::Entity cze = scene.CreateEntity();
-            result.contactZoneEntities[cz.name] = cze;
-
-            Sensors::Components::ContactZoneComponent comp;
-            comp.name = cz.name;
-            comp.role = cz.role;
-            auto lIt = result.linkEntities.find(cz.parentLink);
-            if (lIt != result.linkEntities.end())
-            {
-                comp.parentLink = lIt->second;
-            }
-            comp.dimensions = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.dimensionsM));
-            scene.AddComponent(cze, comp);
-        }
-
         // 10. Configure Swerve Drivetrain Subsystem & Attach SwerveChassisComponent
         if (sidecar.swerve.modules.size() == 4 && result.chassisEntity != Core::ECS::Core::invalidEntity)
         {
@@ -750,6 +1210,69 @@ namespace FRCBananaSim::Robot
             Drivetrain::Components::SwerveChassisComponent chassisComp;
             chassisComp.batteryEntity = result.batteryEntity;
             chassisComp.chassisMass = manifest.massSummary.totalMassKg > 0.0 ? manifest.massSummary.totalMassKg : 54.0;
+
+            Drivetrain::Model::SwerveDrivetrainConfig swerveCfg = Drivetrain::Model::SwerveDrivetrainConfig::CreateMK5nR3Reference();
+            swerveCfg.chassis.mass = chassisComp.chassisMass;
+
+            if (sidecar.swerve.steerActuatorType == "servo")
+            {
+                swerveCfg.steer.actuatorType = Drivetrain::Model::ModuleActuatorType::Servo;
+                swerveCfg.steer.servo = Actuation::ServoModel::FromPreset(sidecar.swerve.steerServoPreset, Actuation::ServoMode::Positional);
+            }
+            if (sidecar.swerve.driveActuatorType == "servo")
+            {
+                swerveCfg.drive.actuatorType = Drivetrain::Model::ModuleActuatorType::Servo;
+                swerveCfg.drive.servo = Actuation::ServoModel::FromPreset(sidecar.swerve.driveServoPreset, Actuation::ServoMode::Continuous);
+            }
+
+            if (sidecar.swerve.driveGearRatio > 0.1)
+            {
+                swerveCfg.drive.motor = CreateMotorFromPreset(
+                    sidecar.swerve.driveMotorPreset,
+                    sidecar.swerve.driveGearRatio,
+                    sidecar.swerve.driveEfficiency > 0.0 ? sidecar.swerve.driveEfficiency : 0.96);
+            }
+            if (sidecar.swerve.steerGearRatio > 0.1)
+            {
+                swerveCfg.steer.motor = CreateMotorFromPreset(
+                    sidecar.swerve.steerMotorPreset,
+                    sidecar.swerve.steerGearRatio,
+                    sidecar.swerve.steerEfficiency > 0.0 ? sidecar.swerve.steerEfficiency : 0.92);
+            }
+            if (sidecar.swerve.wheelRadiusM > 0.001)
+            {
+                swerveCfg.tire.wheelRadius = sidecar.swerve.wheelRadiusM;
+            }
+
+            for (uint32_t i = 0; i < 4 && i < sidecar.swerve.modules.size(); ++i)
+            {
+                const auto& mod = sidecar.swerve.modules[i];
+                swerveCfg.modules[i].name = mod.name;
+                swerveCfg.modules[i].drivePwmChannel = mod.drivePwmChannel;
+                swerveCfg.modules[i].steerPwmChannel = mod.steerPwmChannel;
+                swerveCfg.modules[i].driveCANId = mod.driveCanId;
+                swerveCfg.modules[i].steerCANId = mod.steerCanId;
+                swerveCfg.modules[i].canCoderId = mod.cancoderId;
+
+                // Support both Engine frame (+X Right, +Y Up, +Z Front) and NWU (+X Fwd, +Y Left, +Z Up)
+                if (std::abs(mod.posM.y) < 1e-4 && (std::abs(mod.posM.x) > 1e-4 || std::abs(mod.posM.z) > 1e-4))
+                {
+                    swerveCfg.modules[i].locationOnChassis = glm::vec2(mod.posM.z, -mod.posM.x);
+                }
+                else if (std::abs(mod.posM.x) > 1e-4 || std::abs(mod.posM.y) > 1e-4)
+                {
+                    swerveCfg.modules[i].locationOnChassis = glm::vec2(mod.posM.x, mod.posM.y);
+                }
+            }
+
+            Actuation::BatteryModel bat = Actuation::BatteryModel::FRCStandard();
+            if (result.batteryEntity != Core::ECS::Core::invalidEntity)
+            {
+                auto* bComp = scene.GetComponent<Actuation::Components::BatteryComponent>(result.batteryEntity);
+                if (bComp) { bat = bComp->batteryModel; }
+            }
+
+            chassisComp.drivetrainModel = std::make_shared<Drivetrain::Model::SwerveDrivetrainModel>(swerveCfg, bat);
             scene.AddComponent(result.chassisEntity, chassisComp);
         }
 
@@ -759,11 +1282,17 @@ namespace FRCBananaSim::Robot
 
         // 12. Instantiate Official 8-Stage Execution Pipeline Systems
         result.electricalSystem = std::make_shared<Actuation::Systems::ElectricalSystem>(scene, result.swerveSystem.get());
+        result.electricalSystem->SetRegulatedRail(
+            sidecar.electrical.regulatedRailVoltageV,
+            sidecar.electrical.regulatedRailCurrentLimitA,
+            sidecar.electrical.regulatedRailEfficiency);
         result.elevatorSystem = std::make_shared<Mechanisms::Systems::ElevatorSystem>(scene, joltContext);
         result.mechanismSystem = std::make_shared<Mechanisms::Systems::MechanismSystem>(scene, joltContext);
+        result.differentialSystem = std::make_shared<Mechanisms::Systems::DifferentialMechanismSystem>(scene, joltContext);
         result.flywheelSystem = std::make_shared<Mechanisms::Systems::FlywheelSystem>(scene, joltContext);
         result.compositeMassSystem = std::make_shared<Mechanisms::Systems::CompositeMassSystem>(
             scene, result.swerveSystem ? result.swerveSystem->GetModel() : nullptr, joltContext);
+        result.flightAerodynamicsSystem = std::make_shared<Interaction::Systems::FlightAerodynamicsSystem>(scene, joltContext);
 
         if (joltContext && joltContext->IsInitialized())
         {
@@ -817,10 +1346,34 @@ namespace FRCBananaSim::Robot
             robot.mechanismSystem->FixedUpdate(dt);
         }
 
+        // Stage 3b: DifferentialMechanismSystem (Coupled 2-DOF semi-implicit differential drives)
+        if (robot.differentialSystem)
+        {
+            robot.differentialSystem->FixedUpdate(dt);
+        }
+
+        // Stage 3c: RobotGamePieceSystem Pre-Flywheel (Compression squeeze evaluation & load torque injection)
+        if (robot.scene)
+        {
+            Interaction::Systems::RobotGamePieceSystem::PreFlywheelUpdate(*robot.scene, robot, dt);
+        }
+
+        // Stage 3d: RobotGamePieceSystem Intake (Active intake compliant drag, capture handoff & motor load)
+        if (robot.scene)
+        {
+            Interaction::Systems::RobotGamePieceSystem::UpdateIntake(*robot.scene, robot, dt);
+        }
+
         // Stage 4: FlywheelSystem (Sub-stepped 1D rotational ODEs and body reaction recoil)
         if (robot.flywheelSystem)
         {
             robot.flywheelSystem->FixedUpdate(dt);
+        }
+
+        // Stage 4b: RobotGamePieceSystem Post-Flywheel (Muzzle handoff, linear recoil impulse, isEngaged)
+        if (robot.scene)
+        {
+            Interaction::Systems::RobotGamePieceSystem::PostFlywheelUpdate(*robot.scene, robot, dt);
         }
 
         // Stage 5: CompositeMassSystem (Dynamic CoM and Parallel Axis Theorem handoff to swerve model)
@@ -835,6 +1388,12 @@ namespace FRCBananaSim::Robot
             robot.swerveSystem->FixedUpdate(dt);
         }
 
+        // Stage 6b: FlightAerodynamicsSystem (Scene-level aerodynamic drag & Magnus lift pass)
+        if (robot.flightAerodynamicsSystem)
+        {
+            robot.flightAerodynamicsSystem->FixedUpdate(dt);
+        }
+
         // Stage 7: PhysicsSystem (Jolt rigid body step and ECS transform sync)
         if (robot.physicsSystem)
         {
@@ -845,6 +1404,146 @@ namespace FRCBananaSim::Robot
         if (robot.sensorSystem)
         {
             robot.sensorSystem->FixedUpdate(dt);
+        }
+    }
+
+    void RobotAssembler::ApplyInputs(AssembledRobot& robot, const Control::SimInputs& inputs, Core::ECS::Core::Scene& scene)
+    {
+        SIM_PROFILE_SCOPE("RobotAssembler::ApplyInputs");
+
+        // 1. Forward to Swerve Drivetrain System
+        if (robot.swerveSystem)
+        {
+            robot.swerveSystem->SetInputs(inputs);
+        }
+
+        // 2. Elevators
+        auto elevatorEntities = scene.Query<Mechanisms::Components::ElevatorComponent>();
+        for (auto entity : elevatorEntities)
+        {
+            auto* elev = scene.GetComponent<Mechanisms::Components::ElevatorComponent>(entity);
+            if (!elev) continue;
+
+            if (elev->actuatorType == Mechanisms::Components::ActuatorType::Servo)
+            {
+                if (elev->pwmChannel < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[elev->pwmChannel].isServo)
+                {
+                    elev->servoModel.SetTargetNormalized(inputs.pwmCommands[elev->pwmChannel].position);
+                }
+                else
+                {
+                    uint32_t slot = elev->GetPrimaryMotorSlot();
+                    if (slot < Control::MAX_MOTOR_SLOTS && inputs.motorCommands[slot].mode != Control::MotorControlMode::Disabled)
+                    {
+                        elev->servoModel.SetTargetNormalized(0.5 + 0.5 * std::clamp(inputs.motorCommands[slot].demand / 12.0, -1.0, 1.0));
+                    }
+                }
+            }
+            else
+            {
+                uint32_t slot = elev->GetPrimaryMotorSlot();
+                if (slot < Control::MAX_MOTOR_SLOTS)
+                {
+                    elev->commandedVoltage = inputs.motorCommands[slot].demand;
+                }
+            }
+        }
+
+        // 3. Arms / Wrists
+        auto armEntities = scene.Query<Mechanisms::Components::ArmComponent>();
+        for (auto entity : armEntities)
+        {
+            auto* arm = scene.GetComponent<Mechanisms::Components::ArmComponent>(entity);
+            if (!arm) continue;
+
+            if (arm->actuatorType == Mechanisms::Components::ActuatorType::Servo)
+            {
+                if (arm->pwmChannel < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[arm->pwmChannel].isServo)
+                {
+                    arm->servoModel.SetTargetNormalized(inputs.pwmCommands[arm->pwmChannel].position);
+                }
+                else
+                {
+                    uint32_t slot = arm->GetPrimaryMotorSlot();
+                    if (slot < Control::MAX_MOTOR_SLOTS && inputs.motorCommands[slot].mode != Control::MotorControlMode::Disabled)
+                    {
+                        arm->servoModel.SetTargetAngle(inputs.motorCommands[slot].demand);
+                    }
+                }
+            }
+            else
+            {
+                uint32_t slot = arm->GetPrimaryMotorSlot();
+                if (slot < Control::MAX_MOTOR_SLOTS)
+                {
+                    arm->commandedVoltage = inputs.motorCommands[slot].demand;
+                }
+            }
+        }
+
+        // 4. Differential Mechanisms
+        auto diffEntities = scene.Query<Mechanisms::Components::DifferentialComponent>();
+        for (auto entity : diffEntities)
+        {
+            auto* diff = scene.GetComponent<Mechanisms::Components::DifferentialComponent>(entity);
+            if (!diff) continue;
+
+            if (diff->actuatorType == Mechanisms::Components::ActuatorType::Servo)
+            {
+                if (diff->pwmChannelA < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[diff->pwmChannelA].isServo)
+                {
+                    diff->servoModelA.SetTargetNormalized(inputs.pwmCommands[diff->pwmChannelA].position);
+                }
+                if (diff->pwmChannelB < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[diff->pwmChannelB].isServo)
+                {
+                    diff->servoModelB.SetTargetNormalized(inputs.pwmCommands[diff->pwmChannelB].position);
+                }
+            }
+            else
+            {
+                if (diff->motorSlotA < Control::MAX_MOTOR_SLOTS)
+                {
+                    diff->commandedVoltageA = inputs.motorCommands[diff->motorSlotA].demand;
+                }
+                if (diff->motorSlotB < Control::MAX_MOTOR_SLOTS)
+                {
+                    diff->commandedVoltageB = inputs.motorCommands[diff->motorSlotB].demand;
+                }
+            }
+        }
+
+        // 5. Standalone Servos
+        auto servoEntities = scene.Query<Actuation::Components::ServoComponent>();
+        for (auto entity : servoEntities)
+        {
+            auto* servo = scene.GetComponent<Actuation::Components::ServoComponent>(entity);
+            if (!servo) continue;
+
+            if (servo->pwmChannel < Control::MAX_PWM_CHANNELS && inputs.pwmCommands[servo->pwmChannel].isServo)
+            {
+                if (servo->servoModel.GetMode() == Actuation::ServoMode::Continuous)
+                {
+                    servo->servoModel.SetSpeed(inputs.pwmCommands[servo->pwmChannel].speed);
+                }
+                else
+                {
+                    servo->servoModel.SetTargetNormalized(inputs.pwmCommands[servo->pwmChannel].position);
+                }
+            }
+        }
+
+        // 6. Flywheels / Intakes
+        auto flywheelEntities = scene.Query<Mechanisms::Components::FlywheelComponent>();
+        for (auto entity : flywheelEntities)
+        {
+            auto* fw = scene.GetComponent<Mechanisms::Components::FlywheelComponent>(entity);
+            if (!fw) continue;
+
+            uint32_t slot = fw->GetPrimaryMotorSlot();
+            if (slot < Control::MAX_MOTOR_SLOTS)
+            {
+                fw->commandedVoltage = inputs.motorCommands[slot].demand;
+            }
         }
     }
 }

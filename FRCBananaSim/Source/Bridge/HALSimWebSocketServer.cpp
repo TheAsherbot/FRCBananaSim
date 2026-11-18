@@ -376,20 +376,50 @@ namespace FRCBananaSim::Bridge
                     }
                     catch (...) {}
 
-                    if (channel >= 0 && channel < 8)
+                    if (channel >= 0 && channel < static_cast<int>(Control::MAX_PWM_CHANNELS))
                     {
-                        double demand = 0.0;
+                        bool isPositionalServo = false;
+                        if (data.contains(">position"))
+                        {
+                            double pos = data[">position"].get<double>();
+                            currentInputs.pwmCommands[channel].position = std::clamp(pos, 0.0, 1.0);
+                            currentInputs.pwmCommands[channel].isServo = true;
+                            currentInputs.pwmCommands[channel].pulseWidthUs = 1000.0 + currentInputs.pwmCommands[channel].position * 1000.0;
+                            isPositionalServo = true;
+                        }
                         if (data.contains(">speed"))
                         {
-                            demand = data[">speed"].get<double>() * 12.0;
+                            double spd = data[">speed"].get<double>();
+                            currentInputs.pwmCommands[channel].speed = std::clamp(spd, -1.0, 1.0);
+                            if (!isPositionalServo)
+                            {
+                                currentInputs.pwmCommands[channel].isServo = false;
+                            }
                         }
-                        else if (data.contains(">voltage"))
+                        if (data.contains(">raw") || data.contains(">pulse"))
                         {
-                            demand = data[">voltage"].get<double>();
+                            double pulse = data.contains(">raw") ? data[">raw"].get<double>() : data[">pulse"].get<double>();
+                            currentInputs.pwmCommands[channel].pulseWidthUs = pulse;
+                            currentInputs.pwmCommands[channel].position = std::clamp((pulse - 1000.0) / 1000.0, 0.0, 1.0);
                         }
 
-                        currentInputs.motorCommands[channel].mode = Control::MotorControlMode::Voltage;
-                        currentInputs.motorCommands[channel].demand = std::clamp(demand, -12.0, 12.0);
+                        // Maintain backwards compatibility for legacy motor controllers on PWM channels 0..7
+                        if (!isPositionalServo && channel < 8)
+                        {
+                            double demand = 0.0;
+                            if (data.contains(">speed"))
+                            {
+                                demand = data[">speed"].get<double>() * 12.0;
+                            }
+                            else if (data.contains(">voltage"))
+                            {
+                                demand = data[">voltage"].get<double>();
+                            }
+
+                            currentInputs.motorCommands[channel].mode = Control::MotorControlMode::Voltage;
+                            currentInputs.motorCommands[channel].demand = std::clamp(demand, -12.0, 12.0);
+                        }
+
                         hasNewInputs = true;
                         return true;
                     }

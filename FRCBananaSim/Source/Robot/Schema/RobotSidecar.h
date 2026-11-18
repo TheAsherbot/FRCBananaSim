@@ -5,16 +5,21 @@
 
 #pragma once
 
+#include "Robot/Schema/RobotManifest.h"
+
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 namespace FRCBananaSim::Robot::Schema
 {
+    struct RobotManifest;
+
     /**
      * @struct ElectricalConfig
-     * @brief Lumped battery, bus resistance, and brownout threshold parameters.
+     * @brief Lumped battery, bus resistance, brownout threshold, and regulated servo rail parameters.
      */
     struct ElectricalConfig
     {
@@ -24,11 +29,16 @@ namespace FRCBananaSim::Robot::Schema
         double brownoutWarningV = 6.8;
         double brownoutShutoffV = 6.3;
         double brownoutRecoveryV = 7.5;
+
+        // Regulated 6V / 5V Power Rail (RoboRIO 6V, REV SPM 6V, or FTC Hub)
+        double regulatedRailVoltageV = 6.0;      ///< Default 6.0V
+        double regulatedRailCurrentLimitA = 2.2;  ///< Default RoboRIO 2.2A limit
+        double regulatedRailEfficiency = 0.88;    ///< Buck regulator efficiency
     };
 
     /**
      * @struct SwerveModuleConfig
-     * @brief Electromechanical identification and CAN bus mapping for one swerve module.
+     * @brief Electromechanical identification and CAN/PWM mapping for one swerve module.
      */
     struct SwerveModuleConfig
     {
@@ -38,17 +48,54 @@ namespace FRCBananaSim::Robot::Schema
         uint32_t steerCanId = 0;
         uint32_t cancoderId = 0;
         std::string canBus = "rio";
+        uint32_t drivePwmChannel = 0; ///< For servo-driven drive wheel
+        uint32_t steerPwmChannel = 0; ///< For servo-driven steer azimuth
+    };
+
+    /**
+     * @struct CustomMotorSpec
+     * @brief Parametric electromechanical parameters for custom non-catalog DC motors.
+     */
+    struct CustomMotorSpec
+    {
+        double nominalVoltageV = 12.0;
+        double stallTorqueNm = 5.0;
+        double freeSpeedRpm = 6000.0;
+        double stallCurrentA = 250.0;
+        double freeCurrentA = 2.0;
+    };
+
+    /**
+     * @struct CustomServoSpec
+     * @brief Parametric electromechanical parameters for custom non-catalog PWM servos.
+     */
+    struct CustomServoSpec
+    {
+        double nominalVoltageV = 6.0;
+        double stallTorqueKgCm = 20.0;
+        double speedSecPer60Deg = 0.10;
+        double stallCurrentA = 2.5;
+        double freeCurrentA = 0.15;
+        double travelRangeDeg = 300.0;
     };
 
     /**
      * @struct SwerveConfig
-     * @brief Drivetrain chassis link and swerve module layout parameters.
+     * @brief Drivetrain chassis link, swerve module layout, and actuator configurations.
      */
     struct SwerveConfig
     {
         std::string chassisLink = "base_link";
+        std::string driveActuatorType = "motor"; ///< "motor" or "servo"
+        std::string steerActuatorType = "motor"; ///< "motor" or "servo"
         std::string driveMotorPreset = "KrakenX60";
         std::string steerMotorPreset = "KrakenX44";
+        std::string driveServoPreset = "GoBildaSpeed";
+        std::string steerServoPreset = "GoBildaTorque";
+        CustomMotorSpec customDriveMotor;
+        CustomMotorSpec customSteerMotor;
+        CustomServoSpec customDriveServo;
+        CustomServoSpec customSteerServo;
         double driveGearRatio = 5.27;
         double steerGearRatio = 26.0909;
         double driveEfficiency = 0.96;
@@ -85,26 +132,60 @@ namespace FRCBananaSim::Robot::Schema
     };
 
     /**
+     * @struct ServoConfig
+     * @brief Electromechanical parameters and PWM channel mapping for smart/hobby servos.
+     */
+    struct ServoConfig
+    {
+        std::string preset = "GoBildaTorque"; ///< e.g. "GoBildaTorque", "GoBildaSpeed", "SwyftSpeed"
+        std::string mode = "positional";       ///< "positional" or "continuous"
+        uint32_t pwmChannel = 0;               ///< PWM channel [0..15]
+        double supplyVoltageV = 6.0;           ///< Regulated operating voltage (V)
+        double travelRangeDeg = 300.0;         ///< Total rotational travel range (deg)
+    };
+
+    /**
      * @struct MechanismConfig
-     * @brief High-level mechanism actuator parameters (elevators, arms, wrists, flywheels, intakes).
+     * @brief High-level mechanism actuator parameters (elevators, arms, wrists, flywheels, intakes, differentials).
      */
     struct MechanismConfig
     {
+        std::vector<std::string> targetJoints; ///< Array of 2 joint names (e.g. [pitch_joint, roll_joint]).
+        std::string differentialType = "symmetric_bevel"; ///< "symmetric_bevel", "core_xy", "coupled_arm", "custom_matrix".
+        std::vector<double> gearRatios;        ///< [Gp, Gr] for symmetric bevel.
+        std::vector<std::vector<double>> couplingMatrix; ///< 2x2 matrix for custom_matrix.
+        std::vector<double> coulombFrictions;  ///< [frictionJointA, frictionJointB].
+        std::vector<double> viscousDampings;   ///< [dampingJointA, dampingJointB].
+        std::vector<std::string> motorPresets; ///< For differential: [motorPresetA, motorPresetB].
+        std::vector<CustomMotorSpec> customMotors; ///< For differential: [customMotorA, customMotorB].
+        std::vector<CustomServoSpec> customServos; ///< For differential: [customServoA, customServoB].
+        std::vector<std::string> actuatorTypes;    ///< For differential: [actuatorTypeA, actuatorTypeB].
+        std::vector<double> statorCurrentLimits;   ///< For differential: [statorLimitA, statorLimitB].
+        std::vector<double> supplyCurrentLimits;   ///< For differential: [supplyLimitA, supplyLimitB].
+
         std::string name;
-        std::string role; ///< "elevator", "arm", "wrist", "four_bar", "flywheel", "intake"
+        std::string role; ///< "elevator", "arm", "wrist", "turret", "four_bar", "flywheel", "intake", "differential"
+        std::string actuatorType = "motor"; ///< "motor" (CAN motor) or "servo" (PWM servo)
+        ServoConfig servo;                  ///< Primary servo configuration (for arm, elevator, wrist)
+        std::vector<ServoConfig> servos;    ///< Multiple servo configs (for differential mechanisms)
+
         std::string targetJoint;
         std::string parentLink;
         std::string motorPreset = "KrakenX60";
         double gearRatio = 1.0;
         double efficiency = 1.0;
         double drumRadiusM = 0.0;            ///< Pitch radius for linear spool/sprocket (elevators)
+        double rollerRadiusM = 0.0508;       ///< Roller radius for flywheels and active intake rollers
         double flywheelInertiaKgm2 = 0.0;    ///< Flywheel rotor mass moment of inertia (flywheels)
         glm::dvec3 spinAxis = { 0.0, 1.0, 0.0 }; ///< Local spin axis (flywheels)
         std::string visualLink;              ///< Visual mesh entity name to rotate with flywheel
+        glm::dvec3 mountOffsetM = { 0.0, 0.0, 0.0 }; ///< Mount translation offset relative to joint/parent (flywheels/intakes)
         double statorCurrentLimitA = 60.0;
         double supplyCurrentLimitA = 40.0;
         double coulombFriction = 0.0;
         double viscousDamping = 0.0;
+        CustomMotorSpec customMotor;
+        CustomServoSpec customServo;
         SpringAssistConfig springAssist;
         std::vector<ControllerConfig> controllers;
     };
@@ -172,13 +253,14 @@ namespace FRCBananaSim::Robot::Schema
     struct SensorConfig
     {
         std::string name;
-        std::string type; ///< "imu_pigeon2", "imu_navx", "cancoder", "limit_switch", "beam_break", "analog_input", "laser_can", "color_sensor", "custom"
-        std::string bus = "rio"; ///< "rio", "canivore", "i2c_onboard", "i2c_mxp", "spi", "analog"
+        std::string type; ///< "imu_pigeon2", "imu_navx", "cancoder", "beam_break", "limit_switch", "analog_input", "laser_can", "color_sensor", "rev_through_bore", "andymark_lidar3", "custom"
+        std::string bus = "rio"; ///< "rio", "canivore", "i2c_onboard", "i2c_mxp", "spi", "analog", "dio_pwm"
         uint32_t canId = 0;
         uint32_t dioChannel = 0;
+        uint32_t secondaryDioChannel = 0;     ///< Secondary DIO channel (e.g. Quadrature Channel B for REV Through Bore)
         uint32_t analogChannel = 0;     ///< AnalogIn channel [0..7] for potentiometers / pressure transducers
         uint32_t i2cAddress = 0;        ///< 7-bit I2C device address
-        uint32_t attachToControllerCanId = 0; ///< Motor controller CAN ID for hard-wired limit switches
+        uint32_t attachToControllerCanId = 0; ///< Motor controller CAN ID for hard-wired limit switches or SPARK data port sensors
         std::string parentLink;
         std::string targetJoint;
         std::string contactZone;
@@ -203,6 +285,65 @@ namespace FRCBananaSim::Robot::Schema
     };
 
     /**
+     * @struct UnmodeledBallastConfig
+     * @brief Point-mass inertial ballast offset applied to a target link without a physical collision shape.
+     */
+    struct UnmodeledBallastConfig
+    {
+        std::string targetLink = "base_link";
+        double massKg = 0.0;
+        glm::dvec3 offsetM = { 0.0, 0.0, 0.0 };
+    };
+
+    /**
+     * @struct MassReconciliationConfig
+     * @brief Non-destructive physical bench scale adjustments and unmodeled ballast calibration.
+     */
+    struct MassReconciliationConfig
+    {
+        bool enabled = false;
+        double linkMassMultiplier = 1.0;
+        UnmodeledBallastConfig unmodeledBallast;
+        std::unordered_map<std::string, double> linkMassOverrides; ///< Per-link mass override in kg
+    };
+
+    /**
+     * @struct JointLimitOverride
+     * @brief Override parameters for joint physical hardstops and compliance springs.
+     */
+    struct JointLimitOverride
+    {
+        bool hasLimits = true;
+        double lower = 0.0;
+        double upper = 0.0;
+        std::string unit = "rad"; ///< "rad", "deg", "m"
+        double springFrequencyHz = 40.0;
+        double springDampingRatio = 1.0;
+    };
+
+    /**
+     * @struct BumperConfig
+     * @brief Parametric FRC bumper configuration for robots without CAD-modeled bumpers.
+     */
+    struct BumperConfig
+    {
+        bool enabled = false;                           ///< When true, physical bumper colliders and mass are injected.
+        std::string targetLink = "";                    ///< Link to attach bumpers to (defaults to root/chassis).
+        std::string shape = "box";                      ///< "box" (solid cuboid), "perimeter" (4 hollow sides), or "u_shape" (front cutout)
+        double lengthM = 0.85;                          ///< Outer X length in meters (~33.5 in)
+        double widthM = 0.85;                           ///< Outer Y width in meters (~33.5 in)
+        double heightM = 0.127;                         ///< Bumper vertical height in meters (standard 5.0 in)
+        double thicknessM = 0.0825;                     ///< Perimeter bumper thickness in meters (plywood + noodles, ~3.25 in)
+        glm::dvec3 offsetM = { 0.0, 0.0, 0.09 };        ///< Center offset relative to targetLink NWU (default 0.09m above ground)
+        double massKg = 6.0;                            ///< Total mass of the bumper set in kg (~13.2 lbs)
+        std::string material = "bumper_fabric";         ///< Material for friction & restitution
+        std::string color = "red";                      ///< "red", "blue", or custom hex
+
+        // Cutout settings for "u_shape" (e.g. front ground intake opening)
+        double cutoutWidthM = 0.40;                     ///< Width of the front opening cutout in meters (~15.7 in)
+    };
+
+    /**
      * @struct RobotSidecar
      * @brief Complete parsed sidecar.json electromechanical and sensor specification.
      */
@@ -215,6 +356,25 @@ namespace FRCBananaSim::Robot::Schema
         std::vector<MechanismConfig> mechanisms;
         std::vector<CouplingConfig> couplings;
         std::vector<SensorConfig> sensors;
+        MassReconciliationConfig massReconciliation;
+        std::unordered_map<std::string, JointLimitOverride> jointOverrides;
+        BumperConfig bumpers;
+        std::vector<ContactZoneDefinition> contactZones;
+
+        /**
+         * @brief Looks up a contact zone configuration by name.
+         * @param zoneName Unique contact zone identifier.
+         * @return Pointer to contact zone config, or nullptr if not found.
+         */
+        const ContactZoneDefinition* FindContactZone(const std::string& zoneName) const;
+        ContactZoneDefinition* FindContactZone(const std::string& zoneName);
+
+        /**
+         * @brief Computes effective contact zones, factoring in sidecar overrides/additions over CAD defaults.
+         * @param manifest Loaded robot CAD manifest.
+         * @return Active effective contact zones.
+         */
+        std::vector<ContactZoneDefinition> GetEffectiveContactZones(const RobotManifest& manifest) const;
 
         /**
          * @brief Looks up a mechanism configuration by name.
@@ -222,6 +382,7 @@ namespace FRCBananaSim::Robot::Schema
          * @return Pointer to mechanism config, or nullptr if not found.
          */
         const MechanismConfig* FindMechanism(const std::string& mechanismName) const;
+        MechanismConfig* FindMechanism(const std::string& mechanismName);
 
         /**
          * @brief Looks up a sensor configuration by name.
@@ -229,6 +390,7 @@ namespace FRCBananaSim::Robot::Schema
          * @return Pointer to sensor config, or nullptr if not found.
          */
         const SensorConfig* FindSensor(const std::string& sensorName) const;
+        SensorConfig* FindSensor(const std::string& sensorName);
 
         /**
          * @brief Looks up a joint coupling by name.
@@ -236,5 +398,22 @@ namespace FRCBananaSim::Robot::Schema
          * @return Pointer to coupling config, or nullptr if not found.
          */
         const CouplingConfig* FindCoupling(const std::string& couplingName) const;
+        CouplingConfig* FindCoupling(const std::string& couplingName);
+
+        /**
+         * @brief Looks up a joint limit override by joint name.
+         * @param jointName Unique joint identifier.
+         * @return Pointer to override config, or nullptr if not found.
+         */
+        const JointLimitOverride* FindJointOverride(const std::string& jointName) const;
+        JointLimitOverride* FindJointOverride(const std::string& jointName);
+
+        /**
+         * @brief Computes effective limits for a joint, factoring in sidecar overrides over CAD defaults.
+         * @param jointName Unique joint identifier.
+         * @param manifest Loaded robot CAD manifest.
+         * @return Active effective physical limits.
+         */
+        JointLimitOverride GetEffectiveLimits(const std::string& jointName, const RobotManifest& manifest) const;
     };
 }

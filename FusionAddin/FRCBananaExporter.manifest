@@ -1,0 +1,13 @@
+{
+	"autodeskProduct":	"Fusion360",
+	"type":	"addin",
+	"id":	"c1f7a28e-8e54-463f-91cb-59b433e144a1",
+	"author":	"Antigravity / FRCBananaSim Team",
+	"description":	{
+		"":	"Exports jointed robot CAD assemblies from Fusion 360 into FRCBananaSim Schema v1.0.0 (manifest.json, binary GLB visual meshes, and diagnostic report)."
+	},
+	"version":	"1.0.0",
+	"runOnStartup":	false,
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}

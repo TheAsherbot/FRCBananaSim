@@ -41,6 +41,7 @@ namespace FRCBananaSim::Robot::Mechanisms::Components
         // Geometry & Spin Axis
         glm::vec3 spinAxis = { 0.0f, 0.0f, 1.0f };          ///< Direction of flywheel rotation in parent link body frame.
         glm::vec3 visualLocalOffset = { 0.0f, 0.06f, 0.06f }; ///< Local mounting offset of visualEntity relative to parentEntity.
+        double rollerRadiusM = 0.0508;                        ///< Outer roller radius for surface speed & compression torque (default 2 in = 0.0508 m).
 
         // Friction & External Load
         double coulombFrictionNm = 0.02;        ///< Bearing Coulomb friction torque (N*m).

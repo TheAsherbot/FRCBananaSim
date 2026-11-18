@@ -141,6 +141,12 @@ namespace FRCBananaSim::Physics::Systems
             joltContext.GetPhysicsSystem().RemoveConstraint(joint->constraint);
         }
 
+        auto it = std::find(createdConstraints.begin(), createdConstraints.end(), joint->constraint);
+        if (it != createdConstraints.end())
+        {
+            createdConstraints.erase(it);
+        }
+
         joint->constraint = nullptr;
         joint->isCreated = false;
     }

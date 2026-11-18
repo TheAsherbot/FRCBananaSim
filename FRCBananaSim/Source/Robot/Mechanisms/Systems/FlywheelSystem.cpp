@@ -253,7 +253,7 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
                     parentRot = glm::quat(jRot.GetW(), jRot.GetX(), jRot.GetY(), jRot.GetZ());
 
                     auto* parentCol = scene.GetComponent<ColliderComponent>(flywheel.parentEntity);
-                    if (parentCol)
+                    if (parentCol && !parentCol->IsCompound() && !parentRb->hasCustomCenterOfMass)
                     {
                         parentRot = glm::normalize(parentRot * glm::inverse(parentCol->localRotation));
                         parentPos -= parentRot * parentCol->localOffset;
@@ -311,5 +311,8 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
                 }
             }
         }
+
+        // 8. Reset external load torque disturbance for next physics tick
+        flywheel.externalLoadTorqueNm = 0.0;
     }
 }

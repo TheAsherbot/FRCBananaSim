@@ -1,11 +1,12 @@
 /**
  * @file SwerveParams.h
- * @brief Configuration parameters, JSON loader, and presets for 6-DOF swerve drivetrain mechanics, tire contacts, and motors.
+ * @brief Configuration parameters, JSON loader, and presets for 6-DOF swerve drivetrain mechanics, tire contacts, motors, and servos.
  */
 
 #pragma once
 
 #include "Actuation/DCMotorModel.h"
+#include "Actuation/ServoModel.h"
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/mat3x3.hpp>
@@ -14,6 +15,16 @@
 
 namespace FRCBananaSim::Robot::Drivetrain::Model
 {
+    /**
+     * @enum ModuleActuatorType
+     * @brief Actuator source for swerve steer or drive (DC motor or PWM servo).
+     */
+    enum class ModuleActuatorType : uint8_t
+    {
+        DCMotor = 0, ///< High-power 12V brushless DC motor (Kraken, Falcon, NEO, etc.)
+        Servo = 1    ///< 5V/6V smart servo or continuous gearmotor (goBILDA, Swyft, Axon)
+    };
+
     /**
      * @struct ChassisParams
      * @brief Mass properties and geometric dimensions of the complete robot.
@@ -60,7 +71,10 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
      */
     struct SteerModuleParams
     {
+        ModuleActuatorType actuatorType = ModuleActuatorType::DCMotor;
         Actuation::DCMotorModel motor = Actuation::DCMotorModel::KrakenX44(26.0909, 0.92); ///< MK5n steering motor.
+        Actuation::ServoModel servo = Actuation::ServoModel::GoBildaTorque(Actuation::ServoMode::Positional); ///< Steer smart servo.
+        uint32_t pwmChannel = 0;                                                            ///< Steer PWM channel.
         double steerHousingInertia = 0.00036;                                               ///< Physical azimuth housing inertia (kg*m^2).
         double coulombFrictionTorque = 0.08;                                                ///< Bearing and bevel gear static friction (N*m).
         double viscousDamping = 0.002;                                                      ///< Viscous drag (N*m / (rad/s)).
@@ -72,7 +86,10 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
      */
     struct DriveModuleParams
     {
+        ModuleActuatorType actuatorType = ModuleActuatorType::DCMotor;
         Actuation::DCMotorModel motor = Actuation::DCMotorModel::KrakenX60(5.27, 0.96); ///< MK5n R3 drive motor.
+        Actuation::ServoModel servo = Actuation::ServoModel::GoBildaSpeed(Actuation::ServoMode::Continuous); ///< Continuous drive servo.
+        uint32_t pwmChannel = 0;                                                         ///< Drive PWM channel.
         double coulombFrictionTorque = 1.8;                                              ///< Drive train static Coulomb friction at wheel axle (N*m).
     };
 
@@ -89,6 +106,8 @@ namespace FRCBananaSim::Robot::Drivetrain::Model
         uint32_t driveCANId = 1;
         uint32_t steerCANId = 2;
         uint32_t canCoderId = 1;
+        uint32_t drivePwmChannel = 0;
+        uint32_t steerPwmChannel = 0;
     };
 
     /**

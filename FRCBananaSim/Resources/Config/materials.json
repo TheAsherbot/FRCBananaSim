@@ -2,39 +2,27 @@
   "schemaVersion": "1.0.0",
   "materials": [
     {
+      "name": "abs_infill_35",
+      "density_kg_m3": 600.0,
+      "friction": 0.38,
+      "restitution": 0.18
+    },
+    {
+      "name": "abs_solid",
+      "density_kg_m3": 1040.0,
+      "friction": 0.38,
+      "restitution": 0.18
+    },
+    {
       "name": "aluminum_6061",
       "density_kg_m3": 2700.0,
       "friction": 0.45,
       "restitution": 0.05
     },
     {
-      "name": "steel_4140",
-      "density_kg_m3": 7850.0,
-      "friction": 0.50,
-      "restitution": 0.10
-    },
-    {
-      "name": "polycarbonate",
-      "density_kg_m3": 1200.0,
-      "friction": 0.40,
-      "restitution": 0.15
-    },
-    {
-      "name": "hdpe",
-      "density_kg_m3": 960.0,
-      "friction": 0.25,
-      "restitution": 0.10
-    },
-    {
-      "name": "bumper_fabric",
-      "density_kg_m3": 500.0,
-      "friction": 0.70,
-      "restitution": 0.05
-    },
-    {
-      "name": "colson_performa",
-      "density_kg_m3": 1100.0,
-      "friction": 1.10,
+      "name": "battery_frc_12v",
+      "density_kg_m3": 2570.0,
+      "friction": 0.45,
       "restitution": 0.05
     },
     {
@@ -44,10 +32,268 @@
       "restitution": 0.01
     },
     {
+      "name": "bumper_fabric",
+      "density_kg_m3": 500.0,
+      "friction": 0.70,
+      "restitution": 0.05
+    },
+    {
+      "name": "bumper_wood_birch",
+      "density_kg_m3": 690.0,
+      "friction": 0.45,
+      "restitution": 0.10
+    },
+    {
+      "name": "cats_tongue_tape",
+      "density_kg_m3": 1150.0,
+      "friction": 1.45,
+      "restitution": 0.10
+    },
+    {
+      "name": "colson_performa",
+      "density_kg_m3": 1100.0,
+      "friction": 1.10,
+      "restitution": 0.05
+    },
+    {
+      "name": "duct_tape",
+      "density_kg_m3": 1020.0,
+      "friction": 0.60,
+      "restitution": 0.05
+    },
+    {
       "name": "game_piece_foam",
       "density_kg_m3": 80.0,
       "friction": 0.65,
       "restitution": 0.20
+    },
+    {
+      "name": "motor_775pro",
+      "density_kg_m3": 3800.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_bare_ftc_550",
+      "density_kg_m3": 3540.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_cim",
+      "density_kg_m3": 4500.0,
+      "friction": 0.45,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_ctre_minion",
+      "density_kg_m3": 3850.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_falcon_500",
+      "density_kg_m3": 3700.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_gobilda_yellowjacket",
+      "density_kg_m3": 3530.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_kraken_x44",
+      "density_kg_m3": 3720.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_kraken_x60",
+      "density_kg_m3": 3760.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_neo_550",
+      "density_kg_m3": 3740.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_neo_v1",
+      "density_kg_m3": 3410.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_neo_v2",
+      "density_kg_m3": 3420.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_neo_vortex",
+      "density_kg_m3": 3470.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "motor_rev_core_hex",
+      "density_kg_m3": 2900.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "nylon_66",
+      "density_kg_m3": 1140.0,
+      "friction": 0.28,
+      "restitution": 0.12
+    },
+    {
+      "name": "nylon_glass_filled",
+      "density_kg_m3": 1360.0,
+      "friction": 0.32,
+      "restitution": 0.15
+    },
+    {
+      "name": "pla_cf_infill_35",
+      "density_kg_m3": 720.0,
+      "friction": 0.36,
+      "restitution": 0.12
+    },
+    {
+      "name": "pla_cf_solid",
+      "density_kg_m3": 1280.0,
+      "friction": 0.36,
+      "restitution": 0.12
+    },
+    {
+      "name": "pla_infill_35",
+      "density_kg_m3": 700.0,
+      "friction": 0.35,
+      "restitution": 0.15
+    },
+    {
+      "name": "pla_solid",
+      "density_kg_m3": 1240.0,
+      "friction": 0.35,
+      "restitution": 0.15
+    },
+    {
+      "name": "plexi_glass",
+      "density_kg_m3": 1190.0,
+      "friction": 0.40,
+      "restitution": 0.20
+    },
+    {
+      "name": "polycarbonate",
+      "density_kg_m3": 1200.0,
+      "friction": 0.40,
+      "restitution": 0.15
+    },
+    {
+      "name": "pool_noodle_hollow",
+      "density_kg_m3": 28.0,
+      "friction": 0.60,
+      "restitution": 0.12
+    },
+    {
+      "name": "pool_noodle_solid",
+      "density_kg_m3": 32.0,
+      "friction": 0.60,
+      "restitution": 0.15
+    },
+    {
+      "name": "rev_maxplanetary",
+      "density_kg_m3": 4200.0,
+      "friction": 0.45,
+      "restitution": 0.05
+    },
+    {
+      "name": "sds_spike_grip_tread",
+      "density_kg_m3": 1210.0,
+      "friction": 1.45,
+      "restitution": 0.02
+    },
+    {
+      "name": "silicon_35a",
+      "density_kg_m3": 1100.0,
+      "friction": 1.35,
+      "restitution": 0.38
+    },
+    {
+      "name": "silicon_40a",
+      "density_kg_m3": 1120.0,
+      "friction": 1.30,
+      "restitution": 0.35
+    },
+    {
+      "name": "silicon_50a",
+      "density_kg_m3": 1150.0,
+      "friction": 1.20,
+      "restitution": 0.30
+    },
+    {
+      "name": "silicon_60a",
+      "density_kg_m3": 1180.0,
+      "friction": 1.10,
+      "restitution": 0.25
+    },
+    {
+      "name": "steel_4140",
+      "density_kg_m3": 7850.0,
+      "friction": 0.50,
+      "restitution": 0.10
+    },
+    {
+      "name": "steel_mild_1018",
+      "density_kg_m3": 7870.0,
+      "friction": 0.55,
+      "restitution": 0.10
+    },
+    {
+      "name": "surgical_tubing",
+      "density_kg_m3": 960.0,
+      "friction": 1.10,
+      "restitution": 0.40
+    },
+    {
+      "name": "tpu_85a",
+      "density_kg_m3": 1150.0,
+      "friction": 1.05,
+      "restitution": 0.30
+    },
+    {
+      "name": "tpu_90a",
+      "density_kg_m3": 1180.0,
+      "friction": 0.95,
+      "restitution": 0.28
+    },
+    {
+      "name": "tpu_95a",
+      "density_kg_m3": 1210.0,
+      "friction": 0.85,
+      "restitution": 0.25
+    },
+    {
+      "name": "wheel_sds_mk5_lumped",
+      "density_kg_m3": 1250.0,
+      "friction": 1.45,
+      "restitution": 0.03
+    },
+    {
+      "name": "servo_standard",
+      "density_kg_m3": 2000.0,
+      "friction": 0.40,
+      "restitution": 0.05
+    },
+    {
+      "name": "steel_52100_bearing",
+      "density_kg_m3": 7810.0,
+      "friction": 0.15,
+      "restitution": 0.08
     }
   ],
   "materialPairs": [
@@ -60,12 +306,44 @@
       "rollingResistance": 0.015
     },
     {
+      "materialA": "sds_spike_grip_tread",
+      "materialB": "bilinear_carpet",
+      "staticFriction": 1.65,
+      "dynamicFriction": 1.45,
+      "restitution": 0.02,
+      "rollingResistance": 0.020
+    },
+    {
+      "materialA": "wheel_sds_mk5_lumped",
+      "materialB": "bilinear_carpet",
+      "staticFriction": 1.65,
+      "dynamicFriction": 1.45,
+      "restitution": 0.02,
+      "rollingResistance": 0.020
+    },
+    {
+      "materialA": "tpu_95a",
+      "materialB": "bilinear_carpet",
+      "staticFriction": 1.15,
+      "dynamicFriction": 1.00,
+      "restitution": 0.04,
+      "rollingResistance": 0.015
+    },
+    {
       "materialA": "colson_performa",
       "materialB": "polycarbonate",
       "staticFriction": 0.65,
       "dynamicFriction": 0.55,
       "restitution": 0.08,
       "rollingResistance": 0.005
+    },
+    {
+      "materialA": "sds_spike_grip_tread",
+      "materialB": "polycarbonate",
+      "staticFriction": 0.70,
+      "dynamicFriction": 0.60,
+      "restitution": 0.08,
+      "rollingResistance": 0.008
     },
     {
       "materialA": "game_piece_foam",
@@ -76,11 +354,51 @@
       "rollingResistance": 0.0
     },
     {
+      "materialA": "game_piece_foam",
+      "materialB": "plexi_glass",
+      "staticFriction": 0.70,
+      "dynamicFriction": 0.62,
+      "restitution": 0.25,
+      "rollingResistance": 0.0
+    },
+    {
+      "materialA": "cats_tongue_tape",
+      "materialB": "game_piece_foam",
+      "staticFriction": 1.45,
+      "dynamicFriction": 1.30,
+      "restitution": 0.10,
+      "rollingResistance": 0.0
+    },
+    {
       "materialA": "colson_performa",
       "materialB": "game_piece_foam",
       "staticFriction": 0.95,
       "dynamicFriction": 0.85,
       "restitution": 0.18,
+      "rollingResistance": 0.0
+    },
+    {
+      "materialA": "silicon_40a",
+      "materialB": "game_piece_foam",
+      "staticFriction": 1.35,
+      "dynamicFriction": 1.20,
+      "restitution": 0.25,
+      "rollingResistance": 0.0
+    },
+    {
+      "materialA": "silicon_50a",
+      "materialB": "game_piece_foam",
+      "staticFriction": 1.25,
+      "dynamicFriction": 1.10,
+      "restitution": 0.22,
+      "rollingResistance": 0.0
+    },
+    {
+      "materialA": "tpu_95a",
+      "materialB": "game_piece_foam",
+      "staticFriction": 0.90,
+      "dynamicFriction": 0.80,
+      "restitution": 0.20,
       "rollingResistance": 0.0
     },
     {
@@ -97,6 +415,14 @@
       "staticFriction": 0.50,
       "dynamicFriction": 0.42,
       "restitution": 0.08,
+      "rollingResistance": 0.0
+    },
+    {
+      "materialA": "bumper_fabric",
+      "materialB": "bumper_fabric",
+      "staticFriction": 0.65,
+      "dynamicFriction": 0.55,
+      "restitution": 0.05,
       "rollingResistance": 0.0
     }
   ]

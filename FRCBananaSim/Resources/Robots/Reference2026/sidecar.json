@@ -7,7 +7,10 @@
     "quiescentCurrent_A": 1.5,
     "brownoutWarning_V": 6.8,
     "brownoutShutoff_V": 6.3,
-    "brownoutRecovery_V": 7.5
+    "brownoutRecovery_V": 7.5,
+    "servoRailVoltage_V": 6.0,
+    "servoRailCurrentLimit_A": 2.2,
+    "servoRailBuckEfficiency": 0.88
   },
   "swerve": {
     "chassisLink": "base_link",
@@ -184,6 +187,30 @@
           "role": "follower"
         }
       ]
+    },
+    {
+      "name": "intake_roller",
+      "role": "intake",
+      "parentLink": "intake_coupler_link",
+      "motorPreset": "KrakenX60",
+      "gearRatio": 2.5,
+      "efficiency": 0.95,
+      "flywheelInertia_kgm2": 0.0015,
+      "rollerRadius_m": 0.0508,
+      "statorCurrentLimit_A": 60.0,
+      "supplyCurrentLimit_A": 40.0,
+      "coulombFriction": 0.02,
+      "viscousDamping": 0.0001,
+      "spinAxis": [ 0.0, 1.0, 0.0 ],
+      "controllers": [
+        {
+          "vendor": "CTRE_TalonFX",
+          "canId": 17,
+          "canBus": "canivore",
+          "inverted": false,
+          "role": "leader"
+        }
+      ]
     }
   ],
   "couplings": [
@@ -246,7 +273,7 @@
       "name": "shoulder_cancoder",
       "type": "cancoder",
       "bus": "canivore",
-      "canId": 12,
+      "canId": 25,
       "targetJoint": "arm_shoulder_hinge",
       "sensorToMechanismRatio": 1.0,
       "cpr": 4096,

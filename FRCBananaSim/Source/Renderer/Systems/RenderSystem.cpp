@@ -27,11 +27,26 @@ namespace FRCBananaSim::Renderer::Systems
     {
         SIM_PROFILE_SCOPE("RenderSystem::RenderUpdate");
         auto entities = scene.Query<MeshComponent, WorldTransformComponent>();
+
+        // Pass 1: Render all opaque meshes first with full depth writing
         for (Entity e : entities)
         {
             auto* mesh = scene.GetComponent<MeshComponent>(e);
             auto* worldTransform = scene.GetComponent<WorldTransformComponent>(e);
-            if (!mesh || !worldTransform)
+            if (!mesh || !worldTransform || mesh->alpha < 0.999f)
+            {
+                continue;
+            }
+
+            renderer.DrawMesh(*mesh, *worldTransform);
+        }
+
+        // Pass 2: Render transparent / translucent meshes (e.g. arena walls) with depth testing and blending
+        for (Entity e : entities)
+        {
+            auto* mesh = scene.GetComponent<MeshComponent>(e);
+            auto* worldTransform = scene.GetComponent<WorldTransformComponent>(e);
+            if (!mesh || !worldTransform || mesh->alpha >= 0.999f)
             {
                 continue;
             }

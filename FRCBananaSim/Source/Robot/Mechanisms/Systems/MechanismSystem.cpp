@@ -113,6 +113,52 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
         double omega = jointComp->currentVelocity;
         arm.currentAngleRad = theta;
         arm.currentVelocityRadPerSec = omega;
+        // 2b. Servo Actuation Branch
+        if (arm.actuatorType == Components::ActuatorType::Servo)
+        {
+            double effInertia = std::max(arm.lumpedEffectiveInertiaKgm2, 0.005);
+            double tauServo = arm.servoModel.CalculateTorque(theta, omega, effInertia, dt);
+            arm.statorCurrentA = arm.servoModel.CalculateCurrent(omega);
+
+            double tauGrav = 0.0;
+            if (arm.linkMassKg > 0.0 && arm.centerOfMassDistanceM > 0.0)
+            {
+                tauGrav = -arm.linkMassKg * 9.80665 * arm.centerOfMassDistanceM * std::cos(theta);
+            }
+
+            bool joltGravActive = true;
+            if (arm.linkEntity != invalidEntity)
+            {
+                auto* armRb = scene.GetComponent<RigidBodyComponent>(arm.linkEntity);
+                if (armRb && armRb->gravityFactor == 0.0f)
+                {
+                    joltGravActive = false;
+                }
+            }
+
+            double tauSpring = 0.0;
+            switch (arm.springType)
+            {
+            case ArmSpringType::ConstantTorque:
+                tauSpring = arm.springPreloadTorqueNm;
+                break;
+            case ArmSpringType::TorsionalSpring:
+                tauSpring = arm.springPreloadTorqueNm - arm.torsionalSpringRateNmPerRad * (theta - arm.springRestAngleRad);
+                break;
+            case ArmSpringType::GasStrut:
+                tauSpring = arm.springPreloadTorqueNm * std::cos(theta - arm.springRestAngleRad);
+                break;
+            default:
+                break;
+            }
+
+            double tauDelivered = tauServo + tauSpring + (joltGravActive ? 0.0 : tauGrav);
+            arm.appliedTorqueNm = tauDelivered;
+
+            jointComp->appliedTorque = static_cast<float>(tauDelivered);
+            jointComp->motorMode = JointMotorMode::Torque;
+            return;
+        }
 
         // 3. Commanded Torque & Electrical Back-EMF Damping
         double appliedV = arm.commandedVoltage;

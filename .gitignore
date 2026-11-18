@@ -6,6 +6,7 @@ telemetry_logs/
 build-linux/
 x64/
 CMakeFiles/
+FRCBananaSim/Resources/Robots/
 CMakeCache.txt
 GEMINI.md
 

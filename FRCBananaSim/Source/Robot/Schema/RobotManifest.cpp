@@ -19,14 +19,14 @@ namespace FRCBananaSim::Robot::Schema
     bool InertiaTensor::IsPositiveDefinite() const
     {
         // Sylvester's Criterion Minor 1: Ixx > 0
-        if (ixx <= 1e-9)
+        if (ixx <= 1e-12)
         {
             return false;
         }
 
         // Minor 2: det([Ixx Ixy; Ixy Iyy]) > 0
         double det2 = (ixx * iyy) - (ixy * ixy);
-        if (det2 <= 1e-9)
+        if (det2 <= 1e-20)
         {
             return false;
         }
@@ -35,7 +35,7 @@ namespace FRCBananaSim::Robot::Schema
         double det3 = ixx * (iyy * izz - iyz * iyz)
             - ixy * (ixy * izz - iyz * ixz)
             + ixz * (ixy * iyz - iyy * ixz);
-        return det3 > 1e-9;
+        return det3 > 1e-30;
     }
 
     const LinkDefinition* RobotManifest::FindLink(const std::string& linkName) const

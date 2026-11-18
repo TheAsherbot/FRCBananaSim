@@ -36,6 +36,10 @@
 #include "Robot/Sensors/Components/BeamBreakComponent.h"
 #include "Robot/Sensors/Components/AnalogInputComponent.h"
 #include "Robot/Sensors/Components/ContactZoneComponent.h"
+#include "Interaction/Components/GamePieceComponent.h"
+#include "Interaction/Systems/RobotGamePieceSystem.h"
+#include "Interaction/Systems/FlightAerodynamicsSystem.h"
+#include "Interaction/ShooterSqueezeModel.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/Components/MeshComponent.h"
 #include "Renderer/Systems/RenderSystem.h"
@@ -45,6 +49,7 @@
 #include "Telemetry/TelemeteryViewer/ProfilerWindow.h"
 #include "Telemetry/DrivetrainLogger.h"
 #include "Bridge/HALSimWebSocketServer.h"
+#include "Game/BananaGame.h"
 #include "Control/SimControlBoundary.h"
 #include "Utils/DebugDraw.h"
 #include "Utils/Log.h"
@@ -55,6 +60,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
+
 
 #include <algorithm>
 #include <chrono>
@@ -72,6 +78,8 @@ using namespace FRCBananaSim::Renderer::Components;
 using namespace FRCBananaSim::Control;
 using namespace FRCBananaSim::Robot::Mechanisms::Components;
 using namespace FRCBananaSim::Robot::Sensors::Components;
+using namespace FRCBananaSim::Interaction::Components;
+using namespace FRCBananaSim::Interaction::Systems;
 
 /**
  * @brief Helper drawing an oriented wireframe box in world coordinates.
@@ -110,10 +118,12 @@ static void DrawOrientedBox(const glm::vec3& center, const glm::quat& orientatio
 }
 
 /**
- * @brief Renders wireframe colliders, contact patches, and contact volumes.
+ * @brief Renders wireframe colliders, contact patches, contact volumes, optical lasers, and trajectory trails.
  */
 static void RenderSceneDebugDraw(Scene& scene, bool showColliders, bool showWheelContacts,
-    bool showContactZones, bool alwaysOnTop, const FRCBananaSim::Robot::AssembledRobot& robot)
+    bool showContactZones, bool showBeamBreakLasers, bool showTrajectoryTrails, bool alwaysOnTop,
+    const FRCBananaSim::Robot::AssembledRobot& robot,
+    const std::unordered_map<Entity, std::vector<glm::vec3>>& trajectoryHistory)
 {
     bool depthTest = !alwaysOnTop;
 
@@ -160,13 +170,66 @@ static void RenderSceneDebugDraw(Scene& scene, bool showColliders, bool showWhee
             auto* t = scene.GetComponent<TransformComponent>(e);
             if (!cz || !t) continue;
 
+            // Green intake volume / Gold shooter volume (Block 6 Day 7 Specification)
             glm::vec3 color = (cz->role == "intake")
-                ? glm::vec3(0.1f, 1.0f, 0.2f)   // Green intake volume
-                : glm::vec3(1.0f, 0.2f, 0.8f);  // Magenta shooter volume
+                ? glm::vec3(0.1f, 0.95f, 0.3f)   // Emerald Green intake volume
+                : glm::vec3(1.0f, 0.82f, 0.1f);  // Gold / Amber shooter volume
 
             DrawOrientedBox(t->position, t->rotation, cz->dimensions * 0.5f, color, false);
         }
     }
+
+    if (showBeamBreakLasers)
+    {
+        auto bbEntities = scene.Query<BeamBreakComponent>();
+        for (Entity e : bbEntities)
+        {
+            auto* bb = scene.GetComponent<BeamBreakComponent>(e);
+            if (!bb || bb->sensorEntity == invalidEntity) continue;
+
+            auto* cz = scene.GetComponent<ContactZoneComponent>(bb->sensorEntity);
+            auto* t = scene.GetComponent<TransformComponent>(bb->sensorEntity);
+            if (!cz || !t) continue;
+
+            glm::vec3 halfDim = cz->dimensions * 0.5f;
+            glm::vec3 lateralAxis = (glm::length(cz->tangentAxis) > 1e-4f)
+                ? glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), glm::normalize(cz->tangentAxis))
+                : glm::vec3(1.0f, 0.0f, 0.0f);
+            if (glm::length(lateralAxis) < 1e-4f) lateralAxis = glm::vec3(1.0f, 0.0f, 0.0f);
+            lateralAxis = glm::normalize(lateralAxis);
+
+            glm::vec3 p0 = t->position + (t->rotation * (-lateralAxis * halfDim.x));
+            glm::vec3 p1 = t->position + (t->rotation * (lateralAxis * halfDim.x));
+
+            bool isTripped = bb->isBroken || bb->dioState;
+            glm::vec3 laserColor = isTripped
+                ? glm::vec3(1.0f, 0.15f, 0.15f)   // Pulsing Crimson Red when tripped
+                : glm::vec3(0.1f, 0.95f, 0.3f);   // Emerald Green when clear
+
+            FRCBananaSim::Utils::DebugDraw::Line(p0, p1, laserColor, false);
+            FRCBananaSim::Utils::DebugDraw::Sphere(p0, 0.015f, laserColor, 8, false);
+            FRCBananaSim::Utils::DebugDraw::Sphere(p1, 0.015f, laserColor, 8, false);
+        }
+    }
+
+    if (showTrajectoryTrails)
+    {
+        for (const auto& [pe, trail] : trajectoryHistory)
+        {
+            if (trail.size() < 2) continue;
+
+            auto* piece = scene.GetComponent<GamePieceComponent>(pe);
+            glm::vec3 trailColor = (piece && piece->spec.name.find("Note") != std::string::npos)
+                ? glm::vec3(1.0f, 0.65f, 0.1f)   // Gold / orange for notes
+                : glm::vec3(0.1f, 0.85f, 1.0f);  // Cyan for foam balls
+
+            for (size_t i = 0; i + 1 < trail.size(); ++i)
+            {
+                FRCBananaSim::Utils::DebugDraw::Line(trail[i], trail[i + 1], trailColor, depthTest);
+            }
+        }
+    }
+
 
     if (showWheelContacts && robot.swerveSystem)
     {
@@ -203,8 +266,91 @@ static void RenderSceneDebugDraw(Scene& scene, bool showColliders, bool showWhee
     }
 }
 
+
+static int RunStandaloneGame()
+{
+    // 1. Initialize Hardware Renderer (1600x900 OpenGL 3.3 Core)
+    FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Robot Comp 2 Shootout");
+    if (!renderer.IsValid())
+    {
+        SIM_LOG_FATAL("Failed to initialize OpenGL renderer window");
+        return -1;
+    }
+
+    // 2. Initialize Jolt Physics Subsystem
+    FRCBananaSim::Physics::JoltContext joltContext;
+    if (!joltContext.Initialize())
+    {
+        SIM_LOG_FATAL("Failed to initialize Jolt Physics Context");
+        return -1;
+    }
+
+    {
+        // 3. ECS Scene & Core Presentation Systems
+        Scene scene;
+        scene.SetFixedDeltaTime(FRCBananaSim::Physics::PhysicsConfig::fixedDeltaTime);
+
+        scene.AddSystem(std::make_unique<FRCBananaSim::Core::ECS::Systems::TransformPropagationSystem>(scene));
+        scene.AddSystem(std::make_unique<FRCBananaSim::Renderer::Systems::RenderSystem>(scene, renderer));
+
+        // 4. Scoped Game Execution
+        {
+            FRCBananaSim::Game::BananaGame game(scene, joltContext, renderer);
+            if (!game.Initialize())
+            {
+                SIM_LOG_FATAL("Failed to initialize BananaGame with Robot Comp 2");
+                return -1;
+            }
+
+            FRCBananaSim::Core::Engine engine(200.0, 0.0);
+
+            engine.SetFixedUpdateCallback([&](double dt)
+                {
+                    game.FixedUpdate(dt);
+                });
+
+            engine.SetUpdateCallback([&](double dt)
+                {
+                    if (renderer.ShouldClose() || game.ShouldExit())
+                    {
+                        engine.RequestExit();
+                        return;
+                    }
+
+                    renderer.BeginFrame();
+                    game.Update(dt);
+                });
+
+            engine.SetRenderCallback([&](double alpha)
+                {
+                    game.Render3D();
+                    game.RenderUI();
+
+                    renderer.EndFrame();
+                });
+
+            engine.Run();
+        } // game is destroyed here cleanly, removing all its physics bodies
+
+        scene.Clear();
+    } // scene is destroyed here cleanly before joltContext.Shutdown()
+
+    // 5. Clean teardown in reverse initialization order
+    joltContext.Shutdown();
+
+    SIM_LOG_INFO("[FRCBananaSim] Standalone game exited cleanly.");
+    return 0;
+}
+
 int main(int argc, char* argv[])
 {
+    // Boot directly into Robot Comp 2 Shootout Game unless --test-station flag is passed
+    bool runTestStation = (argc > 1 && std::string(argv[1]) == "--test-station");
+    if (!runTestStation)
+    {
+        return RunStandaloneGame();
+    }
+
     // 1. Initialize Telemetry & Profiler Subsystems
     FRCBananaSim::Telemetry::TelemetryManager::Get().Initialize();
     FRCBananaSim::Telemetry::TelemetryManager::Get().SetMode(FRCBananaSim::Telemetry::TelemetryMode::Minimal);
@@ -214,7 +360,7 @@ int main(int argc, char* argv[])
     FRCBananaSim::Telemetry::DrivetrainLogger drivetrainLogger(120000); // 10 min at 200 Hz
 
     // 2. Initialize Hardware Renderer (1600x900 OpenGL 3.3 Core)
-    FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Block 3 Reference 2026 Robot Test Station");
+    FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Robot Comp 2 Shootout");
     if (!renderer.IsValid())
     {
         SIM_LOG_FATAL("Failed to initialize OpenGL renderer window");
@@ -229,16 +375,16 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    // 4. Start WPILib HALSim WebSocket Server (:3300/wpilibws)
-    FRCBananaSim::Bridge::HALSimWebSocketServer wsServer;
-    wsServer.Start();
-
-    // 5. ECS Scene & Core Presentation Systems
+    // 4. ECS Scene & Core Presentation Systems
     Scene scene;
     scene.SetFixedDeltaTime(FRCBananaSim::Physics::PhysicsConfig::fixedDeltaTime);
 
     scene.AddSystem(std::make_unique<FRCBananaSim::Core::ECS::Systems::TransformPropagationSystem>(scene));
     scene.AddSystem(std::make_unique<FRCBananaSim::Renderer::Systems::RenderSystem>(scene, renderer));
+
+    // Start WPILib HALSim WebSocket Server (:3300/wpilibws) for Test Station
+    FRCBananaSim::Bridge::HALSimWebSocketServer wsServer;
+    wsServer.Start();
 
     auto assignTransforms = [&](Entity entity, const glm::vec3& pos, const glm::vec3& scale,
         const glm::quat& rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
@@ -275,6 +421,7 @@ int main(int argc, char* argv[])
         rb.friction = 0.85f;
         rb.restitution = 0.05f;
         scene.AddComponent(groundEntity, rb);
+
 
         ColliderComponent col;
         col.shape = ColliderShape::Box;
@@ -342,6 +489,7 @@ int main(int argc, char* argv[])
         rb.motionType = BodyMotionType::Static;
         scene.AddComponent(targetEntity, rb);
 
+
         ColliderComponent col;
         col.shape = ColliderShape::Box;
         col.boxHalfExtents = glm::vec3(0.7f, 0.75f, 0.2f);
@@ -364,6 +512,7 @@ int main(int argc, char* argv[])
         "FRCBananaSim/"
     };
 
+
     for (const auto& prefix : searchPrefixes)
     {
         std::string candidate = prefix + "FRCBananaSim/Resources/Robots/Reference2026/manifest.json";
@@ -374,6 +523,7 @@ int main(int argc, char* argv[])
             materialsPath = prefix + "FRCBananaSim/Resources/Config/materials.json";
             break;
         }
+
         std::string directCandidate = prefix + "Resources/Robots/Reference2026/manifest.json";
         if (std::filesystem::exists(directCandidate))
         {
@@ -392,6 +542,7 @@ int main(int argc, char* argv[])
     if (!robot.isSuccess)
     {
         SIM_LOG_FATAL("Failed to assemble Schema v1 robot: " << robot.errorMessage);
+
         return -1;
     }
 
@@ -596,7 +747,77 @@ int main(int argc, char* argv[])
     bool showColliders = true;
     bool showWheelContacts = true;
     bool showContactZones = true;
+    bool showBeamBreakLasers = true;
+    bool showTrajectoryTrails = true;
     bool debugDrawAlwaysOnTop = false;
+
+    // Game Piece & Trajectory History State
+    std::unordered_map<Entity, std::vector<glm::vec3>> projectileTrajectoryHistory;
+    double lastExitSpeedMPerS = 0.0;
+    double lastTheoreticalExitSpeed = 0.0;
+    double lastRpmSag = 0.0;
+    double lastRecoilImpulseNs = 0.0;
+    bool autoFeedSoakMode = false;
+    double autoFeedTimer = 0.0;
+    int totalGamePiecesSpawned = 0;
+
+    auto spawnGamePiece = [&](bool isNote, bool inShooter) {
+        Entity pieceEntity = scene.CreateEntity();
+        GamePieceComponent piece;
+        piece.spec.name = isNote ? "2024 Note (Orange Ring)" : "Cargo Ball (Foam Sphere)";
+        piece.spec.massKg = isNote ? 0.235 : 0.270;
+        piece.spec.thicknessM = isNote ? 0.0508 : 0.2413;
+        piece.spec.outerRadiusM = isNote ? 0.1778 : 0.1206;
+        piece.spec.dragCoefficientCd = isNote ? 0.45 : 0.47;
+        piece.spec.liftSlopeClAlpha = isNote ? 1.20 : 0.80;
+        piece.spec.crossSectionalAreaM2 = isNote ? 0.045 : 0.0457;
+        piece.spec.complianceK = 25000.0;
+        piece.spec.restitutionE = 0.25;
+        piece.spec.surfaceFriction = 0.68;
+
+        auto* chassisT = scene.GetComponent<TransformComponent>(robot.chassisEntity);
+        glm::vec3 cPos = chassisT ? chassisT->position : glm::vec3(0.0f, 0.2f, 0.0f);
+        glm::quat cRot = chassisT ? chassisT->rotation : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+
+        if (inShooter)
+        {
+            piece.state = GamePieceState::Engaged;
+            auto czIt = robot.contactZoneEntities.find("shooter_zone");
+            if (czIt != robot.contactZoneEntities.end()) piece.boundContactZone = czIt->second;
+            piece.capturingRobot = robot.chassisEntity;
+            piece.transitProgressM = 0.0;
+            piece.transitVelocityMPerS = 2.0;
+
+            TransformComponent tc;
+            tc.position = cPos + (cRot * glm::vec3(0.0f, 0.5f, 0.2f));
+            scene.AddComponent(pieceEntity, tc);
+        }
+        else
+        {
+            piece.state = GamePieceState::Free;
+            piece.capturingRobot = invalidEntity;
+
+            TransformComponent tc;
+            tc.position = cPos + (cRot * glm::vec3(0.0f, 0.05f, 0.7f));
+            scene.AddComponent(pieceEntity, tc);
+
+            RigidBodyComponent rb;
+            rb.mass = static_cast<float>(piece.spec.massKg);
+            rb.motionType = BodyMotionType::Dynamic;
+            rb.friction = 0.70f;
+            rb.restitution = 0.25f;
+            scene.AddComponent(pieceEntity, rb);
+
+            ColliderComponent col;
+            col.shape = ColliderShape::Sphere;
+            col.radius = static_cast<float>(piece.spec.outerRadiusM);
+            scene.AddComponent(pieceEntity, col);
+        }
+
+        scene.AddComponent(pieceEntity, piece);
+        totalGamePiecesSpawned++;
+        return pieceEntity;
+    };
 
     // Reposition Helper
     auto resetRobot = [&](const glm::vec3& worldPos, const glm::quat& worldRot)
@@ -880,6 +1101,42 @@ int main(int argc, char* argv[])
             FRCBananaSim::Robot::RobotAssembler::StepPipeline(robot, dt);
             jointSystem.ReadbackTelemetry();
 
+            // Handle Auto-Feed / Soak Spawner Mode
+            if (autoFeedSoakMode)
+            {
+                autoFeedTimer += dt;
+                if (autoFeedTimer >= 1.0)
+                {
+                    autoFeedTimer = 0.0;
+                    spawnGamePiece(true, true);
+                }
+            }
+
+            // Record Projectile Trajectory Trails and Ballistic Telemetry
+            if (totalSimSteps % 2 == 0)
+            {
+                auto pEntities = scene.Query<GamePieceComponent, TransformComponent>();
+                for (Entity pe : pEntities)
+                {
+                    auto* piece = scene.GetComponent<GamePieceComponent>(pe);
+                    auto* tc = scene.GetComponent<TransformComponent>(pe);
+                    if (!piece || !tc) continue;
+
+                    if (piece->state == GamePieceState::Launched)
+                    {
+                        auto& trail = projectileTrajectoryHistory[pe];
+                        if (trail.empty() || glm::distance(trail.back(), tc->position) > 0.02f)
+                        {
+                            trail.push_back(tc->position);
+                            if (trail.size() > 150) trail.erase(trail.begin());
+                        }
+
+                        lastExitSpeedMPerS = glm::length(piece->linearVelocity);
+                        lastRecoilImpulseNs = piece->spec.massKg * lastExitSpeedMPerS;
+                    }
+                }
+            }
+
             if (totalSimSteps == 0)
             {
                 std::cout << "[Simulator] Simulation Step 0 executed smoothly.\n";
@@ -1155,7 +1412,8 @@ int main(int argc, char* argv[])
 
             // A. Immediate-mode Debug Wireframes
             RenderSceneDebugDraw(scene, showColliders, showWheelContacts, showContactZones,
-                debugDrawAlwaysOnTop, robot);
+                showBeamBreakLasers, showTrajectoryTrails, debugDrawAlwaysOnTop, robot,
+                projectileTrajectoryHistory);
 
             // B. Render Solid 3D Meshes
             scene.RenderUpdateSystems();
@@ -1480,6 +1738,75 @@ int main(int argc, char* argv[])
                     }
 
                     // =============================================================
+                    // TAB 3: GAME PIECES & BALLISTICS (BLOCK 6)
+                    // =============================================================
+                    if (ImGui::BeginTabItem("Game Pieces & Ballistics"))
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "SPAWN & INTERACTION CONTROLS");
+                        if (ImGui::Button("Spawn Note in Front of Intake", ImVec2(240.0f, 26.0f)))
+                        {
+                            spawnGamePiece(true, false);
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Spawn Cargo Ball", ImVec2(180.0f, 26.0f)))
+                        {
+                            spawnGamePiece(false, false);
+                        }
+
+                        if (ImGui::Button("Load & Fire Note from Shooter", ImVec2(240.0f, 26.0f)))
+                        {
+                            spawnGamePiece(true, true);
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button(autoFeedSoakMode ? "Stop Auto-Feed Soak" : "Start Auto-Feed Soak (1 Hz)", ImVec2(220.0f, 26.0f)))
+                        {
+                            autoFeedSoakMode = !autoFeedSoakMode;
+                        }
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "BALLISTIC TELEMETRY & ENERGY BALANCE");
+                        ImGui::Text("Pieces Spawned:         %d", totalGamePiecesSpawned);
+                        ImGui::Text("Active In-World Pieces: %zu", scene.Query<GamePieceComponent>().size());
+                        ImGui::Text("Last Exit Velocity:     %.2f m/s (%.1f ft/s)", lastExitSpeedMPerS, lastExitSpeedMPerS * 3.28084);
+                        ImGui::Text("Chassis Recoil Impulse: %.3f N*s", lastRecoilImpulseNs);
+
+                        auto fwItShooter = robot.mechanismEntities.find("shooter_flywheel");
+                        auto* fwCompShooter = (fwItShooter != robot.mechanismEntities.end())
+                            ? scene.GetComponent<FlywheelComponent>(fwItShooter->second) : nullptr;
+                        if (fwCompShooter)
+                        {
+                            double rollerV = fwCompShooter->angularVelocityRadPerSec * fwCompShooter->rollerRadiusM;
+                            ImGui::Text("Shooter Surface Speed:  %.2f m/s (%.0f RPM)", rollerV, fwCompShooter->angularVelocityRpm);
+                            ImGui::Text("Flywheel Load Torque:   %.2f Nm", fwCompShooter->externalLoadTorqueNm);
+                        }
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        ImGui::TextColored(ImVec4(0.3f, 0.85f, 1.0f, 1.0f), "OPTICAL BEAM-BREAK SENSORS (SimOutputs)");
+                        bool dioShooter = (robotOutputs.digitalInputs & (1 << 2)) != 0;
+                        bool dioIntake = (robotOutputs.digitalInputs & (1 << 3)) != 0;
+                        ImGui::Text("DIO 2 [Shooter Throat]: %s", dioShooter ? "TRIPPED (Piece In Throat)" : "CLEAR");
+                        ImGui::Text("DIO 3 [Intake Feeder]:   %s", dioIntake ? "TRIPPED (Piece At Feeder)" : "CLEAR");
+
+                        ImGui::Spacing();
+                        ImGui::Separator();
+
+                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "OVERLAYS & DIAGNOSTICS");
+                        ImGui::Checkbox("Draw Contact Zones (Green Intake / Gold Shooter)", &showContactZones);
+                        ImGui::Checkbox("Draw Optical Beam-Break Lasers", &showBeamBreakLasers);
+                        ImGui::Checkbox("Draw Projectile Trajectory Trails", &showTrajectoryTrails);
+                        if (ImGui::Button("Clear Trajectory Trails"))
+                        {
+                            projectileTrajectoryHistory.clear();
+                        }
+
+                        ImGui::EndTabItem();
+                    }
+
+                    // =============================================================
                     // TAB 3: ELECTRICAL & SENSORS
                     // =============================================================
                     if (ImGui::BeginTabItem("Sensors & Electrical"))
@@ -1579,6 +1906,8 @@ int main(int argc, char* argv[])
                         ImGui::Checkbox("Draw All Colliders (Wireframe OBBs)", &showColliders);
                         ImGui::Checkbox("Draw Wheel Contact Patches & Load Spikes", &showWheelContacts);
                         ImGui::Checkbox("Draw Mechanism Contact Zones (Intake/Shooter)", &showContactZones);
+                        ImGui::Checkbox("Draw Optical Beam-Break Lasers", &showBeamBreakLasers);
+                        ImGui::Checkbox("Draw Game Piece Trajectory Trails", &showTrajectoryTrails);
                         ImGui::Checkbox("Always On Top (No Depth Occlusion)", &debugDrawAlwaysOnTop);
 
                         ImGui::Spacing();
@@ -1629,6 +1958,8 @@ int main(int argc, char* argv[])
     {
         profilerWindow.Close(renderer.GetWindow());
     }
+
+    scene.Clear();
 
     joltContext.Shutdown();
     FRCBananaSim::Telemetry::TelemetryManager::Get().Shutdown();

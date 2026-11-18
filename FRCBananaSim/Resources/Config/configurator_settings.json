@@ -1,0 +1,24 @@
+{
+  "cameraDistance": 2.200000047683716,
+  "cameraPitch": 0.0,
+  "cameraTarget": [
+    0.0,
+    0.25,
+    0.0
+  ],
+  "cameraYaw": 180.0,
+  "fovDegrees": 45.0,
+  "invertOrbitX": false,
+  "invertOrbitY": false,
+  "invertScrollZoom": true,
+  "isOrthographic": true,
+  "lastRobotPath": "FRCBananaSim/Resources/Robots\\Robot Comp 2",
+  "orbitSensitivity": 0.4000000059604645,
+  "panSensitivity": 0.0024999999441206455,
+  "preset": 1,
+  "recentRobots": [
+    "FRCBananaSim/Resources/Robots\\Robot Comp 2",
+    "FRCBananaSim/Resources/Robots\\Reference2026"
+  ],
+  "zoomSensitivity": 0.20000000298023224
+}

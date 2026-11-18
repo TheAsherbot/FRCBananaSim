@@ -48,6 +48,20 @@ namespace FRCBananaSim::Bridge
         uint32_t nextMechanismSlot = 8;
         for (const auto& mech : sidecar.mechanisms)
         {
+            if (mech.role == "differential")
+            {
+                for (const auto& ctrl : mech.controllers)
+                {
+                    uint32_t slot = nextMechanismSlot;
+                    if (nextMechanismSlot < Control::MAX_MOTOR_SLOTS)
+                    {
+                        ++nextMechanismSlot;
+                    }
+                    RegisterMotor(ctrl.canId, slot, ctrl.vendor, ctrl.canBus, ctrl.inverted);
+                }
+                continue;
+            }
+
             uint32_t mechanismPrimarySlot = nextMechanismSlot;
             uint32_t leaderCanId = 0;
 

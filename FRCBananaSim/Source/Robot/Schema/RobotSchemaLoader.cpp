@@ -84,6 +84,7 @@ namespace FRCBananaSim::Robot::Schema
         ClearDiagnostics();
 
         if (!LoadManifestFromFile(manifestPath))
+   
         {
             return false;
         }
@@ -310,6 +311,9 @@ namespace FRCBananaSim::Robot::Schema
             sidecar.electrical.brownoutWarningV = el.value("brownoutWarning_V", 6.8);
             sidecar.electrical.brownoutShutoffV = el.value("brownoutShutoff_V", 6.3);
             sidecar.electrical.brownoutRecoveryV = el.value("brownoutRecovery_V", 7.5);
+            sidecar.electrical.regulatedRailVoltageV = el.value("regulatedRailVoltage_V", 6.0);
+            sidecar.electrical.regulatedRailCurrentLimitA = el.value("regulatedRailCurrentLimit_A", 2.2);
+            sidecar.electrical.regulatedRailEfficiency = el.value("regulatedRailEfficiency", 0.88);
         }
 
         // Swerve
@@ -328,6 +332,48 @@ namespace FRCBananaSim::Robot::Schema
             sidecar.swerve.driveSupplyLimitA = sw.value("driveSupplyLimit_A", 40.0);
             sidecar.swerve.steerStatorLimitA = sw.value("steerStatorLimit_A", 40.0);
             sidecar.swerve.steerSupplyLimitA = sw.value("steerSupplyLimit_A", 30.0);
+            sidecar.swerve.driveActuatorType = sw.value("driveActuatorType", "motor");
+            sidecar.swerve.steerActuatorType = sw.value("steerActuatorType", "motor");
+            sidecar.swerve.driveServoPreset = sw.value("driveServoPreset", "GoBildaSpeed");
+            sidecar.swerve.steerServoPreset = sw.value("steerServoPreset", "GoBildaTorque");
+            if (sw.contains("customDriveMotor") && sw["customDriveMotor"].is_object())
+            {
+                const auto& cm = sw["customDriveMotor"];
+                sidecar.swerve.customDriveMotor.nominalVoltageV = cm.value("nominalVoltage_V", 12.0);
+                sidecar.swerve.customDriveMotor.stallTorqueNm = cm.value("stallTorque_Nm", 5.0);
+                sidecar.swerve.customDriveMotor.freeSpeedRpm = cm.value("freeSpeed_rpm", 6000.0);
+                sidecar.swerve.customDriveMotor.stallCurrentA = cm.value("stallCurrent_A", 250.0);
+                sidecar.swerve.customDriveMotor.freeCurrentA = cm.value("freeCurrent_A", 2.0);
+            }
+            if (sw.contains("customSteerMotor") && sw["customSteerMotor"].is_object())
+            {
+                const auto& cm = sw["customSteerMotor"];
+                sidecar.swerve.customSteerMotor.nominalVoltageV = cm.value("nominalVoltage_V", 12.0);
+                sidecar.swerve.customSteerMotor.stallTorqueNm = cm.value("stallTorque_Nm", 5.0);
+                sidecar.swerve.customSteerMotor.freeSpeedRpm = cm.value("freeSpeed_rpm", 6000.0);
+                sidecar.swerve.customSteerMotor.stallCurrentA = cm.value("stallCurrent_A", 250.0);
+                sidecar.swerve.customSteerMotor.freeCurrentA = cm.value("freeCurrent_A", 2.0);
+            }
+            if (sw.contains("customDriveServo") && sw["customDriveServo"].is_object())
+            {
+                const auto& cs = sw["customDriveServo"];
+                sidecar.swerve.customDriveServo.nominalVoltageV = cs.value("nominalVoltage_V", 6.0);
+                sidecar.swerve.customDriveServo.stallTorqueKgCm = cs.value("stallTorque_kgcm", 20.0);
+                sidecar.swerve.customDriveServo.speedSecPer60Deg = cs.value("speed_secPer60Deg", 0.10);
+                sidecar.swerve.customDriveServo.stallCurrentA = cs.value("stallCurrent_A", 2.5);
+                sidecar.swerve.customDriveServo.freeCurrentA = cs.value("freeCurrent_A", 0.15);
+                sidecar.swerve.customDriveServo.travelRangeDeg = cs.value("travelRange_deg", 300.0);
+            }
+            if (sw.contains("customSteerServo") && sw["customSteerServo"].is_object())
+            {
+                const auto& cs = sw["customSteerServo"];
+                sidecar.swerve.customSteerServo.nominalVoltageV = cs.value("nominalVoltage_V", 6.0);
+                sidecar.swerve.customSteerServo.stallTorqueKgCm = cs.value("stallTorque_kgcm", 20.0);
+                sidecar.swerve.customSteerServo.speedSecPer60Deg = cs.value("speed_secPer60Deg", 0.10);
+                sidecar.swerve.customSteerServo.stallCurrentA = cs.value("stallCurrent_A", 2.5);
+                sidecar.swerve.customSteerServo.freeCurrentA = cs.value("freeCurrent_A", 0.15);
+                sidecar.swerve.customSteerServo.travelRangeDeg = cs.value("travelRange_deg", 300.0);
+            }
 
             if (sw.contains("modules") && sw["modules"].is_array())
             {
@@ -340,12 +386,17 @@ namespace FRCBananaSim::Robot::Schema
                     mod.steerCanId = mNode.value("steerCanId", 0);
                     mod.cancoderId = mNode.value("cancoderId", 0);
                     mod.canBus = mNode.value("canBus", "rio");
+                    mod.drivePwmChannel = mNode.value("drivePwmChannel", 0);
+                    mod.steerPwmChannel = mNode.value("steerPwmChannel", 0);
                     sidecar.swerve.modules.push_back(mod);
                 }
             }
         }
 
         // Mechanisms
+                // -------------------------------------------------------------
+        // In FRCBananaSim/Source/Robot/Schema/RobotSchemaLoader.cpp (around line 355):
+        // -------------------------------------------------------------
         if (json.contains("mechanisms") && json["mechanisms"].is_array())
         {
             for (const auto& mNode : json["mechanisms"])
@@ -359,13 +410,161 @@ namespace FRCBananaSim::Robot::Schema
                 mech.gearRatio = mNode.value("gearRatio", 1.0);
                 mech.efficiency = mNode.value("efficiency", 1.0);
                 mech.drumRadiusM = mNode.value("drumRadius_m", 0.0);
+                mech.rollerRadiusM = mNode.value("rollerRadius_m", 0.0508);
                 mech.flywheelInertiaKgm2 = mNode.value("flywheelInertia_kgm2", 0.0);
                 mech.spinAxis = ParseOptionalVec3(mNode, "spinAxis", glm::dvec3(0.0, 1.0, 0.0));
                 mech.visualLink = mNode.value("visualLink", "");
+                mech.mountOffsetM = ParseOptionalVec3(mNode, "mountOffset_m", glm::dvec3(0.0, 0.0, 0.0));
                 mech.statorCurrentLimitA = mNode.value("statorCurrentLimit_A", 60.0);
                 mech.supplyCurrentLimitA = mNode.value("supplyCurrentLimit_A", 40.0);
-                mech.coulombFriction = mNode.value("coulombFriction", 0.0);
-                mech.viscousDamping = mNode.value("viscousDamping", 0.0);
+                if (mNode.contains("coulombFriction") && mNode["coulombFriction"].is_number())
+                {
+                    mech.coulombFriction = mNode["coulombFriction"].get<double>();
+                }
+                if (mNode.contains("viscousDamping") && mNode["viscousDamping"].is_number())
+                {
+                    mech.viscousDamping = mNode["viscousDamping"].get<double>();
+                }
+                mech.actuatorType = mNode.value("actuatorType", "motor");
+                if (mNode.contains("customMotor") && mNode["customMotor"].is_object())
+                {
+                    const auto& cm = mNode["customMotor"];
+                    mech.customMotor.nominalVoltageV = cm.value("nominalVoltage_V", 12.0);
+                    mech.customMotor.stallTorqueNm = cm.value("stallTorque_Nm", 5.0);
+                    mech.customMotor.freeSpeedRpm = cm.value("freeSpeed_rpm", 6000.0);
+                    mech.customMotor.stallCurrentA = cm.value("stallCurrent_A", 250.0);
+                    mech.customMotor.freeCurrentA = cm.value("freeCurrent_A", 2.0);
+                }
+                if (mNode.contains("servo") && mNode["servo"].is_object())
+                {
+                    const auto& sNode = mNode["servo"];
+                    mech.servo.preset = sNode.value("preset", "GoBildaTorque");
+                    mech.servo.mode = sNode.value("mode", "positional");
+                    mech.servo.pwmChannel = sNode.value("pwmChannel", 0);
+                    mech.servo.supplyVoltageV = sNode.value("supplyVoltage_V", 6.0);
+                    mech.servo.travelRangeDeg = sNode.value("travelRange_deg", 300.0);
+                    if (sNode.contains("customServo") && sNode["customServo"].is_object())
+                    {
+                        const auto& cs = sNode["customServo"];
+                        mech.customServo.nominalVoltageV = cs.value("nominalVoltage_V", 6.0);
+                        mech.customServo.stallTorqueKgCm = cs.value("stallTorque_kgcm", 20.0);
+                        mech.customServo.speedSecPer60Deg = cs.value("speed_secPer60Deg", 0.10);
+                        mech.customServo.stallCurrentA = cs.value("stallCurrent_A", 2.5);
+                        mech.customServo.freeCurrentA = cs.value("freeCurrent_A", 0.15);
+                        mech.customServo.travelRangeDeg = cs.value("travelRange_deg", 300.0);
+                    }
+                }
+                else if (mNode.contains("servoPreset"))
+                {
+                    mech.servo.preset = mNode.value("servoPreset", "GoBildaTorque");
+                    mech.servo.mode = mNode.value("servoMode", "positional");
+                    mech.servo.pwmChannel = mNode.value("pwmChannel", 0);
+                    mech.servo.supplyVoltageV = mNode.value("supplyVoltage_V", 6.0);
+                }
+                if (mNode.contains("servos") && mNode["servos"].is_array())
+                {
+                    for (const auto& sNode : mNode["servos"])
+                    {
+                        ServoConfig sc;
+                        sc.preset = sNode.value("preset", "GoBildaTorque");
+                        sc.mode = sNode.value("mode", "positional");
+                        sc.pwmChannel = sNode.value("pwmChannel", 0);
+                        sc.supplyVoltageV = sNode.value("supplyVoltage_V", 6.0);
+                        sc.travelRangeDeg = sNode.value("travelRange_deg", 300.0);
+                        mech.servos.push_back(sc);
+                    }
+                }
+
+                // ==================== [START NEW DIFFERENTIAL PARSING] ====================
+                if (mNode.contains("targetJoints") && mNode["targetJoints"].is_array())
+                {
+                    for (const auto& tj : mNode["targetJoints"])
+                    {
+                        mech.targetJoints.push_back(tj.get<std::string>());
+                    }
+                }
+                if (mNode.contains("differentialType") && mNode["differentialType"].is_string())
+                {
+                    mech.differentialType = mNode["differentialType"].get<std::string>();
+                }
+                if (mNode.contains("gearRatios") && mNode["gearRatios"].is_array())
+                {
+                    for (const auto& gr : mNode["gearRatios"])
+                    {
+                        mech.gearRatios.push_back(gr.get<double>());
+                    }
+                }
+                if (mNode.contains("couplingMatrix") && mNode["couplingMatrix"].is_array())
+                {
+                    for (const auto& row : mNode["couplingMatrix"])
+                    {
+                        std::vector<double> r;
+                        if (row.is_array())
+                        {
+                            for (const auto& val : row)
+                            {
+                                r.push_back(val.get<double>());
+                            }
+                        }
+                        mech.couplingMatrix.push_back(r);
+                    }
+                }
+                if (mNode.contains("coulombFriction") && mNode["coulombFriction"].is_array())
+                {
+                    for (const auto& cf : mNode["coulombFriction"])
+                    {
+                        mech.coulombFrictions.push_back(cf.get<double>());
+                    }
+                }
+                if (mNode.contains("viscousDamping") && mNode["viscousDamping"].is_array())
+                {
+                    for (const auto& vd : mNode["viscousDamping"])
+                    {
+                        mech.viscousDampings.push_back(vd.get<double>());
+                    }
+                }
+                if (mNode.contains("motorPresets") && mNode["motorPresets"].is_array())
+                {
+                    for (const auto& mp : mNode["motorPresets"])
+                    {
+                        mech.motorPresets.push_back(mp.get<std::string>());
+                    }
+                }
+                if (mNode.contains("actuatorTypes") && mNode["actuatorTypes"].is_array())
+                {
+                    for (const auto& at : mNode["actuatorTypes"])
+                    {
+                        mech.actuatorTypes.push_back(at.get<std::string>());
+                    }
+                }
+                if (mNode.contains("statorCurrentLimits") && mNode["statorCurrentLimits"].is_array())
+                {
+                    for (const auto& scl : mNode["statorCurrentLimits"])
+                    {
+                        mech.statorCurrentLimits.push_back(scl.get<double>());
+                    }
+                }
+                if (mNode.contains("supplyCurrentLimits") && mNode["supplyCurrentLimits"].is_array())
+                {
+                    for (const auto& sucl : mNode["supplyCurrentLimits"])
+                    {
+                        mech.supplyCurrentLimits.push_back(sucl.get<double>());
+                    }
+                }
+                if (mNode.contains("customMotors") && mNode["customMotors"].is_array())
+                {
+                    for (const auto& cmNode : mNode["customMotors"])
+                    {
+                        CustomMotorSpec spec;
+                        spec.nominalVoltageV = cmNode.value("nominalVoltage_V", 12.0);
+                        spec.stallTorqueNm = cmNode.value("stallTorque_Nm", 4.0);
+                        spec.freeSpeedRpm = cmNode.value("freeSpeed_rpm", 6000.0);
+                        spec.stallCurrentA = cmNode.value("stallCurrent_A", 120.0);
+                        spec.freeCurrentA = cmNode.value("freeCurrent_A", 1.5);
+                        mech.customMotors.push_back(spec);
+                    }
+                }
+                // ===================== [END NEW DIFFERENTIAL PARSING] =====================
 
                 if (mNode.contains("springAssist"))
                 {
@@ -453,6 +652,7 @@ namespace FRCBananaSim::Robot::Schema
                 sensor.bus = sNode.value("bus", "rio");
                 sensor.canId = sNode.value("canId", 0);
                 sensor.dioChannel = sNode.value("dioChannel", 0);
+                sensor.secondaryDioChannel = sNode.value("secondaryDioChannel", 0);
                 sensor.analogChannel = sNode.value("analogChannel", 0);
                 sensor.i2cAddress = sNode.value("i2cAddress", 0);
                 sensor.attachToControllerCanId = sNode.value("attachToControllerCanId", 0);
@@ -497,6 +697,90 @@ namespace FRCBananaSim::Robot::Schema
                 }
 
                 sidecar.sensors.push_back(sensor);
+            }
+        }
+
+        // Mass Reconciliation
+        if (json.contains("massReconciliation") && json["massReconciliation"].is_object())
+        {
+            const auto& mr = json["massReconciliation"];
+            sidecar.massReconciliation.enabled = true;
+            sidecar.massReconciliation.linkMassMultiplier = mr.value("linkMassMultiplier", 1.0);
+            if (mr.contains("unmodeledBallast") && mr["unmodeledBallast"].is_object())
+            {
+                const auto& ub = mr["unmodeledBallast"];
+                sidecar.massReconciliation.unmodeledBallast.targetLink = ub.value("targetLink", "base_link");
+                sidecar.massReconciliation.unmodeledBallast.massKg = ub.value("mass_kg", 0.0);
+                sidecar.massReconciliation.unmodeledBallast.offsetM = ParseOptionalVec3(ub, "offset_m", glm::dvec3(0.0, 0.0, 0.0));
+            }
+            if (mr.contains("linkMassOverrides") && mr["linkMassOverrides"].is_object())
+            {
+                for (auto it = mr["linkMassOverrides"].begin(); it != mr["linkMassOverrides"].end(); ++it)
+                {
+                    if (it.value().is_number())
+                    {
+                        sidecar.massReconciliation.linkMassOverrides[it.key()] = it.value().get<double>();
+                    }
+                }
+            }
+        }
+
+        // Joint Overrides (Hardstop Limits & Compliance Springs)
+        if (json.contains("jointOverrides") && json["jointOverrides"].is_object())
+        {
+            for (auto it = json["jointOverrides"].begin(); it != json["jointOverrides"].end(); ++it)
+            {
+                if (it.value().is_object())
+                {
+                    const auto& jo = it.value();
+                    JointLimitOverride ov;
+                    ov.hasLimits = jo.value("hasLimits", true);
+                    ov.lower = jo.value("lower", 0.0);
+                    ov.upper = jo.value("upper", 0.0);
+                    ov.unit = jo.value("unit", "rad");
+                    ov.springFrequencyHz = jo.value("springFrequency_Hz", 40.0);
+                    ov.springDampingRatio = jo.value("springDampingRatio", 1.0);
+                    sidecar.jointOverrides[it.key()] = ov;
+                }
+            }
+        }
+
+        // Bumpers (Parametric Collision Geometry & Mass)
+        if (json.contains("bumpers") && json["bumpers"].is_object())
+        {
+            const auto& bj = json["bumpers"];
+            sidecar.bumpers.enabled = bj.value("enabled", false);
+            sidecar.bumpers.targetLink = bj.value("targetLink", "");
+            sidecar.bumpers.shape = bj.value("shape", "box");
+            sidecar.bumpers.lengthM = bj.value("length_m", 0.85);
+            sidecar.bumpers.widthM = bj.value("width_m", 0.85);
+            sidecar.bumpers.heightM = bj.value("height_m", 0.127);
+            sidecar.bumpers.thicknessM = bj.value("thickness_m", 0.0825);
+            sidecar.bumpers.offsetM = ParseOptionalVec3(bj, "offset_m", glm::dvec3(0.0, 0.09, 0.0));
+            sidecar.bumpers.massKg = bj.value("mass_kg", 6.0);
+            sidecar.bumpers.material = bj.value("material", "bumper_fabric");
+            sidecar.bumpers.color = bj.value("color", "red");
+            sidecar.bumpers.cutoutWidthM = bj.value("cutoutWidth_m", 0.40);
+        }
+
+        // Contact Zones (Intake / Shooter / Indexer Interaction Volumes)
+        if (json.contains("contactZones") && json["contactZones"].is_array())
+        {
+            for (const auto& zNode : json["contactZones"])
+            {
+                ContactZoneDefinition zone;
+                zone.name = zNode.value("name", "");
+                zone.role = zNode.value("role", "intake");
+                zone.parentLink = zNode.value("parentLink", "");
+                zone.shape = zNode.value("shape", "box");
+                zone.originM = ParseOptionalVec3(zNode, "origin_m", glm::dvec3(0.0));
+                zone.rotationQuat = ParseOptionalQuat(zNode, "rotation_quat", glm::dquat(1.0, 0.0, 0.0, 0.0));
+                zone.dimensionsM = ParseOptionalVec3(zNode, "dimensions_m", glm::dvec3(0.0));
+                zone.tangentAxis = ParseOptionalVec3(zNode, "tangentAxis", glm::dvec3(1.0, 0.0, 0.0));
+                zone.compressionAxis = ParseOptionalVec3(zNode, "compressionAxis", glm::dvec3(0.0, 0.0, 1.0));
+                zone.nominalGapM = zNode.value("nominalGap_m", 0.0);
+
+                sidecar.contactZones.push_back(zone);
             }
         }
 
@@ -608,6 +892,15 @@ namespace FRCBananaSim::Robot::Schema
                 isValid = false;
             }
 
+            for (const auto& tj : mech.targetJoints)
+            {
+                if (!tj.empty() && !manifest.FindJoint(tj))
+                {
+                    errors.push_back("Mechanism '" + mech.name + "' references missing targetJoint: '" + tj + "'");
+                    isValid = false;
+                }
+            }
+
             if (!mech.parentLink.empty() && !manifest.FindLink(mech.parentLink))
             {
                 errors.push_back("Mechanism '" + mech.name + "' references missing parentLink: '" + mech.parentLink + "'");
@@ -685,9 +978,44 @@ namespace FRCBananaSim::Robot::Schema
                 errors.push_back("Sensor '" + sensor.name + "' references missing targetJoint: '" + sensor.targetJoint + "'");
                 isValid = false;
             }
-            if (!sensor.contactZone.empty() && !manifest.FindContactZone(sensor.contactZone))
+            if (!sensor.contactZone.empty() && !manifest.FindContactZone(sensor.contactZone) && !sidecar.FindContactZone(sensor.contactZone))
             {
                 errors.push_back("Sensor '" + sensor.name + "' references missing contactZone: '" + sensor.contactZone + "'");
+                isValid = false;
+            }
+        }
+
+        // 9. Sidecar Contact Zones Validation
+        for (const auto& zone : sidecar.contactZones)
+        {
+            if (!zone.parentLink.empty() && !manifest.FindLink(zone.parentLink))
+            {
+                errors.push_back("Sidecar ContactZone '" + zone.name + "' references missing parentLink: '" + zone.parentLink + "'");
+                isValid = false;
+            }
+        }
+
+        // 10. Mass Reconciliation
+        if (sidecar.massReconciliation.enabled)
+        {
+            if (sidecar.massReconciliation.unmodeledBallast.massKg > 0.0)
+            {
+                if (!sidecar.massReconciliation.unmodeledBallast.targetLink.empty() &&
+                    !manifest.FindLink(sidecar.massReconciliation.unmodeledBallast.targetLink))
+                {
+                    errors.push_back("MassReconciliation unmodeledBallast references missing targetLink: '" +
+                        sidecar.massReconciliation.unmodeledBallast.targetLink + "'");
+                    isValid = false;
+                }
+            }
+        }
+
+        // 8. Bumpers Target Link Enforcement
+        if (sidecar.bumpers.enabled && !sidecar.bumpers.targetLink.empty())
+        {
+            if (!manifest.FindLink(sidecar.bumpers.targetLink))
+            {
+                errors.push_back("Bumpers targetLink references missing link: '" + sidecar.bumpers.targetLink + "'");
                 isValid = false;
             }
         }
@@ -776,4 +1104,69 @@ namespace FRCBananaSim::Robot::Schema
         glm::dmat3 rNWU = Minv * rEngine * glm::transpose(Minv);
         return glm::normalize(glm::quat_cast(rNWU));
     }
+
+    // --- Sidecar Configurator Robot Frame (+X Right, +Y Up, +Z Front) ---
+    glm::dvec3 RobotSchemaLoader::ConvertNWUToRobotFrame(const glm::dvec3& vNWU)
+    {
+        // NWU: +X North (Forward), +Y West (Left), +Z Up
+        // Robot Frame: +X East (Right), +Y Up, +Z North (Forward)
+        // x_Robot = -y_NWU (Right)
+        // y_Robot = +z_NWU (Up)
+        // z_Robot = +x_NWU (Front)
+        return glm::dvec3(-vNWU.y, vNWU.z, vNWU.x);
+    }
+
+    glm::vec3 RobotSchemaLoader::ConvertNWUToRobotFrame(const glm::vec3& vNWU)
+    {
+        return glm::vec3(-vNWU.y, vNWU.z, vNWU.x);
+    }
+
+    glm::dvec3 RobotSchemaLoader::ConvertRobotFrameToNWU(const glm::dvec3& vRobot)
+    {
+        // Inverse:
+        // x_NWU = +z_Robot (Forward)
+        // y_NWU = -x_Robot (Left)
+        // z_NWU = +y_Robot (Up)
+        return glm::dvec3(vRobot.z, -vRobot.x, vRobot.y);
+    }
+
+    glm::vec3 RobotSchemaLoader::ConvertRobotFrameToNWU(const glm::vec3& vRobot)
+    {
+        return glm::vec3(vRobot.z, -vRobot.x, vRobot.y);
+    }
+
+    glm::dquat RobotSchemaLoader::ConvertNWUQuatToRobotFrame(const glm::dquat& qNWU)
+    {
+        glm::dmat3 M(0.0);
+        M[0] = glm::dvec3( 0.0, 0.0, 1.0); // column 0: x_NWU -> z_Robot
+        M[1] = glm::dvec3(-1.0, 0.0, 0.0); // column 1: y_NWU -> -x_Robot
+        M[2] = glm::dvec3( 0.0, 1.0, 0.0); // column 2: z_NWU -> y_Robot
+
+        glm::dmat3 rNWU = glm::mat3_cast(qNWU);
+        glm::dmat3 rRobot = M * rNWU * glm::transpose(M);
+        return glm::normalize(glm::quat_cast(rRobot));
+    }
+
+    glm::quat RobotSchemaLoader::ConvertNWUQuatToRobotFrame(const glm::quat& qNWU)
+    {
+        return glm::quat(ConvertNWUQuatToRobotFrame(glm::dquat(qNWU)));
+    }
+
+    glm::dmat3 RobotSchemaLoader::ConvertRobotFrameInertiaToNWU(const glm::dmat3& iRobot)
+    {
+        // Robot Frame: [0]=X(Right), [1]=Y(Up), [2]=Z(Front)
+        // NWU Frame:   [0]=X(Front), [1]=Y(Left), [2]=Z(Up)
+        glm::dmat3 iNWU(0.0);
+        iNWU[0][0] = iRobot[2][2];
+        iNWU[1][1] = iRobot[0][0];
+        iNWU[2][2] = iRobot[1][1];
+        iNWU[0][1] = -iRobot[2][0];
+        iNWU[1][0] = -iRobot[0][2];
+        iNWU[0][2] = iRobot[2][1];
+        iNWU[2][0] = iRobot[1][2];
+        iNWU[1][2] = -iRobot[0][1];
+        iNWU[2][1] = -iRobot[1][0];
+        return iNWU;
+    }
 }
+

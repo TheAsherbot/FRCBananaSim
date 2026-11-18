@@ -21,6 +21,16 @@
 #include "Bridge/SimDeviceLockstepTest.h"
 #include "Robot/RobotAssemblerTest.h"
 #include "Integration/FullRobotEnduranceTest.h"
+#include "Robot/DifferentialMechanismTest.h"
+#include "Robot/ServoMechanismTest.h"
+#include "Robot/SchemaSerializationTest.h"
+#include "Robot/ConfiguratorTest.h"
+#include "RoundTripPipelineTest.h"
+#include "Interaction/ShooterSqueezeTest.h"
+#include "Interaction/FlightAerodynamicsTest.h"
+#include "Interaction/IntakeCaptureTest.h"
+#include "Interaction/PipelineIntegrationTest.h"
+#include "Interaction/GamePieceInteractionTest.h"
 
 #include <iostream>
 #include <string>
@@ -43,6 +53,16 @@ using FRCBananaSim::Tests::RunSensorSuiteTest;
 using FRCBananaSim::Tests::RunSimDeviceLockstepTest;
 using FRCBananaSim::Tests::RunRobotAssemblerTest;
 using FRCBananaSim::Tests::RunFullRobotEnduranceTest;
+using FRCBananaSim::Tests::RunDifferentialMechanismTest;
+using FRCBananaSim::Tests::RunServoMechanismTest;
+using FRCBananaSim::Tests::RunSchemaSerializationTest;
+using FRCBananaSim::Tests::RunConfiguratorTest;
+using FRCBananaSim::Tests::RunRoundTripPipelineTest;
+using FRCBananaSim::Tests::RunShooterSqueezeTest;
+using FRCBananaSim::Tests::RunFlightAerodynamicsTest;
+using FRCBananaSim::Tests::RunIntakeCaptureTest;
+using FRCBananaSim::Tests::RunPipelineIntegrationTest;
+using FRCBananaSim::Tests::RunGamePieceInteractionTest;
 
 int main(int argc, char* argv[])
 {
@@ -141,6 +161,57 @@ int main(int argc, char* argv[])
             runAll = false;
             RunFullRobotEnduranceTest(ctx);
         }
+        else if (arg == "--differential-mechanism")
+        {
+            runAll = false;
+            RunDifferentialMechanismTest(ctx);
+        }
+        else if (arg == "--servo-mechanism")
+        {
+            runAll = false;
+            RunServoMechanismTest(ctx);
+        }
+        else if (arg == "--schema-serialization")
+        {
+            runAll = false;
+            RunSchemaSerializationTest(ctx);
+        }
+        else if (arg == "--configurator")
+        {
+            runAll = false;
+            RunConfiguratorTest(ctx);
+        }
+        else if (arg == "--round-trip")
+        {
+            runAll = false;
+            RunRoundTripPipelineTest(ctx);
+        }
+        else if (arg == "--shooter-squeeze")
+        {
+            runAll = false;
+            RunShooterSqueezeTest(ctx);
+        }
+        else if (arg == "--flight-aero")
+        {
+            runAll = false;
+            RunFlightAerodynamicsTest(ctx);
+        }
+        else if (arg == "--intake-capture")
+        {
+            runAll = false;
+            RunIntakeCaptureTest(ctx);
+        }
+        else if (arg == "--pipeline-integration")
+        {
+            runAll = false;
+            RunPipelineIntegrationTest(ctx);
+        }
+        else if (arg == "--game-pieces" || arg == "--soak")
+        {
+            runAll = false;
+            RunGamePieceInteractionTest(ctx);
+        }
+
     }
 
     if (runAll)
@@ -162,6 +233,16 @@ int main(int argc, char* argv[])
         RunSimDeviceLockstepTest(ctx);
         RunRobotAssemblerTest(ctx);
         RunFullRobotEnduranceTest(ctx);
+        RunDifferentialMechanismTest(ctx);
+        RunServoMechanismTest(ctx);
+        RunSchemaSerializationTest(ctx);
+        RunConfiguratorTest(ctx);
+        RunRoundTripPipelineTest(ctx);
+        RunShooterSqueezeTest(ctx);
+        RunFlightAerodynamicsTest(ctx);
+        RunIntakeCaptureTest(ctx);
+        RunPipelineIntegrationTest(ctx);
+        RunGamePieceInteractionTest(ctx);
     }
 
     std::cout << "======================================\n";
