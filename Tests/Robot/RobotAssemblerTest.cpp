@@ -1134,5 +1134,58 @@ namespace FRCBananaSim::Tests
                 TEST_EXPECT_EQ(ctx, colComp->subColliders.size(), static_cast<size_t>(3));
             }
         }
+
+        // =============================================================
+        // 13. Robot Comp 2 Assembly Verification (RA13)
+        // =============================================================
+        {
+            std::cout << "  -> RA13: Robot Comp 2 Full Assembly Verification\n";
+
+            std::string comp2Manifest = "FRCBananaSim/Resources/Robots/Robot Comp 2/manifest.json";
+            std::string comp2Sidecar = "FRCBananaSim/Resources/Robots/Robot Comp 2/sidecar.json";
+            std::string materialsPath = "FRCBananaSim/Resources/Config/materials.json";
+
+            if (!std::filesystem::exists(comp2Manifest))
+            {
+                comp2Manifest = "../FRCBananaSim/Resources/Robots/Robot Comp 2/manifest.json";
+                comp2Sidecar = "../FRCBananaSim/Resources/Robots/Robot Comp 2/sidecar.json";
+                materialsPath = "../FRCBananaSim/Resources/Config/materials.json";
+            }
+
+            RobotSchemaLoader loader;
+            bool loadOk = loader.LoadRobot(comp2Manifest, comp2Sidecar, materialsPath);
+            TEST_EXPECT_TRUE(ctx, loadOk);
+            if (!loadOk || loader.HasErrors())
+            {
+                for (const auto& err : loader.GetErrors())
+                {
+                    std::cout << "  [Loader Error] " << err << "\n";
+                }
+            }
+
+            Physics::JoltContext jolt;
+            TEST_EXPECT_TRUE(ctx, jolt.Initialize());
+
+            Scene scene;
+            RobotAssembler assembler(scene, &jolt);
+            auto robot = assembler.Assemble(loader.GetManifest(), loader.GetSidecar(), loader.GetMaterials());
+
+            if (!robot.isSuccess)
+            {
+                std::cout << "  [Assembly Error] " << robot.errorMessage << "\n";
+            }
+            TEST_EXPECT_TRUE(ctx, robot.isSuccess);
+            TEST_EXPECT_EQ(ctx, robot.robotName, "Robot Comp 2");
+            TEST_EXPECT_TRUE(ctx, robot.chassisEntity != invalidEntity);
+            TEST_EXPECT_TRUE(ctx, robot.swerveSystem != nullptr);
+            TEST_EXPECT_TRUE(ctx, robot.dispatcher != nullptr);
+
+            std::cout << "  -> Comp 2 Assembly Stats:\n";
+            std::cout << "     Links: " << robot.linkEntities.size() << "\n";
+            std::cout << "     Joints: " << robot.jointEntities.size() << "\n";
+            std::cout << "     Mechanisms: " << robot.mechanismEntities.size() << "\n";
+            std::cout << "     Sensors: " << robot.sensorEntities.size() << "\n";
+            std::cout << "     ContactZones: " << robot.contactZoneEntities.size() << "\n";
+        }
     }
 }

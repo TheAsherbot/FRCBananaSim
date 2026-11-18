@@ -49,6 +49,7 @@
 #include "Telemetry/TelemeteryViewer/ProfilerWindow.h"
 #include "Telemetry/DrivetrainLogger.h"
 #include "Bridge/HALSimWebSocketServer.h"
+#include "Game/BananaGame.h"
 #include "Control/SimControlBoundary.h"
 #include "Utils/DebugDraw.h"
 #include "Utils/Log.h"
@@ -277,7 +278,7 @@ int main(int argc, char* argv[])
     FRCBananaSim::Telemetry::DrivetrainLogger drivetrainLogger(120000); // 10 min at 200 Hz
 
     // 2. Initialize Hardware Renderer (1600x900 OpenGL 3.3 Core)
-    FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Block 3 Reference 2026 Robot Test Station");
+    FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Robot Comp 2 Shootout");
     if (!renderer.IsValid())
     {
         SIM_LOG_FATAL("Failed to initialize OpenGL renderer window");
@@ -302,6 +303,47 @@ int main(int argc, char* argv[])
 
     scene.AddSystem(std::make_unique<FRCBananaSim::Core::ECS::Systems::TransformPropagationSystem>(scene));
     scene.AddSystem(std::make_unique<FRCBananaSim::Renderer::Systems::RenderSystem>(scene, renderer));
+
+    // Boot directly into Robot Comp 2 Shootout Game unless --test-station flag is passed
+    bool runTestStation = (argc > 1 && std::string(argv[1]) == "--test-station");
+    if (!runTestStation)
+    {
+        FRCBananaSim::Game::BananaGame game(scene, joltContext, renderer);
+        if (!game.Initialize())
+        {
+            SIM_LOG_FATAL("Failed to initialize BananaGame with Robot Comp 2");
+            return -1;
+        }
+
+        FRCBananaSim::Core::Engine engine(200.0, 0.0);
+
+        engine.SetFixedUpdateCallback([&](double dt)
+            {
+                game.FixedUpdate(dt);
+            });
+
+        engine.SetUpdateCallback([&](double dt)
+            {
+                if (renderer.ShouldClose() || game.ShouldExit())
+                {
+                    engine.RequestExit();
+                    return;
+                }
+
+                renderer.BeginFrame();
+
+                game.Update(dt);
+                game.Render3D();
+                game.RenderUI();
+
+                renderer.EndFrame();
+            });
+
+        engine.Run();
+
+        FRCBananaSim::Telemetry::TelemetryManager::Get().Shutdown();
+        return 0;
+    }
 
     auto assignTransforms = [&](Entity entity, const glm::vec3& pos, const glm::vec3& scale,
         const glm::quat& rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
@@ -440,6 +482,7 @@ int main(int argc, char* argv[])
             materialsPath = prefix + "FRCBananaSim/Resources/Config/materials.json";
             break;
         }
+
         std::string directCandidate = prefix + "Resources/Robots/Reference2026/manifest.json";
         if (std::filesystem::exists(directCandidate))
         {
@@ -465,7 +508,6 @@ int main(int argc, char* argv[])
     // Joint System for Jolt constraints management
     FRCBananaSim::Physics::Systems::JointSystem jointSystem(scene, joltContext);
 
-
     // Initial Warmup Pass: Allocate all Jolt rigid bodies and joint constraints
     // before the first simulation time step to prevent initial impulse explosion.
     if (robot.physicsSystem)
@@ -477,7 +519,6 @@ int main(int argc, char* argv[])
     jointSystem.ReadbackTelemetry();
     
     std::cout << "[Simulator] Robot assembled and physics bodies warmed up successfully.\n";
-
 
     // -------------------------------------------------------------------------
     // 8. Visual Mesh & Scale Attachment for All Robot Links

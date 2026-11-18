@@ -62,6 +62,7 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Interaction/IntakeSurfaceModel.cpp
     FRCBananaSim/Source/Interaction/Systems/RobotGamePieceSystem.cpp
     FRCBananaSim/Source/Interaction/Systems/FlightAerodynamicsSystem.cpp
+    FRCBananaSim/Source/Game/BananaGame.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
@@ -221,6 +222,7 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Interaction/IntakeSurfaceModel.cpp
     FRCBananaSim/Source/Interaction/Systems/RobotGamePieceSystem.cpp
     FRCBananaSim/Source/Interaction/Systems/FlightAerodynamicsSystem.cpp
+    FRCBananaSim/Source/Game/BananaGame.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp

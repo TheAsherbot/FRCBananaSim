@@ -12,11 +12,12 @@
   "invertOrbitY": false,
   "invertScrollZoom": true,
   "isOrthographic": true,
-  "lastRobotPath": "FRCBananaSim/Resources/Robots\\Reference2026",
+  "lastRobotPath": "FRCBananaSim/Resources/Robots\\Robot Comp 2",
   "orbitSensitivity": 0.4000000059604645,
   "panSensitivity": 0.0024999999441206455,
   "preset": 1,
   "recentRobots": [
+    "FRCBananaSim/Resources/Robots\\Robot Comp 2",
     "FRCBananaSim/Resources/Robots\\Reference2026"
   ],
   "zoomSensitivity": 0.20000000298023224

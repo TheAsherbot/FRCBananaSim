@@ -56,6 +56,18 @@ namespace FRCBananaSim::Core::ECS::Core
         const std::vector<Entity>& GetEntities() const;
 
         /**
+         * @brief Checks if an entity handle is currently valid and active in the scene.
+         * @param entity The entity handle to inspect.
+         * @return True if valid and alive, false otherwise.
+         */
+        bool IsEntityValid(Entity entity) const
+        {
+            return entity < entityToIndex.size() && entityToIndex[entity] != invalidIndex;
+        }
+
+        bool IsAlive(Entity entity) const { return IsEntityValid(entity); }
+
+        /**
          * @brief Checks if an entity possesses a component of type T.
          * @tparam T The component type to check.
          * @param entity The entity handle to inspect.

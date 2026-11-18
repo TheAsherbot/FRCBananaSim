@@ -1225,12 +1225,44 @@ namespace FRCBananaSim::Robot
                 swerveCfg.drive.servo = Actuation::ServoModel::FromPreset(sidecar.swerve.driveServoPreset, Actuation::ServoMode::Continuous);
             }
 
-            for (uint32_t i = 0; i < 4; ++i)
+            if (sidecar.swerve.driveGearRatio > 0.1)
             {
-                swerveCfg.modules[i].drivePwmChannel = sidecar.swerve.modules[i].drivePwmChannel;
-                swerveCfg.modules[i].steerPwmChannel = sidecar.swerve.modules[i].steerPwmChannel;
-                swerveCfg.modules[i].driveCANId = sidecar.swerve.modules[i].driveCanId;
-                swerveCfg.modules[i].steerCANId = sidecar.swerve.modules[i].steerCanId;
+                swerveCfg.drive.motor = CreateMotorFromPreset(
+                    sidecar.swerve.driveMotorPreset,
+                    sidecar.swerve.driveGearRatio,
+                    sidecar.swerve.driveEfficiency > 0.0 ? sidecar.swerve.driveEfficiency : 0.96);
+            }
+            if (sidecar.swerve.steerGearRatio > 0.1)
+            {
+                swerveCfg.steer.motor = CreateMotorFromPreset(
+                    sidecar.swerve.steerMotorPreset,
+                    sidecar.swerve.steerGearRatio,
+                    sidecar.swerve.steerEfficiency > 0.0 ? sidecar.swerve.steerEfficiency : 0.92);
+            }
+            if (sidecar.swerve.wheelRadiusM > 0.001)
+            {
+                swerveCfg.tire.wheelRadius = sidecar.swerve.wheelRadiusM;
+            }
+
+            for (uint32_t i = 0; i < 4 && i < sidecar.swerve.modules.size(); ++i)
+            {
+                const auto& mod = sidecar.swerve.modules[i];
+                swerveCfg.modules[i].name = mod.name;
+                swerveCfg.modules[i].drivePwmChannel = mod.drivePwmChannel;
+                swerveCfg.modules[i].steerPwmChannel = mod.steerPwmChannel;
+                swerveCfg.modules[i].driveCANId = mod.driveCanId;
+                swerveCfg.modules[i].steerCANId = mod.steerCanId;
+                swerveCfg.modules[i].canCoderId = mod.cancoderId;
+
+                // Support both Engine frame (+X Right, +Y Up, +Z Front) and NWU (+X Fwd, +Y Left, +Z Up)
+                if (std::abs(mod.posM.y) < 1e-4 && (std::abs(mod.posM.x) > 1e-4 || std::abs(mod.posM.z) > 1e-4))
+                {
+                    swerveCfg.modules[i].locationOnChassis = glm::vec2(mod.posM.z, -mod.posM.x);
+                }
+                else if (std::abs(mod.posM.x) > 1e-4 || std::abs(mod.posM.y) > 1e-4)
+                {
+                    swerveCfg.modules[i].locationOnChassis = glm::vec2(mod.posM.x, mod.posM.y);
+                }
             }
 
             Actuation::BatteryModel bat = Actuation::BatteryModel::FRCStandard();
