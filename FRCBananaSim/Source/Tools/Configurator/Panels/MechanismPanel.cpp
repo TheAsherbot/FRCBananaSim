@@ -1371,6 +1371,12 @@ namespace FRCBananaSim::Tools::Configurator
 
         if (mechToDelete >= 0 && mechToDelete < static_cast<int>(mechanisms.size()))
         {
+            if (state.selectedMechanism == mechanisms[mechToDelete].name)
+            {
+                state.selectedMechanism.clear();
+                state.selectedJoint.clear();
+                state.selectedLink.clear();
+            }
             mechanisms.erase(mechanisms.begin() + mechToDelete);
             state.RunLinter();
         }

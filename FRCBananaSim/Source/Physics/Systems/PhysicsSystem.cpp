@@ -79,7 +79,10 @@ namespace FRCBananaSim::Physics::Systems
             {
                 if (!bodyID.IsInvalid())
                 {
-                    bodyInterface.RemoveBody(bodyID);
+                    if (bodyInterface.IsAdded(bodyID))
+                    {
+                        bodyInterface.RemoveBody(bodyID);
+                    }
                     bodyInterface.DestroyBody(bodyID);
                 }
             }
@@ -89,6 +92,7 @@ namespace FRCBananaSim::Physics::Systems
 
     JPH::GroupFilterTable* PhysicsSystem::GetGroupFilterTable() const
     {
+
         return groupFilterTable.GetPtr();
     }
 
@@ -122,11 +126,21 @@ namespace FRCBananaSim::Physics::Systems
             return;
         }
 
+        JPH::BodyID id = rigidBody->bodyID;
         if (joltContext.IsInitialized())
         {
             JPH::BodyInterface& bodyInterface = joltContext.GetBodyInterface();
-            bodyInterface.RemoveBody(rigidBody->bodyID);
-            bodyInterface.DestroyBody(rigidBody->bodyID);
+            if (bodyInterface.IsAdded(id))
+            {
+                bodyInterface.RemoveBody(id);
+            }
+            bodyInterface.DestroyBody(id);
+        }
+
+        auto it = std::find(createdBodies.begin(), createdBodies.end(), id);
+        if (it != createdBodies.end())
+        {
+            createdBodies.erase(it);
         }
 
         rigidBody->isCreated = false;

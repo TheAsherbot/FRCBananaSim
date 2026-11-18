@@ -46,6 +46,8 @@
 
 #include "Robot/Sensors/Systems/SensorSystem.h"
 
+#include "Interaction/Systems/FlightAerodynamicsSystem.h"
+
 #include "Control/SimControlBoundary.h"
 
 
@@ -85,6 +87,7 @@ namespace FRCBananaSim::Robot
         Core::ECS::Core::Entity chassisEntity = Core::ECS::Core::invalidEntity;
 
         Core::ECS::Core::Entity batteryEntity = Core::ECS::Core::invalidEntity;
+        Core::ECS::Core::Scene* scene = nullptr;
 
 
 
@@ -127,6 +130,8 @@ namespace FRCBananaSim::Robot
         std::shared_ptr<Mechanisms::Systems::FlywheelSystem> flywheelSystem;
 
         std::shared_ptr<Mechanisms::Systems::CompositeMassSystem> compositeMassSystem;
+
+        std::shared_ptr<Interaction::Systems::FlightAerodynamicsSystem> flightAerodynamicsSystem;
 
         std::shared_ptr<Physics::Systems::PhysicsSystem> physicsSystem;
 

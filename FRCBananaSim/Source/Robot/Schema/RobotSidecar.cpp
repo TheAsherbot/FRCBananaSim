@@ -117,4 +117,60 @@ namespace FRCBananaSim::Robot::Schema
         def.hasLimits = false;
         return def;
     }
+
+    const ContactZoneDefinition* RobotSidecar::FindContactZone(const std::string& zoneName) const
+    {
+        for (const auto& cz : contactZones)
+        {
+            if (cz.name == zoneName)
+            {
+                return &cz;
+            }
+        }
+        return nullptr;
+    }
+
+    ContactZoneDefinition* RobotSidecar::FindContactZone(const std::string& zoneName)
+    {
+        for (auto& cz : contactZones)
+        {
+            if (cz.name == zoneName)
+            {
+                return &cz;
+            }
+        }
+        return nullptr;
+    }
+
+    std::vector<ContactZoneDefinition> RobotSidecar::GetEffectiveContactZones(const RobotManifest& manifest) const
+    {
+        std::vector<ContactZoneDefinition> result;
+        std::unordered_map<std::string, size_t> zoneIndexMap;
+
+        // 1. Seed with CAD manifest contact zones
+        for (const auto& cz : manifest.contactZones)
+        {
+            zoneIndexMap[cz.name] = result.size();
+            result.push_back(cz);
+        }
+
+        // 2. Apply sidecar overrides or additions
+        for (const auto& cz : contactZones)
+        {
+            auto it = zoneIndexMap.find(cz.name);
+            if (it != zoneIndexMap.end())
+            {
+                // Override existing manifest zone with sidecar parameters
+                result[it->second] = cz;
+            }
+            else
+            {
+                // Append new sidecar-defined zone
+                zoneIndexMap[cz.name] = result.size();
+                result.push_back(cz);
+            }
+        }
+
+        return result;
+    }
 }

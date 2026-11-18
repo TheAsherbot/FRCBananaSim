@@ -133,7 +133,20 @@
     <ClCompile Include="Source\Utils\Log.cpp" />
 
     <!-- Differential Mechanism & Playground -->
-    <ClCompile Include="Source\Robot\Mechanisms/Systems/DifferentialMechanismSystem.cpp" />
+    <ClCompile Include="Source\Robot\Mechanisms\Systems\DifferentialMechanismSystem.cpp" />
+    <ClCompile Include="Source\Robot\Mechanisms\Systems\FlywheelSystem.cpp" />
+    <ClCompile Include="Source\Robot\Sensors\Systems\SensorSystem.cpp" />
+    <ClCompile Include="Source\Robot\Sensors\Models\EncoderSensorModel.cpp" />
+    <ClCompile Include="Source\Robot\Sensors\Models\IMUSensorModel.cpp" />
+    <ClCompile Include="Source\Robot\Schema\MaterialLibrary.cpp" />
+    <ClCompile Include="Source\Robot\Schema\RobotManifest.cpp" />
+    <ClCompile Include="Source\Robot\Schema\RobotSidecar.cpp" />
+    <ClCompile Include="Source\Robot\Schema\RobotSchemaLoader.cpp" />
+    <ClCompile Include="Source\Robot\Schema\RobotSidecarSerializer.cpp" />
+    <ClCompile Include="Source\Interaction\ShooterSqueezeModel.cpp" />
+    <ClCompile Include="Source\Interaction\IntakeSurfaceModel.cpp" />
+    <ClCompile Include="Source\Interaction\Systems\RobotGamePieceSystem.cpp" />
+    <ClCompile Include="Source\Interaction\Systems\FlightAerodynamicsSystem.cpp" />
     <ClCompile Include="Source\Playground\PlaygroundScene.cpp" />
     <ClCompile Include="Source\Playground\PlaygroundMain.cpp" />
   </ItemGroup>
@@ -142,6 +155,17 @@
     <ClInclude Include="Source\Actuation\ServoModel.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\DifferentialComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Systems\DifferentialMechanismSystem.h" />
+    <ClInclude Include="Source\Robot\Mechanisms\Components\FlywheelComponent.h" />
+    <ClInclude Include="Source\Robot\Mechanisms\Systems\FlywheelSystem.h" />
+    <ClInclude Include="Source\Robot\Sensors\Components\ContactZoneComponent.h" />
+    <ClInclude Include="Source\Robot\Sensors\Components\BeamBreakComponent.h" />
+    <ClInclude Include="Source\Robot\Sensors\Systems\SensorSystem.h" />
+    <ClInclude Include="Source\Interaction\GamePieceSpec.h" />
+    <ClInclude Include="Source\Interaction\Components\GamePieceComponent.h" />
+    <ClInclude Include="Source\Interaction\ShooterSqueezeModel.h" />
+    <ClInclude Include="Source\Interaction\IntakeSurfaceModel.h" />
+    <ClInclude Include="Source\Interaction\Systems\RobotGamePieceSystem.h" />
+    <ClInclude Include="Source\Interaction\Systems\FlightAerodynamicsSystem.h" />
     <ClInclude Include="Source\Playground\PlaygroundScene.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

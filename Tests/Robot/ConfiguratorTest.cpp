@@ -7,6 +7,7 @@
 #include "TestFramework.h"
 #include "Tools/Configurator/ConfiguratorState.h"
 #include "Tools/Configurator/Panels/ConfiguratorWidgets.h"
+#include "Tools/Configurator/Panels/CADViewportPanel.h"
 #include "Robot/Schema/RobotSchemaLoader.h"
 
 #include <filesystem>
@@ -232,6 +233,39 @@ namespace FRCBananaSim::Tests
                 }
             }
             TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+        }
+
+        // =============================================================
+        // 5b. CF5b: Load and Validate Robot Comp 2
+        // =============================================================
+        {
+            std::cout << "  -> CF5b: Load and Validate Robot Comp 2\n";
+
+            std::string comp2Path = "FRCBananaSim/Resources/Robots/Robot Comp 2";
+            if (!std::filesystem::exists(comp2Path))
+            {
+                comp2Path = "../FRCBananaSim/Resources/Robots/Robot Comp 2";
+            }
+
+            if (std::filesystem::exists(comp2Path))
+            {
+                ConfiguratorState state;
+                bool loaded = state.LoadCADFolder(comp2Path);
+                TEST_EXPECT_TRUE(ctx, loaded);
+                TEST_EXPECT_TRUE(ctx, state.isCadLoaded);
+                TEST_EXPECT_TRUE(ctx, state.isSidecarLoaded);
+
+                state.RunLinter();
+                if (!state.linterErrors.empty())
+                {
+                    std::cout << "Linter errors for Robot Comp 2:\n";
+                    for (const auto& err : state.linterErrors)
+                    {
+                        std::cout << "  - " << err << "\n";
+                    }
+                }
+                TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+            }
         }
 
         // =============================================================
@@ -1229,6 +1263,285 @@ namespace FRCBananaSim::Tests
             TEST_EXPECT_NEAR(ctx, reloadState.sidecar.bumpers.massKg, 6.0, 1e-4);
 
             std::filesystem::remove(tempSidecar);
+        }
+
+        // =============================================================
+        // 11. CF11: Contact Zones Document Model & Linter Diagnostics
+        // =============================================================
+        {
+            std::cout << "  -> CF11: Contact Zones Document Model & Linter Diagnostics\n";
+
+            ConfiguratorState state;
+            bool ok = state.LoadCADFolder(refPath);
+            TEST_EXPECT_TRUE(ctx, ok);
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // Initially Reference2026 has 2 CAD contact zones in manifest:
+            // "zone_intake_roller" and "zone_shooter_nip"
+            auto initialZones = state.GetEffectiveContactZones();
+            TEST_EXPECT_EQ(ctx, initialZones.size(), static_cast<size_t>(2));
+
+            // 1. Add valid sidecar contact zone
+            ContactZoneDefinition newZone;
+            newZone.name = "indexer_stage1";
+            newZone.parentLink = "base_link";
+            newZone.role = "intake";
+            newZone.dimensionsM = { 0.2, 0.2, 0.1 };
+            newZone.tangentAxis = { 0.0, 1.0, 0.0 };
+            newZone.compressionAxis = { 0.0, 0.0, 1.0 };
+            newZone.nominalGapM = 0.038;
+            state.sidecar.contactZones.push_back(newZone);
+
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+            TEST_EXPECT_EQ(ctx, state.GetEffectiveContactZones().size(), static_cast<size_t>(3));
+
+            // 2. Non-existent parent link error
+            state.sidecar.contactZones.back().parentLink = "non_existent_link_xyz";
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty());
+            bool foundParentErr = false;
+            for (const auto& err : state.linterErrors)
+            {
+                if (err.find("Contact Zone Error: Zone 'indexer_stage1' references non-existent parentLink") != std::string::npos)
+                {
+                    foundParentErr = true;
+                }
+            }
+            TEST_EXPECT_TRUE(ctx, foundParentErr);
+            state.sidecar.contactZones.back().parentLink = "base_link";
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 3. Non-positive size error
+            state.sidecar.contactZones.back().dimensionsM.x = 0.0;
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty());
+            bool foundSizeErr = false;
+            for (const auto& err : state.linterErrors)
+            {
+                if (err.find("dimensions must be strictly positive") != std::string::npos)
+                {
+                    foundSizeErr = true;
+                }
+            }
+            TEST_EXPECT_TRUE(ctx, foundSizeErr);
+            state.sidecar.contactZones.back().dimensionsM.x = 0.2;
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 4. Non-orthogonal tangent and compression axes warning
+            state.sidecar.contactZones.back().tangentAxis = { 1.0, 0.0, 0.0 };
+            state.sidecar.contactZones.back().compressionAxis = { 1.0, 0.0, 0.0 }; // Collinear!
+            state.RunLinter();
+            bool foundOrthWarn = false;
+            for (const auto& w : state.linterWarnings)
+            {
+                if (w.find("tangentAxis and compressionAxis are not perpendicular") != std::string::npos)
+                {
+                    foundOrthWarn = true;
+                }
+            }
+            TEST_EXPECT_TRUE(ctx, foundOrthWarn);
+            state.sidecar.contactZones.back().compressionAxis = { 0.0, 0.0, 1.0 };
+            state.RunLinter();
+
+            // 5. Beam break sensor binding to sidecar contact zone
+            SensorConfig beamBreak;
+            beamBreak.name = "indexer_entry_break";
+            beamBreak.type = "beam_break";
+            beamBreak.dioChannel = 15; // unused channel
+            beamBreak.contactZone = "indexer_stage1";
+            state.sidecar.sensors.push_back(beamBreak);
+
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // Point beam break to non-existent zone
+            state.sidecar.sensors.back().contactZone = "unknown_zone";
+            state.RunLinter();
+            TEST_EXPECT_FALSE(ctx, state.linterErrors.empty());
+            bool foundBreakZoneErr = false;
+            for (const auto& err : state.linterErrors)
+            {
+                if (err.find("Orphan Contact Zone Reference: Sensor 'indexer_entry_break' references non-existent contact zone 'unknown_zone'") != std::string::npos)
+                {
+                    foundBreakZoneErr = true;
+                }
+            }
+            TEST_EXPECT_TRUE(ctx, foundBreakZoneErr);
+            state.sidecar.sensors.back().contactZone = "indexer_stage1";
+            state.RunLinter();
+            TEST_EXPECT_TRUE(ctx, state.linterErrors.empty());
+
+            // 6. Save and reload sidecar with contact zones
+            std::string tempSidecar = (std::filesystem::temp_directory_path() / "test_sidecar_contactzones.json").string();
+            bool saveOk = state.SaveSidecar(tempSidecar);
+            TEST_EXPECT_TRUE(ctx, saveOk);
+
+            ConfiguratorState reloadState;
+            reloadState.manifest = state.manifest;
+            reloadState.isCadLoaded = true;
+            bool reloadOk = reloadState.LoadSidecar(tempSidecar);
+            TEST_EXPECT_TRUE(ctx, reloadOk);
+            TEST_EXPECT_EQ(ctx, reloadState.sidecar.contactZones.size(), static_cast<size_t>(1));
+            TEST_EXPECT_EQ(ctx, reloadState.sidecar.contactZones[0].name, "indexer_stage1");
+            TEST_EXPECT_EQ(ctx, reloadState.sidecar.contactZones[0].parentLink, "base_link");
+            TEST_EXPECT_NEAR(ctx, reloadState.sidecar.contactZones[0].dimensionsM.x, 0.2, 1e-4);
+            TEST_EXPECT_NEAR(ctx, reloadState.sidecar.contactZones[0].dimensionsM.y, 0.2, 1e-4);
+            TEST_EXPECT_NEAR(ctx, reloadState.sidecar.contactZones[0].dimensionsM.z, 0.1, 1e-4);
+            TEST_EXPECT_NEAR(ctx, reloadState.sidecar.contactZones[0].nominalGapM, 0.038, 1e-4);
+
+            std::filesystem::remove(tempSidecar);
+
+            // 7. Verify deletion of contact zones down to empty without crash
+            ConfiguratorState emptyZoneState;
+            emptyZoneState.manifest.robotName = "TestEmpty";
+            Robot::Schema::ContactZoneDefinition czOnly;
+            czOnly.name = "single_custom_zone";
+            czOnly.parentLink = "base_link";
+            czOnly.role = "intake";
+            czOnly.dimensionsM = { 0.1, 0.1, 0.1 };
+            emptyZoneState.sidecar.contactZones.push_back(czOnly);
+            emptyZoneState.selectedContactZone = czOnly.name;
+
+            TEST_EXPECT_EQ(ctx, emptyZoneState.GetEffectiveContactZones().size(), static_cast<size_t>(1));
+
+            // Simulate deletion of the only contact zone
+            auto it = std::remove_if(emptyZoneState.sidecar.contactZones.begin(), emptyZoneState.sidecar.contactZones.end(),
+                [&](const auto& z) { return z.name == czOnly.name; });
+            emptyZoneState.sidecar.contactZones.erase(it, emptyZoneState.sidecar.contactZones.end());
+            auto remaining = emptyZoneState.GetEffectiveContactZones();
+            emptyZoneState.selectedContactZone = remaining.empty() ? "" : remaining[0].name;
+
+            TEST_EXPECT_TRUE(ctx, emptyZoneState.selectedContactZone.empty());
+            TEST_EXPECT_TRUE(ctx, emptyZoneState.GetEffectiveContactZones().empty());
+
+            // Ensure FindContactZone on empty/deleted name is safely nullptr and doesn't crash
+            TEST_EXPECT_TRUE(ctx, emptyZoneState.sidecar.FindContactZone(emptyZoneState.selectedContactZone) == nullptr);
+            TEST_EXPECT_TRUE(ctx, emptyZoneState.manifest.FindContactZone(emptyZoneState.selectedContactZone) == nullptr);
+            emptyZoneState.RunLinter();
+            TEST_EXPECT_TRUE(ctx, emptyZoneState.linterErrors.empty());
+        }
+
+        // =============================================================
+        // 12. CF12: Interactive CAD Viewport Canonical Views, Orthographic Projection & Camera Preferences Persistence
+        // =============================================================
+        {
+            std::cout << "  -> CF12: Interactive CAD Viewport Canonical Views, Ortho Projection & Camera Preferences\n";
+
+            bool createdImGui = false;
+            if (ImGui::GetCurrentContext() == nullptr)
+            {
+                ImGui::CreateContext();
+                createdImGui = true;
+            }
+
+            CADViewportPanel viewport;
+
+            // 1. Initial Default State
+            viewport.ResetCamera();
+            TEST_EXPECT_FALSE(ctx, viewport.IsOrthographic());
+            TEST_EXPECT_NEAR(ctx, viewport.GetDistance(), 2.2f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, viewport.GetYaw(), 215.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, viewport.GetPitch(), 25.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, viewport.GetTarget().y, 0.25f, 1e-3f);
+            TEST_EXPECT_TRUE(ctx, viewport.GetCurrentViewName().find("Perspective") != std::string::npos);
+
+            // 2. Canonical Views & Auto-Ortho Snapping
+            // Right (+X)
+            viewport.SetCanonicalView(CanonicalView::Right, /*makeOrtho=*/true);
+            TEST_EXPECT_TRUE(ctx, viewport.IsOrthographic());
+            TEST_EXPECT_NEAR(ctx, viewport.GetYaw(), 90.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, viewport.GetPitch(), 0.0f, 1e-3f);
+            TEST_EXPECT_EQ(ctx, viewport.GetCurrentViewName(), "Right (+X) [Orthographic]");
+
+            // Left (-X)
+            viewport.SetCanonicalView(CanonicalView::Left, /*makeOrtho=*/true);
+            TEST_EXPECT_TRUE(ctx, viewport.IsOrthographic());
+            TEST_EXPECT_NEAR(ctx, viewport.GetYaw(), 270.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, viewport.GetPitch(), 0.0f, 1e-3f);
+            TEST_EXPECT_EQ(ctx, viewport.GetCurrentViewName(), "Left (-X) [Orthographic]");
+
+            // Top (+Y)
+            viewport.SetCanonicalView(CanonicalView::Top, /*makeOrtho=*/true);
+            TEST_EXPECT_TRUE(ctx, viewport.IsOrthographic());
+            TEST_EXPECT_NEAR(ctx, viewport.GetYaw(), 180.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, viewport.GetPitch(), 89.99f, 1e-2f);
+            TEST_EXPECT_EQ(ctx, viewport.GetCurrentViewName(), "Top (+Y) [Orthographic]");
+
+            // Bottom (-Y)
+            viewport.SetCanonicalView(CanonicalView::Bottom, /*makeOrtho=*/true);
+            TEST_EXPECT_TRUE(ctx, viewport.IsOrthographic());
+            TEST_EXPECT_NEAR(ctx, viewport.GetYaw(), 180.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, viewport.GetPitch(), -89.99f, 1e-2f);
+            TEST_EXPECT_EQ(ctx, viewport.GetCurrentViewName(), "Bottom (-Y) [Orthographic]");
+
+            // Front (+Z)
+            viewport.SetCanonicalView(CanonicalView::Front, /*makeOrtho=*/true);
+            TEST_EXPECT_TRUE(ctx, viewport.IsOrthographic());
+            TEST_EXPECT_NEAR(ctx, viewport.GetYaw(), 0.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, viewport.GetPitch(), 0.0f, 1e-3f);
+            TEST_EXPECT_EQ(ctx, viewport.GetCurrentViewName(), "Front (+Z) [Orthographic]");
+
+            // Back (-Z)
+            viewport.SetCanonicalView(CanonicalView::Back, /*makeOrtho=*/true);
+            TEST_EXPECT_TRUE(ctx, viewport.IsOrthographic());
+            TEST_EXPECT_NEAR(ctx, viewport.GetYaw(), 180.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, viewport.GetPitch(), 0.0f, 1e-3f);
+            TEST_EXPECT_EQ(ctx, viewport.GetCurrentViewName(), "Back (-Z) [Orthographic]");
+
+            // 3. Orthographic Toggle
+            viewport.ToggleOrthographic();
+            TEST_EXPECT_FALSE(ctx, viewport.IsOrthographic());
+            TEST_EXPECT_EQ(ctx, viewport.GetCurrentViewName(), "Back (-Z) [Perspective]");
+            viewport.ToggleOrthographic();
+            TEST_EXPECT_TRUE(ctx, viewport.IsOrthographic());
+
+            // 4. Persistence of Preferences to JSON
+            std::string tempSettings = (std::filesystem::temp_directory_path() / "test_configurator_cam_settings.json").string();
+            viewport.SetPreset(CameraPreset::Blender);
+            viewport.GetCameraConfig().invertScrollZoom = false;
+            viewport.GetCameraConfig().invertOrbitX = true;
+            viewport.GetCameraConfig().invertOrbitY = true;
+            viewport.GetCameraConfig().orbitSensitivity = 0.55f;
+            viewport.GetCameraConfig().panSensitivity = 0.0042f;
+            viewport.GetCameraConfig().zoomSensitivity = 0.35f;
+            viewport.GetCameraConfig().fovDegrees = 60.0f;
+            viewport.SetYaw(135.0f);
+            viewport.SetPitch(40.0f);
+            viewport.SetDistance(3.75f);
+            viewport.SetTarget(glm::vec3(0.12f, 0.45f, -0.22f));
+
+            viewport.SaveSettings(tempSettings);
+            TEST_EXPECT_TRUE(ctx, std::filesystem::exists(tempSettings));
+
+            // Reload into fresh panel
+            CADViewportPanel loadedPanel;
+            loadedPanel.LoadSettings(tempSettings);
+
+            TEST_EXPECT_TRUE(ctx, loadedPanel.GetCameraConfig().preset == CameraPreset::Blender);
+            TEST_EXPECT_FALSE(ctx, loadedPanel.GetCameraConfig().invertScrollZoom);
+            TEST_EXPECT_TRUE(ctx, loadedPanel.GetCameraConfig().invertOrbitX);
+            TEST_EXPECT_TRUE(ctx, loadedPanel.GetCameraConfig().invertOrbitY);
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetCameraConfig().orbitSensitivity, 0.55f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetCameraConfig().panSensitivity, 0.0042f, 1e-4f);
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetCameraConfig().zoomSensitivity, 0.35f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetCameraConfig().fovDegrees, 60.0f, 1e-3f);
+            TEST_EXPECT_TRUE(ctx, loadedPanel.IsOrthographic());
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetYaw(), 135.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetPitch(), 40.0f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetDistance(), 3.75f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetTarget().x, 0.12f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetTarget().y, 0.45f, 1e-3f);
+            TEST_EXPECT_NEAR(ctx, loadedPanel.GetTarget().z, -0.22f, 1e-3f);
+
+            // Cleanup
+            std::filesystem::remove(tempSettings);
+            if (createdImGui)
+            {
+                ImGui::DestroyContext();
+            }
         }
     }
 }

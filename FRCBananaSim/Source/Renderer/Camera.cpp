@@ -126,7 +126,6 @@ namespace FRCBananaSim::Renderer
         if (mode == Mode::Orbit)
         {
             position = orbitTarget - Front() * orbitDistance;
-            DebugDraw::Sphere(orbitTarget, 0.25f, glm::vec3(1.0f, 0.0f, 0.0f), 32, false);
         }
     }
 

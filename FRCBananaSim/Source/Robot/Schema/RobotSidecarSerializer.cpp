@@ -237,9 +237,10 @@ namespace FRCBananaSim::Robot::Schema
                             m["springAssist"] = sa;
                         }
                     }
-                    else if (mech.role == "flywheel")
+                    else if (mech.role == "flywheel" || mech.role == "intake")
                     {
                         m["flywheelInertia_kgm2"] = mech.flywheelInertiaKgm2;
+                        m["rollerRadius_m"] = mech.rollerRadiusM;
                         m["spinAxis"] = { mech.spinAxis.x, mech.spinAxis.y, mech.spinAxis.z };
                         if (!mech.visualLink.empty())
                         {
@@ -394,12 +395,16 @@ namespace FRCBananaSim::Robot::Schema
                     s["canId"] = sensor.canId;
                 }
 
-                if (sensor.dioChannel > 0 || sensor.type == "limit_switch" || sensor.type == "beam_break" || sensor.type == "rev_through_bore")
+                bool isRevI2C = (sensor.type == "rev_through_bore" && sensor.bus.find("i2c") != std::string::npos);
+
+                if (sensor.dioChannel > 0 || sensor.type == "limit_switch" || sensor.type == "beam_break" ||
+                    (sensor.type == "rev_through_bore" && !isRevI2C && sensor.attachToControllerCanId == 0))
                 {
                     s["dioChannel"] = sensor.dioChannel;
                 }
 
-                if (sensor.secondaryDioChannel > 0 || sensor.type == "rev_through_bore")
+                if (sensor.secondaryDioChannel > 0 ||
+                    (sensor.type == "rev_through_bore" && !isRevI2C && sensor.attachToControllerCanId == 0))
                 {
                     s["secondaryDioChannel"] = sensor.secondaryDioChannel;
                 }
@@ -600,6 +605,28 @@ namespace FRCBananaSim::Robot::Schema
                 bJson["cutoutWidth_m"] = sidecar.bumpers.cutoutWidthM;
             }
             root["bumpers"] = bJson;
+        }
+
+        // 9. Contact Zones (Intake, Shooter, Indexer Interaction Volumes)
+        if (!sidecar.contactZones.empty())
+        {
+            nlohmann::json czArray = nlohmann::json::array();
+            for (const auto& cz : sidecar.contactZones)
+            {
+                nlohmann::json czNode;
+                czNode["name"] = cz.name;
+                czNode["role"] = cz.role;
+                czNode["parentLink"] = cz.parentLink;
+                czNode["shape"] = cz.shape;
+                czNode["origin_m"] = { cz.originM.x, cz.originM.y, cz.originM.z };
+                czNode["rotation_quat"] = { cz.rotationQuat.w, cz.rotationQuat.x, cz.rotationQuat.y, cz.rotationQuat.z };
+                czNode["dimensions_m"] = { cz.dimensionsM.x, cz.dimensionsM.y, cz.dimensionsM.z };
+                czNode["tangentAxis"] = { cz.tangentAxis.x, cz.tangentAxis.y, cz.tangentAxis.z };
+                czNode["compressionAxis"] = { cz.compressionAxis.x, cz.compressionAxis.y, cz.compressionAxis.z };
+                czNode["nominalGap_m"] = cz.nominalGapM;
+                czArray.push_back(czNode);
+            }
+            root["contactZones"] = czArray;
         }
 
         return root;

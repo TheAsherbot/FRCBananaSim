@@ -25,12 +25,18 @@ namespace FRCBananaSim::Tools::Configurator
 
     CADViewportPanel::CADViewportPanel()
     {
-        SetPreset(CameraPreset::Fusion360);
+        SetPreset(CameraPreset::Fusion360, /*save=*/false);
+        // Default camera state
+        cameraTarget = glm::vec3(0.0f, 0.25f, 0.0f);
+        cameraDistance = 2.2f;
+        cameraYaw = 215.0f;
+        cameraPitch = 25.0f;
+        cameraConfig.isOrthographic = false;
+
         LoadSettings();
-        ResetCamera();
     }
 
-    void CADViewportPanel::SetPreset(CameraPreset preset)
+    void CADViewportPanel::SetPreset(CameraPreset preset, bool save)
     {
         cameraConfig.preset = preset;
         if (preset == CameraPreset::Fusion360)
@@ -54,27 +60,15 @@ namespace FRCBananaSim::Tools::Configurator
             cameraConfig.panSensitivity = 0.0025f;
             cameraConfig.zoomSensitivity = 0.20f;
         }
-        SaveSettings();
+        if (save)
+        {
+            SaveSettings();
+        }
     }
 
     void CADViewportPanel::LoadSettings(const std::string& filepath)
     {
-        std::string configPath = filepath;
-        if (configPath.empty())
-        {
-            if (std::filesystem::exists("FRCBananaSim/Resources/Config/configurator_settings.json"))
-            {
-                configPath = "FRCBananaSim/Resources/Config/configurator_settings.json";
-            }
-            else if (std::filesystem::exists("../FRCBananaSim/Resources/Config/configurator_settings.json"))
-            {
-                configPath = "../FRCBananaSim/Resources/Config/configurator_settings.json";
-            }
-            else if (std::filesystem::exists("configurator_settings.json"))
-            {
-                configPath = "configurator_settings.json";
-            }
-        }
+        std::string configPath = ConfiguratorState::ResolveSettingsPath(filepath);
 
         if (!configPath.empty() && std::filesystem::exists(configPath))
         {
@@ -93,6 +87,16 @@ namespace FRCBananaSim::Tools::Configurator
                     if (j.contains("panSensitivity")) cameraConfig.panSensitivity = j["panSensitivity"].get<float>();
                     if (j.contains("zoomSensitivity")) cameraConfig.zoomSensitivity = j["zoomSensitivity"].get<float>();
                     if (j.contains("fovDegrees")) cameraConfig.fovDegrees = j["fovDegrees"].get<float>();
+                    if (j.contains("isOrthographic")) cameraConfig.isOrthographic = j["isOrthographic"].get<bool>();
+                    if (j.contains("cameraYaw")) cameraYaw = j["cameraYaw"].get<float>();
+                    if (j.contains("cameraPitch")) cameraPitch = j["cameraPitch"].get<float>();
+                    if (j.contains("cameraDistance")) cameraDistance = j["cameraDistance"].get<float>();
+                    if (j.contains("cameraTarget") && j["cameraTarget"].is_array() && j["cameraTarget"].size() == 3)
+                    {
+                        cameraTarget.x = j["cameraTarget"][0].get<float>();
+                        cameraTarget.y = j["cameraTarget"][1].get<float>();
+                        cameraTarget.z = j["cameraTarget"][2].get<float>();
+                    }
                 }
             }
             catch (...) {}
@@ -101,22 +105,7 @@ namespace FRCBananaSim::Tools::Configurator
 
     void CADViewportPanel::SaveSettings(const std::string& filepath) const
     {
-        std::string configPath = filepath;
-        if (configPath.empty())
-        {
-            if (std::filesystem::exists("FRCBananaSim/Resources/Config"))
-            {
-                configPath = "FRCBananaSim/Resources/Config/configurator_settings.json";
-            }
-            else if (std::filesystem::exists("../FRCBananaSim/Resources/Config"))
-            {
-                configPath = "../FRCBananaSim/Resources/Config/configurator_settings.json";
-            }
-            else
-            {
-                configPath = "configurator_settings.json";
-            }
-        }
+        std::string configPath = ConfiguratorState::ResolveSettingsPath(filepath);
 
         try
         {
@@ -139,6 +128,11 @@ namespace FRCBananaSim::Tools::Configurator
             j["panSensitivity"] = cameraConfig.panSensitivity;
             j["zoomSensitivity"] = cameraConfig.zoomSensitivity;
             j["fovDegrees"] = cameraConfig.fovDegrees;
+            j["isOrthographic"] = cameraConfig.isOrthographic;
+            j["cameraYaw"] = cameraYaw;
+            j["cameraPitch"] = cameraPitch;
+            j["cameraDistance"] = cameraDistance;
+            j["cameraTarget"] = { cameraTarget.x, cameraTarget.y, cameraTarget.z };
 
             std::ofstream f(configPath);
             if (f.is_open())
@@ -153,20 +147,122 @@ namespace FRCBananaSim::Tools::Configurator
     {
         cameraTarget = glm::vec3(0.0f, 0.25f, 0.0f);
         cameraDistance = 2.2f;
-        cameraYaw = 45.0f;
+        cameraYaw = 215.0f; // Behind and slightly left of robot, looking forward (+Z) and right (+X)
         cameraPitch = 25.0f;
+        cameraConfig.isOrthographic = false;
+        SaveSettings();
+    }
+
+    void CADViewportPanel::SetCanonicalView(CanonicalView view, bool makeOrtho)
+    {
+        switch (view)
+        {
+        case CanonicalView::Right: // +X
+            cameraYaw = 90.0f;
+            cameraPitch = 0.0f;
+            break;
+        case CanonicalView::Left: // -X
+            cameraYaw = 270.0f;
+            cameraPitch = 0.0f;
+            break;
+        case CanonicalView::Top: // +Y
+            cameraYaw = 180.0f;
+            cameraPitch = 89.99f;
+            break;
+        case CanonicalView::Bottom: // -Y
+            cameraYaw = 180.0f;
+            cameraPitch = -89.99f;
+            break;
+        case CanonicalView::Front: // +Z
+            cameraYaw = 0.0f;
+            cameraPitch = 0.0f;
+            break;
+        case CanonicalView::Back: // -Z
+            cameraYaw = 180.0f;
+            cameraPitch = 0.0f;
+            break;
+        default:
+            break;
+        }
+
+        if (makeOrtho)
+        {
+            cameraConfig.isOrthographic = true;
+        }
+
+        SaveSettings();
+    }
+
+    void CADViewportPanel::ToggleOrthographic()
+    {
+        cameraConfig.isOrthographic = !cameraConfig.isOrthographic;
+        SaveSettings();
+    }
+
+    bool CADViewportPanel::IsOrthographic() const
+    {
+        return cameraConfig.isOrthographic;
+    }
+
+    std::string CADViewportPanel::GetCurrentViewName() const
+    {
+        auto approxEq = [](float a, float b, float eps = 1.5f) {
+            return std::abs(a - b) <= eps;
+        };
+
+        float normYaw = std::fmod(cameraYaw, 360.0f);
+        if (normYaw < 0.0f) normYaw += 360.0f;
+
+        std::string viewName;
+        if (approxEq(cameraPitch, 89.99f, 2.0f) || approxEq(cameraPitch, 90.0f, 2.0f))
+        {
+            viewName = "Top (+Y)";
+        }
+        else if (approxEq(cameraPitch, -89.99f, 2.0f) || approxEq(cameraPitch, -90.0f, 2.0f))
+        {
+            viewName = "Bottom (-Y)";
+        }
+        else if (approxEq(cameraPitch, 0.0f, 2.0f))
+        {
+            if (approxEq(normYaw, 0.0f, 2.0f) || approxEq(normYaw, 360.0f, 2.0f))
+                viewName = "Front (+Z)";
+            else if (approxEq(normYaw, 90.0f, 2.0f))
+                viewName = "Right (+X)";
+            else if (approxEq(normYaw, 180.0f, 2.0f))
+                viewName = "Back (-Z)";
+            else if (approxEq(normYaw, 270.0f, 2.0f))
+                viewName = "Left (-X)";
+            else
+                viewName = "Custom Angle";
+        }
+        else
+        {
+            viewName = "Perspective Orbit";
+        }
+
+        if (cameraConfig.isOrthographic)
+        {
+            viewName += " [Orthographic]";
+        }
+        else
+        {
+            viewName += " [Perspective]";
+        }
+
+        return viewName;
     }
 
     ImVec2 CADViewportPanel::ProjectToScreen(const glm::vec3& worldPos, const glm::mat4& viewProj,
         const ImVec2& viewOrigin, const ImVec2& viewSize)
     {
         glm::vec4 clip = viewProj * glm::vec4(worldPos, 1.0f);
-        if (clip.w <= 0.01f)
+        if (!cameraConfig.isOrthographic && clip.w <= 0.01f)
         {
             return ImVec2(-10000.0f, -10000.0f); // Behind near clipping plane
         }
 
-        glm::vec3 ndc = glm::vec3(clip) / clip.w;
+        float w = cameraConfig.isOrthographic ? 1.0f : clip.w;
+        glm::vec3 ndc = glm::vec3(clip) / w;
         float x = viewOrigin.x + (ndc.x * 0.5f + 0.5f) * viewSize.x;
         float y = viewOrigin.y + (-ndc.y * 0.5f + 0.5f) * viewSize.y;
         return ImVec2(x, y);
@@ -270,13 +366,13 @@ namespace FRCBananaSim::Tools::Configurator
         }
     }
 
-    void CADViewportPanel::DrawOrientationGizmo(ImDrawList* drawList, const glm::mat4& view,
+    bool CADViewportPanel::DrawOrientationGizmo(ImDrawList* drawList, const glm::mat4& view,
         const ImVec2& viewOrigin, const ImVec2& viewSize)
     {
         ImVec2 center(viewOrigin.x + 55.0f, viewOrigin.y + viewSize.y - 55.0f);
-        constexpr float gizmoRadius = 38.0f;
-        drawList->AddCircleFilled(center, gizmoRadius, IM_COL32(20, 22, 28, 210));
-        drawList->AddCircle(center, gizmoRadius, IM_COL32(55, 60, 72, 220), 32, 1.5f);
+        constexpr float gizmoRadius = 40.0f;
+        drawList->AddCircleFilled(center, gizmoRadius, IM_COL32(20, 22, 28, 220));
+        drawList->AddCircle(center, gizmoRadius, IM_COL32(55, 60, 72, 230), 36, 1.5f);
 
         glm::mat3 rot(view);
         struct AxisGizmo
@@ -284,37 +380,95 @@ namespace FRCBananaSim::Tools::Configurator
             glm::vec3 worldDir;
             ImU32 color;
             const char* label;
+            const char* tooltip;
+            CanonicalView view;
+            bool isPositive;
+            float radius;
             float depth;
             ImVec2 scrPt;
         };
 
-        AxisGizmo axes[3] = {
-            { glm::vec3(1.0f, 0.0f, 0.0f), IM_COL32(235, 60, 60, 255), "X", 0.0f, ImVec2(0,0) },
-            { glm::vec3(0.0f, 1.0f, 0.0f), IM_COL32(60, 230, 60, 255), "Y", 0.0f, ImVec2(0,0) },
-            { glm::vec3(0.0f, 0.0f, 1.0f), IM_COL32(70, 140, 255, 255), "Z", 0.0f, ImVec2(0,0) }
+        AxisGizmo axes[6] = {
+            { glm::vec3( 1.0f,  0.0f,  0.0f), IM_COL32(235,  60,  60, 255), "X",  "Right View (+X)",  CanonicalView::Right,  true,  8.0f, 0.0f, ImVec2(0,0) },
+            { glm::vec3(-1.0f,  0.0f,  0.0f), IM_COL32(180,  50,  50, 210), "-X", "Left View (-X)",   CanonicalView::Left,   false, 5.5f, 0.0f, ImVec2(0,0) },
+            { glm::vec3( 0.0f,  1.0f,  0.0f), IM_COL32( 60, 230,  60, 255), "Y",  "Top View (+Y)",    CanonicalView::Top,    true,  8.0f, 0.0f, ImVec2(0,0) },
+            { glm::vec3( 0.0f, -1.0f,  0.0f), IM_COL32( 50, 170,  50, 210), "-Y", "Bottom View (-Y)", CanonicalView::Bottom, false, 5.5f, 0.0f, ImVec2(0,0) },
+            { glm::vec3( 0.0f,  0.0f,  1.0f), IM_COL32( 70, 140, 255, 255), "Z",  "Front View (+Z)",  CanonicalView::Front,  true,  8.0f, 0.0f, ImVec2(0,0) },
+            { glm::vec3( 0.0f,  0.0f, -1.0f), IM_COL32( 50, 100, 210, 210), "-Z", "Back View (-Z)",   CanonicalView::Back,   false, 5.5f, 0.0f, ImVec2(0,0) }
         };
 
-        float armLen = 25.0f;
-        for (int i = 0; i < 3; ++i)
+        float armLen = 26.0f;
+        for (int i = 0; i < 6; ++i)
         {
             glm::vec3 camDir = rot * axes[i].worldDir;
             axes[i].depth = camDir.z;
             axes[i].scrPt = ImVec2(center.x + camDir.x * armLen, center.y - camDir.y * armLen);
         }
 
-        // Sort so farthest axes are drawn first (in LH, larger depth = further away)
-        int order[3] = { 0, 1, 2 };
-        if (axes[order[0]].depth < axes[order[1]].depth) std::swap(order[0], order[1]);
-        if (axes[order[1]].depth < axes[order[2]].depth) std::swap(order[1], order[2]);
-        if (axes[order[0]].depth < axes[order[1]].depth) std::swap(order[0], order[1]);
+        // Sort order: largest depth (farthest away) first, smallest depth (closest) last
+        int order[6] = { 0, 1, 2, 3, 4, 5 };
+        std::sort(std::begin(order), std::end(order), [&](int a, int b) {
+            return axes[a].depth > axes[b].depth;
+        });
 
-        for (int i = 0; i < 3; ++i)
+        // Hit testing: test closest axes first
+        ImGuiIO& io = ImGui::GetIO();
+        int hoveredIndex = -1;
+        for (int i = 5; i >= 0; --i)
+        {
+            int idx = order[i];
+            float dist = std::hypot(io.MousePos.x - axes[idx].scrPt.x, io.MousePos.y - axes[idx].scrPt.y);
+            if (dist <= axes[idx].radius + 3.0f)
+            {
+                hoveredIndex = idx;
+                break;
+            }
+        }
+
+        bool clicked = false;
+        if (hoveredIndex != -1)
+        {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            ImGui::SetTooltip("%s\nClick to snap view [Orthographic]", axes[hoveredIndex].tooltip);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                SetCanonicalView(axes[hoveredIndex].view, /*makeOrtho=*/true);
+                clicked = true;
+            }
+        }
+
+        // Render stalks and bubbles from back to front
+        for (int i = 0; i < 6; ++i)
         {
             const auto& a = axes[order[i]];
-            drawList->AddLine(center, a.scrPt, a.color, 2.5f);
-            drawList->AddCircleFilled(a.scrPt, 7.0f, a.color);
-            drawList->AddText(ImVec2(a.scrPt.x - 3.5f, a.scrPt.y - 6.5f), IM_COL32(15, 15, 20, 255), a.label);
+            bool isHovered = (order[i] == hoveredIndex);
+
+            if (a.isPositive)
+            {
+                drawList->AddLine(center, a.scrPt, a.color, isHovered ? 3.5f : 2.5f);
+                drawList->AddCircleFilled(a.scrPt, a.radius, a.color);
+                if (isHovered)
+                {
+                    drawList->AddCircle(a.scrPt, a.radius + 2.0f, IM_COL32(255, 255, 255, 255), 16, 2.0f);
+                }
+                drawList->AddText(ImVec2(a.scrPt.x - 3.5f, a.scrPt.y - 6.5f), IM_COL32(15, 15, 20, 255), a.label);
+            }
+            else
+            {
+                // Negative axis opposite dot / stalk
+                if (a.depth < 0.0f || isHovered)
+                {
+                    drawList->AddLine(center, a.scrPt, IM_COL32(90, 95, 110, 140), 1.5f);
+                    drawList->AddCircleFilled(a.scrPt, a.radius, a.color);
+                    if (isHovered)
+                    {
+                        drawList->AddCircle(a.scrPt, a.radius + 2.0f, IM_COL32(255, 255, 255, 255), 16, 2.0f);
+                    }
+                }
+            }
         }
+
+        return clicked;
     }
 
     void CADViewportPanel::Render(ConfiguratorState& state)
@@ -331,12 +485,22 @@ namespace FRCBananaSim::Tools::Configurator
             showCameraSettings = !showCameraSettings;
         }
         ImGui::SameLine();
+        const char* projBtnLabel = cameraConfig.isOrthographic ? "[Projection: Ortho (O)]" : "[Projection: Perspective (P)]";
+        if (ImGui::SmallButton(projBtnLabel))
+        {
+            ToggleOrthographic();
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Toggle between Perspective and Orthographic projection (Hotkey: O/P)");
+        }
+        ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.6f, 0.7f, 0.85f, 1.0f), "|  Axes: +X Right (Red) | +Y Up (Green) | +Z Front (Blue)");
 
         // Camera Settings Popover / Window
         if (showCameraSettings)
         {
-            ImGui::SetNextWindowSize(ImVec2(360.0f, 330.0f), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize(ImVec2(360.0f, 360.0f), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Camera Navigation Settings", &showCameraSettings))
             {
                 ImGui::TextColored(ImVec4(1.0f, 0.84f, 0.0f, 1.0f), "Navigation Preset");
@@ -349,6 +513,20 @@ namespace FRCBananaSim::Tools::Configurator
                 if (ImGui::Combo("##PresetCombo", &currentPreset, presets, IM_ARRAYSIZE(presets)))
                 {
                     SetPreset(static_cast<CameraPreset>(currentPreset));
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                ImGui::TextColored(ImVec4(1.0f, 0.84f, 0.0f, 1.0f), "Projection & Optics");
+                if (ImGui::Checkbox("Orthographic Projection", &cameraConfig.isOrthographic))
+                {
+                    SaveSettings();
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Flat, parallel projection without perspective foreshortening (Hotkey: O/P).");
                 }
 
                 ImGui::Spacing();
@@ -437,15 +615,50 @@ namespace FRCBananaSim::Tools::Configurator
             ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
         bool isHovered = ImGui::IsItemHovered();
 
+        ImVec2 gizmoCenter(viewOrigin.x + 55.0f, viewOrigin.y + viewSize.y - 55.0f);
+        bool isOverGizmo = (std::hypot(io.MousePos.x - gizmoCenter.x, io.MousePos.y - gizmoCenter.y) <= 44.0f);
+
         // 1. Camera Orbit / Pan / Zoom Interaction
-        if (isHovered || ImGui::IsItemActive())
+        if ((isHovered && !isOverGizmo) || ImGui::IsItemActive())
         {
+            // Keyboard Shortcuts
+            if (isHovered)
+            {
+                if (ImGui::IsKeyPressed(ImGuiKey_O, false))
+                {
+                    cameraConfig.isOrthographic = true;
+                    SaveSettings();
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_P, false))
+                {
+                    cameraConfig.isOrthographic = false;
+                    SaveSettings();
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_1, false) || ImGui::IsKeyPressed(ImGuiKey_Keypad1, false))
+                {
+                    SetCanonicalView(io.KeyCtrl ? CanonicalView::Back : CanonicalView::Front, true);
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_3, false) || ImGui::IsKeyPressed(ImGuiKey_Keypad3, false))
+                {
+                    SetCanonicalView(io.KeyCtrl ? CanonicalView::Left : CanonicalView::Right, true);
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_7, false) || ImGui::IsKeyPressed(ImGuiKey_Keypad7, false))
+                {
+                    SetCanonicalView(io.KeyCtrl ? CanonicalView::Bottom : CanonicalView::Top, true);
+                }
+                else if (ImGui::IsKeyPressed(ImGuiKey_5, false) || ImGui::IsKeyPressed(ImGuiKey_Keypad5, false))
+                {
+                    ToggleOrthographic();
+                }
+            }
+
             // Zoom via scroll wheel
             if (io.MouseWheel != 0.0f)
             {
                 // Inverted (Fusion 360 Inverted / Standard Games): Wheel up (positive) -> Zooms IN (distance decreases)
                 float zoomSign = cameraConfig.invertScrollZoom ? -1.0f : 1.0f;
                 cameraDistance = std::clamp(cameraDistance + io.MouseWheel * zoomSign * cameraConfig.zoomSensitivity, 0.2f, 25.0f);
+                SaveSettings();
             }
 
             bool doOrbit = false;
@@ -496,10 +709,10 @@ namespace FRCBananaSim::Tools::Configurator
 
             if (doOrbit)
             {
-                float signX = cameraConfig.invertOrbitX ? -1.0f : 1.0f;
+                float signX = cameraConfig.invertOrbitX ? 1.0f : -1.0f;
                 float signY = cameraConfig.invertOrbitY ? -1.0f : 1.0f;
                 cameraYaw += signX * io.MouseDelta.x * cameraConfig.orbitSensitivity;
-                cameraPitch = std::clamp(cameraPitch + signY * io.MouseDelta.y * cameraConfig.orbitSensitivity, -85.0f, 85.0f);
+                cameraPitch = std::clamp(cameraPitch + signY * io.MouseDelta.y * cameraConfig.orbitSensitivity, -89.99f, 89.99f);
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
             }
             else if (doPan)
@@ -512,12 +725,22 @@ namespace FRCBananaSim::Tools::Configurator
                     cameraDistance * std::cos(radPitch) * std::cos(radYaw)
                 );
                 glm::vec3 forward = glm::normalize(cameraTarget - camPos);
-                glm::vec3 right = glm::normalize(glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), forward));
+                glm::vec3 upRef = (std::abs(cameraPitch) >= 88.0f) ?
+                    (cameraPitch >= 0.0f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 0.0f, -1.0f)) :
+                    glm::vec3(0.0f, 1.0f, 0.0f);
+                glm::vec3 right = glm::normalize(glm::cross(upRef, forward));
                 glm::vec3 up = glm::normalize(glm::cross(forward, right));
 
                 float panSpeed = cameraConfig.panSensitivity * cameraDistance;
                 cameraTarget += (-io.MouseDelta.x * right + io.MouseDelta.y * up) * panSpeed;
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            }
+
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) ||
+                ImGui::IsMouseReleased(ImGuiMouseButton_Middle) ||
+                ImGui::IsMouseReleased(ImGuiMouseButton_Right))
+            {
+                SaveSettings();
             }
         }
 
@@ -530,8 +753,28 @@ namespace FRCBananaSim::Tools::Configurator
             cameraDistance * std::cos(radPitch) * std::cos(radYaw)
         );
 
-        glm::mat4 view = glm::lookAtLH(camPos, cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 proj = glm::perspectiveLH(glm::radians(cameraConfig.fovDegrees), viewSize.x / viewSize.y, 0.05f, 50.0f);
+        glm::vec3 upVector(0.0f, 1.0f, 0.0f);
+        if (cameraPitch >= 88.0f)
+        {
+            upVector = glm::vec3(0.0f, 0.0f, 1.0f);
+        }
+        else if (cameraPitch <= -88.0f)
+        {
+            upVector = glm::vec3(0.0f, 0.0f, -1.0f);
+        }
+
+        glm::mat4 view = glm::lookAtLH(camPos, cameraTarget, upVector);
+        glm::mat4 proj;
+        if (cameraConfig.isOrthographic)
+        {
+            float halfH = cameraDistance * std::tan(glm::radians(cameraConfig.fovDegrees) * 0.5f);
+            float halfW = halfH * (viewSize.x / viewSize.y);
+            proj = glm::orthoLH(-halfW, halfW, -halfH, halfH, 0.05f, 50.0f);
+        }
+        else
+        {
+            proj = glm::perspectiveLH(glm::radians(cameraConfig.fovDegrees), viewSize.x / viewSize.y, 0.05f, 50.0f);
+        }
         glm::mat4 viewProj = proj * view;
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -598,15 +841,18 @@ namespace FRCBananaSim::Tools::Configurator
         }
 
         // 6. Compute Link World Poses via Kinematic Joint Tree in NWU
+        glm::dvec3 bumperMountPosRobot(0.0);
+        glm::dquat bumperMountRotRobot(1.0, 0.0, 0.0, 0.0);
+
+        struct LinkPoseNWU
+        {
+            glm::dvec3 pos{ 0.0 };
+            glm::dquat rot{ 1.0, 0.0, 0.0, 0.0 };
+        };
+        std::unordered_map<std::string, LinkPoseNWU> linkPosesNWU;
+
         if (state.isCadLoaded)
         {
-            struct LinkPoseNWU
-            {
-                glm::dvec3 pos{ 0.0 };
-                glm::dquat rot{ 1.0, 0.0, 0.0, 0.0 };
-            };
-            std::unordered_map<std::string, LinkPoseNWU> linkPosesNWU;
-
             std::string rootLinkName = "base_link";
             for (const auto& link : state.manifest.links)
             {
@@ -684,7 +930,7 @@ namespace FRCBananaSim::Tools::Configurator
                 }
             }
 
-            // 6b. Render Virtual Bumpers in Viewport (+X=Right, +Y=Up, +Z=Front)
+            // Resolve bumper mount link pose if CAD loaded
             if (state.sidecar.bumpers.enabled)
             {
                 const auto& b = state.sidecar.bumpers;
@@ -695,88 +941,16 @@ namespace FRCBananaSim::Tools::Configurator
                 auto targetIt = linkPosesNWU.find(bTarget);
                 if (targetIt != linkPosesNWU.end())
                 {
-                    const auto& tPose = targetIt->second;
-                    glm::dvec3 tPosRobot = RobotSchemaLoader::ConvertNWUToRobotFrame(tPose.pos);
-                    glm::dquat tRotRobot = RobotSchemaLoader::ConvertNWUQuatToRobotFrame(tPose.rot);
-
-                    bool isBlue = (b.color == "blue");
-                    bool isTabActive = (state.activeInspectorTab == ConfiguratorState::ActiveInspectorTab::Bumpers);
-                    ImU32 bumperColor = isTabActive ?
-                        (isBlue ? IM_COL32(80, 160, 255, 255) : IM_COL32(255, 80, 80, 255)) :
-                        (isBlue ? IM_COL32(40, 120, 240, 220) : IM_COL32(235, 45, 45, 220));
-
-                    std::vector<std::pair<glm::dvec3, glm::dvec3>> renderBoxesRobot;
-                    auto addBumperBox = [&](const glm::dvec3& origRob, const glm::dvec3& dimsRob)
+                    bumperMountPosRobot = RobotSchemaLoader::ConvertNWUToRobotFrame(targetIt->second.pos);
+                    bumperMountRotRobot = RobotSchemaLoader::ConvertNWUQuatToRobotFrame(targetIt->second.rot);
+                }
+                else if (!linkPosesNWU.empty())
+                {
+                    auto rIt = linkPosesNWU.find(rootLinkName);
+                    if (rIt != linkPosesNWU.end())
                     {
-                        renderBoxesRobot.push_back({ origRob, glm::abs(dimsRob) });
-                    };
-
-                    if (b.shape == "box")
-                    {
-                        addBumperBox(b.offsetM, glm::dvec3(b.widthM, b.heightM, b.lengthM));
-                    }
-                    else if (b.shape == "perimeter")
-                    {
-                        // Front (+Z)
-                        addBumperBox(
-                            glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
-                            glm::dvec3(b.widthM, b.heightM, b.thicknessM));
-                        // Back (-Z)
-                        addBumperBox(
-                            glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z - b.lengthM * 0.5 + b.thicknessM * 0.5),
-                            glm::dvec3(b.widthM, b.heightM, b.thicknessM));
-                        // Left (-X)
-                        double sideLen = std::max(0.01, b.lengthM - 2.0 * b.thicknessM);
-                        addBumperBox(
-                            glm::dvec3(b.offsetM.x - b.widthM * 0.5 + b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
-                            glm::dvec3(b.thicknessM, b.heightM, sideLen));
-                        // Right (+X)
-                        addBumperBox(
-                            glm::dvec3(b.offsetM.x + b.widthM * 0.5 - b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
-                            glm::dvec3(b.thicknessM, b.heightM, sideLen));
-                    }
-                    else if (b.shape == "u_shape")
-                    {
-                        // Back (-Z)
-                        addBumperBox(
-                            glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z - b.lengthM * 0.5 + b.thicknessM * 0.5),
-                            glm::dvec3(b.widthM, b.heightM, b.thicknessM));
-                        // Left (-X)
-                        double sideLen = std::max(0.01, b.lengthM - 2.0 * b.thicknessM);
-                        addBumperBox(
-                            glm::dvec3(b.offsetM.x - b.widthM * 0.5 + b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
-                            glm::dvec3(b.thicknessM, b.heightM, sideLen));
-                        // Right (+X)
-                        addBumperBox(
-                            glm::dvec3(b.offsetM.x + b.widthM * 0.5 - b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
-                            glm::dvec3(b.thicknessM, b.heightM, sideLen));
-                        // Front corners if cutout is narrower than the inside width
-                        double innerWidth = b.widthM - 2.0 * b.thicknessM;
-                        if (b.cutoutWidthM < innerWidth && innerWidth > 0.02)
-                        {
-                            double cornerW = (innerWidth - b.cutoutWidthM) * 0.5 + b.thicknessM;
-                            // Front-Left (-X, +Z)
-                            addBumperBox(
-                                glm::dvec3(b.offsetM.x - (b.widthM - cornerW) * 0.5, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
-                                glm::dvec3(cornerW, b.heightM, b.thicknessM));
-                            // Front-Right (+X, +Z)
-                            addBumperBox(
-                                glm::dvec3(b.offsetM.x + (b.widthM - cornerW) * 0.5, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
-                                glm::dvec3(cornerW, b.heightM, b.thicknessM));
-                        }
-                    }
-
-                    for (const auto& box : renderBoxesRobot)
-                    {
-                        glm::dvec3 worldCenterRob = tPosRobot + (tRotRobot * box.first);
-                        glm::dquat worldRotRob = tRotRobot;
-
-                        glm::vec3 worldCenter = glm::vec3(worldCenterRob);
-                        glm::quat worldRot = glm::quat(worldRotRob);
-                        glm::vec3 dims = glm::vec3(box.second);
-                        glm::vec3 halfExtents = dims * 0.5f;
-
-                        DrawWireframeBox(drawList, worldCenter, halfExtents, worldRot, viewProj, viewOrigin, viewSize, bumperColor);
+                        bumperMountPosRobot = RobotSchemaLoader::ConvertNWUToRobotFrame(rIt->second.pos);
+                        bumperMountRotRobot = RobotSchemaLoader::ConvertNWUQuatToRobotFrame(rIt->second.rot);
                     }
                 }
             }
@@ -805,10 +979,164 @@ namespace FRCBananaSim::Tools::Configurator
             }
         }
 
+        // 7b. Render Virtual Bumpers in Viewport (+X=Right, +Y=Up, +Z=Front)
+        // (Rendered whenever enabled, anchored to CAD link if present or robot origin if standalone)
+        if (state.sidecar.bumpers.enabled)
+        {
+            const auto& b = state.sidecar.bumpers;
+            bool isBlue = (b.color == "blue");
+            bool isTabActive = (state.activeInspectorTab == ConfiguratorState::ActiveInspectorTab::Bumpers);
+            ImU32 bumperColor = isTabActive ?
+                (isBlue ? IM_COL32(80, 160, 255, 255) : IM_COL32(255, 80, 80, 255)) :
+                (isBlue ? IM_COL32(40, 120, 240, 220) : IM_COL32(235, 45, 45, 220));
+
+            std::vector<std::pair<glm::dvec3, glm::dvec3>> renderBoxesRobot;
+            auto addBumperBox = [&](const glm::dvec3& origRob, const glm::dvec3& dimsRob)
+            {
+                renderBoxesRobot.push_back({ origRob, glm::abs(dimsRob) });
+            };
+
+            if (b.shape == "box")
+            {
+                addBumperBox(b.offsetM, glm::dvec3(b.widthM, b.heightM, b.lengthM));
+            }
+            else if (b.shape == "perimeter")
+            {
+                // Front (+Z)
+                addBumperBox(
+                    glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
+                    glm::dvec3(b.widthM, b.heightM, b.thicknessM));
+                // Back (-Z)
+                addBumperBox(
+                    glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z - b.lengthM * 0.5 + b.thicknessM * 0.5),
+                    glm::dvec3(b.widthM, b.heightM, b.thicknessM));
+                // Left (-X)
+                double sideLen = std::max(0.01, b.lengthM - 2.0 * b.thicknessM);
+                addBumperBox(
+                    glm::dvec3(b.offsetM.x - b.widthM * 0.5 + b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                    glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                // Right (+X)
+                addBumperBox(
+                    glm::dvec3(b.offsetM.x + b.widthM * 0.5 - b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                    glm::dvec3(b.thicknessM, b.heightM, sideLen));
+            }
+            else if (b.shape == "u_shape")
+            {
+                // Back (-Z)
+                addBumperBox(
+                    glm::dvec3(b.offsetM.x, b.offsetM.y, b.offsetM.z - b.lengthM * 0.5 + b.thicknessM * 0.5),
+                    glm::dvec3(b.widthM, b.heightM, b.thicknessM));
+                // Left (-X)
+                double sideLen = std::max(0.01, b.lengthM - 2.0 * b.thicknessM);
+                addBumperBox(
+                    glm::dvec3(b.offsetM.x - b.widthM * 0.5 + b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                    glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                // Right (+X)
+                addBumperBox(
+                    glm::dvec3(b.offsetM.x + b.widthM * 0.5 - b.thicknessM * 0.5, b.offsetM.y, b.offsetM.z),
+                    glm::dvec3(b.thicknessM, b.heightM, sideLen));
+                // Front corners if cutout is narrower than the inside width
+                double innerWidth = b.widthM - 2.0 * b.thicknessM;
+                if (b.cutoutWidthM < innerWidth && innerWidth > 0.02)
+                {
+                    double cornerW = (innerWidth - b.cutoutWidthM) * 0.5 + b.thicknessM;
+                    // Front-Left (-X, +Z)
+                    addBumperBox(
+                        glm::dvec3(b.offsetM.x - (b.widthM - cornerW) * 0.5, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
+                        glm::dvec3(cornerW, b.heightM, b.thicknessM));
+                    // Front-Right (+X, +Z)
+                    addBumperBox(
+                        glm::dvec3(b.offsetM.x + (b.widthM - cornerW) * 0.5, b.offsetM.y, b.offsetM.z + b.lengthM * 0.5 - b.thicknessM * 0.5),
+                        glm::dvec3(cornerW, b.heightM, b.thicknessM));
+                }
+            }
+
+            for (const auto& box : renderBoxesRobot)
+            {
+                glm::dvec3 worldCenterRob = bumperMountPosRobot + (bumperMountRotRobot * box.first);
+                glm::dquat worldRotRob = bumperMountRotRobot;
+
+                glm::vec3 worldCenter = glm::vec3(worldCenterRob);
+                glm::quat worldRot = glm::quat(worldRotRob);
+                glm::vec3 dims = glm::vec3(box.second);
+                glm::vec3 halfExtents = dims * 0.5f;
+
+                DrawWireframeBox(drawList, worldCenter, halfExtents, worldRot, viewProj, viewOrigin, viewSize, bumperColor);
+            }
+        }
+
+        // 7c. Render Game-Piece Contact Zones (Intake / Shooter / Indexer)
+        auto contactZones = state.GetEffectiveContactZones();
+        bool isContactTabActive = (state.activeInspectorTab == ConfiguratorState::ActiveInspectorTab::ContactZones);
+
+        for (const auto& cz : contactZones)
+        {
+            glm::dvec3 parentPosRobot(0.0);
+            glm::dquat parentRotRobot(1.0, 0.0, 0.0, 0.0);
+
+            if (!cz.parentLink.empty())
+            {
+                auto pIt = linkPosesNWU.find(cz.parentLink);
+                if (pIt != linkPosesNWU.end())
+                {
+                    parentPosRobot = RobotSchemaLoader::ConvertNWUToRobotFrame(pIt->second.pos);
+                    parentRotRobot = RobotSchemaLoader::ConvertNWUQuatToRobotFrame(pIt->second.rot);
+                }
+            }
+
+            // Convert NWU origin and rotation to Robot frame (+X Right, +Y Up, +Z Front)
+            glm::dvec3 zoneOriginRob = RobotSchemaLoader::ConvertNWUToRobotFrame(cz.originM);
+            glm::dquat zoneRotRob = RobotSchemaLoader::ConvertNWUQuatToRobotFrame(cz.rotationQuat);
+
+            glm::dvec3 worldCenterRob = parentPosRobot + (parentRotRobot * zoneOriginRob);
+            glm::dquat worldRotRob = parentRotRobot * zoneRotRob;
+
+            // Dimensions: X length (fwd in NWU -> Z in Robot), Y width (left in NWU -> X in Robot), Z height (up in NWU -> Y in Robot)
+            glm::dvec3 dimsRob = glm::dvec3(cz.dimensionsM.y, cz.dimensionsM.z, cz.dimensionsM.x);
+
+            glm::vec3 worldCenter = glm::vec3(worldCenterRob);
+            glm::quat worldRot = glm::quat(worldRotRob);
+            glm::vec3 halfExtents = glm::vec3(dimsRob) * 0.5f;
+
+            bool isSelected = (cz.name == state.selectedContactZone);
+
+            ImU32 zoneColor;
+            if (cz.role == "shooter")
+            {
+                zoneColor = isSelected ? IM_COL32(255, 230, 80, 255) : (isContactTabActive ? IM_COL32(240, 180, 40, 220) : IM_COL32(200, 150, 30, 140));
+            }
+            else
+            {
+                zoneColor = isSelected ? IM_COL32(80, 255, 140, 255) : (isContactTabActive ? IM_COL32(40, 220, 100, 220) : IM_COL32(30, 170, 70, 140));
+            }
+
+            DrawWireframeBox(drawList, worldCenter, halfExtents, worldRot, viewProj, viewOrigin, viewSize, zoneColor);
+
+            // Draw Tangent Axis Arrow (Transit Direction)
+            if (glm::length(cz.tangentAxis) > 1e-4)
+            {
+                glm::dvec3 tanRob = RobotSchemaLoader::ConvertNWUToRobotFrame(glm::normalize(cz.tangentAxis));
+                glm::vec3 tanDirWorld = glm::vec3(parentRotRobot * tanRob);
+                glm::vec3 arrowEnd = worldCenter + tanDirWorld * (halfExtents.z + 0.10f);
+
+                ImVec2 p0_2d = ProjectToScreen(worldCenter, viewProj, viewOrigin, viewSize);
+                ImVec2 p1_2d = ProjectToScreen(arrowEnd, viewProj, viewOrigin, viewSize);
+                if (p0_2d.x > -1000.0f && p1_2d.x > -1000.0f)
+                {
+                    drawList->AddLine(p0_2d, p1_2d, zoneColor, isSelected ? 3.0f : 1.5f);
+                    drawList->AddCircleFilled(p1_2d, isSelected ? 4.5f : 3.0f, zoneColor);
+                }
+            }
+        }
+
         // 8. Draw Orientation Triad Gizmo (Bottom-Left)
         DrawOrientationGizmo(drawList, view, viewOrigin, viewSize);
 
         // 9. Viewport HUD Overlay
+        std::string viewStatus = GetCurrentViewName();
+        drawList->AddText(ImVec2(viewOrigin.x + 10.0f, viewOrigin.y + 10.0f),
+            IM_COL32(255, 215, 0, 255), ("View: " + viewStatus).c_str());
+
         const char* navHelp = "Fusion 360: MMB Pan | Shift+MMB Rotate | Scroll Zoom";
         if (cameraConfig.preset == CameraPreset::Blender)
         {
@@ -819,27 +1147,28 @@ namespace FRCBananaSim::Tools::Configurator
             navHelp = "Standard CAD: LMB Rotate | RMB Pan | Scroll Zoom";
         }
 
-        drawList->AddText(ImVec2(viewOrigin.x + 10.0f, viewOrigin.y + 10.0f),
-            IM_COL32(200, 205, 215, 255), navHelp);
+        drawList->AddText(ImVec2(viewOrigin.x + 10.0f, viewOrigin.y + 26.0f),
+            IM_COL32(185, 190, 200, 220), navHelp);
 
+        float textOffsetY = 44.0f;
         if (!state.selectedMechanism.empty())
         {
             std::string selText = "Mechanism: " + state.selectedMechanism;
             if (!state.selectedJoint.empty()) selText += " [Joint: " + state.selectedJoint + "]";
             if (!state.selectedLink.empty()) selText += " [Link: " + state.selectedLink + "]";
-            drawList->AddText(ImVec2(viewOrigin.x + 10.0f, viewOrigin.y + 28.0f),
+            drawList->AddText(ImVec2(viewOrigin.x + 10.0f, viewOrigin.y + textOffsetY),
                 IM_COL32(255, 215, 0, 255), selText.c_str());
         }
         else if (!state.selectedLink.empty())
         {
             std::string selText = "Selected Link: " + state.selectedLink;
-            drawList->AddText(ImVec2(viewOrigin.x + 10.0f, viewOrigin.y + 28.0f),
+            drawList->AddText(ImVec2(viewOrigin.x + 10.0f, viewOrigin.y + textOffsetY),
                 IM_COL32(255, 215, 0, 255), selText.c_str());
         }
         else if (!state.selectedJoint.empty())
         {
             std::string selText = "Selected Joint: " + state.selectedJoint;
-            drawList->AddText(ImVec2(viewOrigin.x + 10.0f, viewOrigin.y + 28.0f),
+            drawList->AddText(ImVec2(viewOrigin.x + 10.0f, viewOrigin.y + textOffsetY),
                 IM_COL32(255, 215, 0, 255), selText.c_str());
         }
     }

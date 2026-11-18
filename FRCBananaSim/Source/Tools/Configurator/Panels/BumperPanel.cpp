@@ -25,8 +25,9 @@ namespace FRCBananaSim::Tools::Configurator
 
         if (!state.isCadLoaded)
         {
-            ImGui::TextWrapped("Load a CAD folder or manifest.json to configure bumpers.");
-            return;
+            ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.20f, 1.0f),
+                "Note: No CAD loaded. Virtual bumpers previewed around robot origin (0,0,0). Load CAD to bind to specific links.");
+            ImGui::Spacing();
         }
 
         // Check if CAD already had a bumper collider in manifest
@@ -148,15 +149,22 @@ namespace FRCBananaSim::Tools::Configurator
         }
         if (targetIdx == -1 && !linkNames.empty()) targetIdx = 0;
 
-        ImGui::SetNextItemWidth(220.0f);
-        if (ImGui::Combo("Attachment Link##BumperTarget", &targetIdx, linkNames.data(), static_cast<int>(linkNames.size())))
+        if (!linkNames.empty())
         {
-            if (targetIdx >= 0 && targetIdx < static_cast<int>(linkNames.size()))
+            ImGui::SetNextItemWidth(220.0f);
+            if (ImGui::Combo("Attachment Link##BumperTarget", &targetIdx, linkNames.data(), static_cast<int>(linkNames.size())))
             {
-                state.sidecar.bumpers.targetLink = linkNames[targetIdx];
-                state.sidecarVersion++;
-                state.RunLinter();
+                if (targetIdx >= 0 && targetIdx < static_cast<int>(linkNames.size()))
+                {
+                    state.sidecar.bumpers.targetLink = linkNames[targetIdx];
+                    state.sidecarVersion++;
+                    state.RunLinter();
+                }
             }
+        }
+        else
+        {
+            ImGui::TextDisabled("Attachment Link: [Mounted at robot origin (0,0,0) - Load CAD to select links]");
         }
 
         // 3. Bumper Geometry & Shape

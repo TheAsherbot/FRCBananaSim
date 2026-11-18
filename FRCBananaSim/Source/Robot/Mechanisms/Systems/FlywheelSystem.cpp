@@ -311,5 +311,8 @@ namespace FRCBananaSim::Robot::Mechanisms::Systems
                 }
             }
         }
+
+        // 8. Reset external load torque disturbance for next physics tick
+        flywheel.externalLoadTorqueNm = 0.0;
     }
 }

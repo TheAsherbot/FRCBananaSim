@@ -675,6 +675,7 @@ namespace FRCBananaSim::Tools::Configurator
         // 8. Sensor Suite Validation
         std::map<uint32_t, std::string> dioMap;
         std::map<uint32_t, std::string> analogMap;
+        std::map<std::string, std::string> i2cMap;
 
         std::set<uint32_t> activeControllerCanIds;
         for (const auto& mod : sidecar.swerve.modules)
@@ -710,7 +711,7 @@ namespace FRCBananaSim::Tools::Configurator
             if (!sensor.contactZone.empty())
             {
                 bool zoneFound = false;
-                for (const auto& cz : manifest.contactZones)
+                for (const auto& cz : GetEffectiveContactZones())
                 {
                     if (cz.name == sensor.contactZone)
                     {
@@ -725,11 +726,13 @@ namespace FRCBananaSim::Tools::Configurator
                 }
             }
 
+            bool isRevI2C = (sensor.type == "rev_through_bore" && (sensor.bus == "i2c_onboard" || sensor.bus == "i2c_mxp"));
+
             // DIO Channel Validation
             bool checkPrimaryDio = false;
             if (sensor.type == "beam_break" ||
                 (sensor.type == "limit_switch" && sensor.attachToControllerCanId == 0) ||
-                (sensor.type == "rev_through_bore" && sensor.attachToControllerCanId == 0) ||
+                (sensor.type == "rev_through_bore" && sensor.attachToControllerCanId == 0 && !isRevI2C) ||
                 (sensor.type == "andymark_lidar3" && sensor.bus == "dio_pwm"))
             {
                 checkPrimaryDio = true;
@@ -758,7 +761,7 @@ namespace FRCBananaSim::Tools::Configurator
             }
 
             // REV Through Bore Secondary DIO (Quadrature Channel B)
-            if (sensor.type == "rev_through_bore" && sensor.attachToControllerCanId == 0)
+            if (sensor.type == "rev_through_bore" && sensor.attachToControllerCanId == 0 && !isRevI2C)
             {
                 bool isQuad = (sensor.customStringParams.count("encoderMode") && sensor.customStringParams.at("encoderMode") == "quadrature")
                     || (sensor.secondaryDioChannel > 0);
@@ -786,6 +789,31 @@ namespace FRCBananaSim::Tools::Configurator
                         {
                             dioMap[sensor.secondaryDioChannel] = sensor.name + " (Channel B)";
                         }
+                    }
+                }
+            }
+
+            // I2C Address Validation (Color sensor, LIDAR-3 I2C, REV Through Bore I2C)
+            if (sensor.bus == "i2c_onboard" || sensor.bus == "i2c_mxp" || sensor.type == "color_sensor" || isRevI2C)
+            {
+                if (sensor.i2cAddress == 0 || sensor.i2cAddress > 127)
+                {
+                    linterErrors.push_back("I2C Address Out of Range: Sensor '" + sensor.name +
+                        "' specifies invalid 7-bit I2C address " + std::to_string(sensor.i2cAddress) + " (valid [1..127]).");
+                }
+                else
+                {
+                    std::string effectiveBus = (sensor.bus == "i2c_mxp") ? "i2c_mxp" : "i2c_onboard";
+                    std::string busKey = effectiveBus + ":" + std::to_string(sensor.i2cAddress);
+                    auto it = i2cMap.find(busKey);
+                    if (it != i2cMap.end())
+                    {
+                        linterErrors.push_back("I2C Address Collision: Address 0x" + std::to_string(sensor.i2cAddress) +
+                            " on bus '" + effectiveBus + "' is claimed by both '" + it->second + "' and '" + sensor.name + "'.");
+                    }
+                    else
+                    {
+                        i2cMap[busKey] = sensor.name;
                     }
                 }
             }
@@ -895,6 +923,75 @@ namespace FRCBananaSim::Tools::Configurator
             {
                 linterWarnings.push_back("Bumper Rule Warning: Bumper height (" +
                     std::to_string(static_cast<int>(sidecar.bumpers.heightM * 39.3701)) + " in) is less than standard FRC 5-inch requirement.");
+            }
+        }
+
+        // 10. Contact Zone Validation (Intake & Shooter Game-Piece Interaction)
+        auto effectiveZones = GetEffectiveContactZones();
+        bool hasShooterZone = false;
+        for (const auto& cz : effectiveZones)
+        {
+            if (cz.name.empty())
+            {
+                linterErrors.push_back("Contact Zone Error: A contact zone has an empty name.");
+                continue;
+            }
+
+            if (!cz.parentLink.empty() && !manifest.FindLink(cz.parentLink))
+            {
+                linterErrors.push_back("Contact Zone Error: Zone '" + cz.name + "' references non-existent parentLink '" + cz.parentLink + "'.");
+            }
+
+            if (cz.dimensionsM.x <= 0.0 || cz.dimensionsM.y <= 0.0 || cz.dimensionsM.z <= 0.0)
+            {
+                linterErrors.push_back("Contact Zone Dimensions Error: Zone '" + cz.name + "' dimensions must be strictly positive.");
+            }
+
+            if (cz.nominalGapM <= 0.0)
+            {
+                linterWarnings.push_back("Contact Zone Gap Warning: Zone '" + cz.name + "' nominalGap is zero or negative (" + std::to_string(cz.nominalGapM) + " m).");
+            }
+
+            double tanLen = glm::length(cz.tangentAxis);
+            double compLen = glm::length(cz.compressionAxis);
+            if (tanLen < 1e-4)
+            {
+                linterErrors.push_back("Contact Zone Axis Error: Zone '" + cz.name + "' tangentAxis is degenerate (zero length).");
+            }
+            if (compLen < 1e-4)
+            {
+                linterErrors.push_back("Contact Zone Axis Error: Zone '" + cz.name + "' compressionAxis is degenerate (zero length).");
+            }
+
+            if (tanLen >= 1e-4 && compLen >= 1e-4)
+            {
+                double dotVal = std::abs(glm::dot(cz.tangentAxis / tanLen, cz.compressionAxis / compLen));
+                if (dotVal > 0.15)
+                {
+                    linterWarnings.push_back("Contact Zone Orthogonality Warning: Zone '" + cz.name + "' tangentAxis and compressionAxis are not perpendicular (dot product: " + std::to_string(dotVal) + ").");
+                }
+            }
+
+            if (cz.role == "shooter")
+            {
+                hasShooterZone = true;
+            }
+        }
+
+        if (hasShooterZone)
+        {
+            bool hasFlywheel = false;
+            for (const auto& m : sidecar.mechanisms)
+            {
+                if (m.role == "flywheel")
+                {
+                    hasFlywheel = true;
+                    break;
+                }
+            }
+            if (!hasFlywheel)
+            {
+                linterWarnings.push_back("Shooter Flywheel Warning: A shooter contact zone is present, but no mechanism with role 'flywheel' is configured.");
             }
         }
     }
@@ -1064,5 +1161,10 @@ namespace FRCBananaSim::Tools::Configurator
             }
         }
         catch (...) {}
+    }
+
+    std::vector<Robot::Schema::ContactZoneDefinition> ConfiguratorState::GetEffectiveContactZones() const
+    {
+        return sidecar.GetEffectiveContactZones(manifest);
     }
 }

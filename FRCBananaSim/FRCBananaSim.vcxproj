@@ -228,6 +228,10 @@
     <ClCompile Include="Source\Robot\Sensors\Models\EncoderSensorModel.cpp" />
     <ClCompile Include="Source\Robot\Sensors\Models\IMUSensorModel.cpp" />
     <ClCompile Include="Source\Robot\Sensors\Systems\SensorSystem.cpp" />
+    <ClCompile Include="Source\Interaction\ShooterSqueezeModel.cpp" />
+    <ClCompile Include="Source\Interaction\IntakeSurfaceModel.cpp" />
+    <ClCompile Include="Source\Interaction\Systems\RobotGamePieceSystem.cpp" />
+    <ClCompile Include="Source\Interaction\Systems\FlightAerodynamicsSystem.cpp" />
     <ClCompile Include="Source\Telemetry\DrivetrainLogger.cpp" />
     <ClCompile Include="Source\Telemetry\TelemeteryViewer\MemoryTracker.cpp" />
     <ClCompile Include="Source\Telemetry\TelemeteryViewer\ProfilerUI.cpp" />
@@ -268,6 +272,12 @@
     <ClInclude Include="Source\Core\Parameters\ParameterValue.h" />
     <ClInclude Include="Source\Core\Units\Units.h" />
     <ClInclude Include="Source\Playground\PlaygroundScene.h" />
+    <ClInclude Include="Source\Interaction\GamePieceSpec.h" />
+    <ClInclude Include="Source\Interaction\Components\GamePieceComponent.h" />
+    <ClInclude Include="Source\Interaction\ShooterSqueezeModel.h" />
+    <ClInclude Include="Source\Interaction\IntakeSurfaceModel.h" />
+    <ClInclude Include="Source\Interaction\Systems\RobotGamePieceSystem.h" />
+    <ClInclude Include="Source\Interaction\Systems\FlightAerodynamicsSystem.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\ArmComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\CompositeMassComponent.h" />
     <ClInclude Include="Source\Robot\Mechanisms\Components\CouplingComponent.h" />

@@ -828,8 +828,8 @@ namespace FRCBananaSim::Tools::Configurator
 
             // Symmetrical Layout Helper with Sliders + Direct Input
             ImGui::TextDisabled("Symmetrical Axle Geometry Helper (+X=Right, +Y=Up, +Z=Front):");
-            SliderWithDirectInput("Wheelbase (Z / Front-Back) (m)", &wheelbaseM, 0.20f, 1.20f, "%.3f");
             SliderWithDirectInput("Trackwidth (X / Left-Right) (m)", &trackwidthM, 0.20f, 1.20f, "%.3f");
+            SliderWithDirectInput("Wheelbase (Z / Front-Back) (m)", &wheelbaseM, 0.20f, 1.20f, "%.3f");
 
             if (ImGui::Button("Apply Symmetrical Positions"))
             {

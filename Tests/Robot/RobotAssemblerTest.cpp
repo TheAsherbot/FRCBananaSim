@@ -21,6 +21,10 @@
 #include "Robot/Mechanisms/Components/CompositeMassComponent.h"
 #include "Actuation/Components/BatteryComponent.h"
 #include "Control/SimControlBoundary.h"
+#include "Robot/Sensors/Components/ContactZoneComponent.h"
+#include "Robot/Sensors/Components/BeamBreakComponent.h"
+#include "Interaction/GamePieceSpec.h"
+#include "Interaction/Components/GamePieceComponent.h"
 
 #include <Jolt/Physics/Collision/Shape/CompoundShape.h>
 #include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
@@ -81,7 +85,7 @@ namespace FRCBananaSim::Tests
             // Entity collection counts matching Reference2026 specification
             TEST_EXPECT_EQ(ctx, robot.linkEntities.size(), static_cast<size_t>(9));
             TEST_EXPECT_EQ(ctx, robot.jointEntities.size(), static_cast<size_t>(7));
-            TEST_EXPECT_EQ(ctx, robot.mechanismEntities.size(), static_cast<size_t>(5));
+            TEST_EXPECT_EQ(ctx, robot.mechanismEntities.size(), static_cast<size_t>(6));
             TEST_EXPECT_EQ(ctx, robot.sensorEntities.size(), static_cast<size_t>(7));
             TEST_EXPECT_EQ(ctx, robot.contactZoneEntities.size(), static_cast<size_t>(2));
 
@@ -191,6 +195,7 @@ namespace FRCBananaSim::Tests
                     TEST_EXPECT_NEAR(ctx, fw->gearRatio, 0.5, tolerance);
                     TEST_EXPECT_NEAR(ctx, fw->flywheelInertiaKgm2, 0.0032, 1e-5);
                     TEST_EXPECT_NEAR(ctx, fw->statorCurrentLimitA, 80.0, tolerance);
+                    TEST_EXPECT_NEAR(ctx, fw->rollerRadiusM, 0.0508, tolerance);
                 }
             }
 
@@ -207,6 +212,55 @@ namespace FRCBananaSim::Tests
                     TEST_EXPECT_TRUE(ctx, jc->hasLimits);
                     TEST_EXPECT_NEAR(ctx, jc->maxLimit, 0.60f, static_cast<float>(tolerance));
                 }
+            }
+
+            // 8. Contact Zones & Full Geometric Retention (Block 6 Day 1)
+            auto czIt = robot.contactZoneEntities.find("intake_capture_zone");
+            TEST_EXPECT_TRUE(ctx, czIt != robot.contactZoneEntities.end());
+            if (czIt != robot.contactZoneEntities.end())
+            {
+                auto* cz = scene.GetComponent<Robot::Sensors::Components::ContactZoneComponent>(czIt->second);
+                TEST_EXPECT_TRUE(ctx, cz != nullptr);
+                if (cz)
+                {
+                    TEST_EXPECT_EQ(ctx, cz->name, "intake_capture_zone");
+                    TEST_EXPECT_EQ(ctx, cz->role, "intake");
+                    TEST_EXPECT_TRUE(ctx, glm::length(cz->dimensions) > 0.1f);
+                    TEST_EXPECT_NEAR(ctx, glm::length(cz->tangentAxis), 1.0, tolerance);
+                    TEST_EXPECT_NEAR(ctx, glm::length(cz->compressionAxis), 1.0, tolerance);
+                    TEST_EXPECT_NEAR(ctx, cz->nominalGapM, 0.11, tolerance);
+                }
+            }
+
+            // 9. Beam-Break Sensor Contact Zone Binding (Block 6 Day 1 Fix)
+            auto bbIt = robot.sensorEntities.find("intake_beam_break");
+            TEST_EXPECT_TRUE(ctx, bbIt != robot.sensorEntities.end());
+            if (bbIt != robot.sensorEntities.end())
+            {
+                auto* bb = scene.GetComponent<Robot::Sensors::Components::BeamBreakComponent>(bbIt->second);
+                TEST_EXPECT_TRUE(ctx, bb != nullptr);
+                if (bb)
+                {
+                    TEST_EXPECT_TRUE(ctx, bb->sensorEntity != Core::ECS::Core::invalidEntity);
+                    TEST_EXPECT_TRUE(ctx, bb->sensorEntity == robot.contactZoneEntities["intake_capture_zone"]);
+                    auto* linkedCz = scene.GetComponent<Robot::Sensors::Components::ContactZoneComponent>(bb->sensorEntity);
+                    TEST_EXPECT_TRUE(ctx, linkedCz != nullptr);
+                }
+            }
+
+            // 10. GamePiece Data Structures Validation (Block 6 Day 1)
+            {
+                Interaction::GamePieceSpec spec;
+                TEST_EXPECT_EQ(ctx, spec.name, "Note2024");
+                TEST_EXPECT_NEAR(ctx, spec.massKg, 0.235, tolerance);
+                TEST_EXPECT_NEAR(ctx, spec.outerRadiusM, 0.1778, tolerance);
+                TEST_EXPECT_NEAR(ctx, spec.thicknessM, 0.0508, tolerance);
+                TEST_EXPECT_NEAR(ctx, spec.complianceK, 25000.0, tolerance);
+
+                Interaction::Components::GamePieceComponent gp;
+                TEST_EXPECT_EQ(ctx, static_cast<int>(gp.state), static_cast<int>(Interaction::Components::GamePieceState::Free));
+                TEST_EXPECT_TRUE(ctx, gp.capturingRobot == Core::ECS::Core::invalidEntity);
+                TEST_EXPECT_TRUE(ctx, gp.boundContactZone == Core::ECS::Core::invalidEntity);
             }
         }
 
@@ -258,6 +312,45 @@ namespace FRCBananaSim::Tests
             TEST_EXPECT_NEAR(ctx, outputs.batteryTerminalVoltage, 12.60, 0.5);
             TEST_EXPECT_TRUE(ctx, outputs.totalBusCurrent >= 1.0);
             TEST_EXPECT_FALSE(ctx, outputs.isBrownedOut);
+
+            // Flywheel external disturbance torque reset verification (Block 6 Day 1)
+            auto fwMechIt = robot.mechanismEntities.find("shooter_flywheel");
+            if (fwMechIt != robot.mechanismEntities.end())
+            {
+                auto* fw = scene.GetComponent<Robot::Mechanisms::Components::FlywheelComponent>(fwMechIt->second);
+                if (fw)
+                {
+                    fw->externalLoadTorqueNm = 4.5;
+                    RobotAssembler::StepPipeline(robot, 0.005);
+                    TEST_EXPECT_NEAR(ctx, fw->externalLoadTorqueNm, 0.0, 1e-6);
+                }
+            }
+
+            // Beam-Break contact zone engagement through pipeline stepping (Block 6 Day 1)
+            auto czEntityIt = robot.contactZoneEntities.find("intake_capture_zone");
+            if (czEntityIt != robot.contactZoneEntities.end())
+            {
+                auto* cz = scene.GetComponent<Robot::Sensors::Components::ContactZoneComponent>(czEntityIt->second);
+                if (cz)
+                {
+                    cz->isEngaged = true;
+                    // Step 3 ticks (15 ms) to exceed the 10 ms debounce threshold
+                    for (int i = 0; i < 3; ++i)
+                    {
+                        RobotAssembler::StepPipeline(robot, 0.005);
+                    }
+                    // intake_beam_break is configured on dioChannel 2
+                    TEST_EXPECT_TRUE(ctx, (outputs.digitalInputs & (1u << 2)) != 0);
+
+                    // Disengage and verify falling edge clears
+                    cz->isEngaged = false;
+                    for (int i = 0; i < 3; ++i)
+                    {
+                        RobotAssembler::StepPipeline(robot, 0.005);
+                    }
+                    TEST_EXPECT_TRUE(ctx, (outputs.digitalInputs & (1u << 2)) == 0);
+                }
+            }
         }
 
         // =============================================================

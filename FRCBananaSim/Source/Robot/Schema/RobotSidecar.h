@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "Robot/Schema/RobotManifest.h"
+
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -173,6 +175,7 @@ namespace FRCBananaSim::Robot::Schema
         double gearRatio = 1.0;
         double efficiency = 1.0;
         double drumRadiusM = 0.0;            ///< Pitch radius for linear spool/sprocket (elevators)
+        double rollerRadiusM = 0.0508;       ///< Roller radius for flywheels and active intake rollers
         double flywheelInertiaKgm2 = 0.0;    ///< Flywheel rotor mass moment of inertia (flywheels)
         glm::dvec3 spinAxis = { 0.0, 1.0, 0.0 }; ///< Local spin axis (flywheels)
         std::string visualLink;              ///< Visual mesh entity name to rotate with flywheel
@@ -356,6 +359,22 @@ namespace FRCBananaSim::Robot::Schema
         MassReconciliationConfig massReconciliation;
         std::unordered_map<std::string, JointLimitOverride> jointOverrides;
         BumperConfig bumpers;
+        std::vector<ContactZoneDefinition> contactZones;
+
+        /**
+         * @brief Looks up a contact zone configuration by name.
+         * @param zoneName Unique contact zone identifier.
+         * @return Pointer to contact zone config, or nullptr if not found.
+         */
+        const ContactZoneDefinition* FindContactZone(const std::string& zoneName) const;
+        ContactZoneDefinition* FindContactZone(const std::string& zoneName);
+
+        /**
+         * @brief Computes effective contact zones, factoring in sidecar overrides/additions over CAD defaults.
+         * @param manifest Loaded robot CAD manifest.
+         * @return Active effective contact zones.
+         */
+        std::vector<ContactZoneDefinition> GetEffectiveContactZones(const RobotManifest& manifest) const;
 
         /**
          * @brief Looks up a mechanism configuration by name.

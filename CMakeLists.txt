@@ -58,6 +58,10 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/FlywheelSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/DifferentialMechanismSystem.cpp
+    FRCBananaSim/Source/Interaction/ShooterSqueezeModel.cpp
+    FRCBananaSim/Source/Interaction/IntakeSurfaceModel.cpp
+    FRCBananaSim/Source/Interaction/Systems/RobotGamePieceSystem.cpp
+    FRCBananaSim/Source/Interaction/Systems/FlightAerodynamicsSystem.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
@@ -122,6 +126,26 @@ target_link_libraries(FRCBananaSim PRIVATE
     ws2_32
 )
 
+# Target: Visual Prototyping Playground Executable
+add_executable(Playground
+    ${ENGINE_SOURCES}
+    FRCBananaSim/Source/Playground/PlaygroundScene.cpp
+    FRCBananaSim/Source/Playground/PlaygroundMain.cpp
+)
+
+target_link_directories(Playground PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/glfw/bin/$<CONFIG>
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/jolt/bin/$<CONFIG>
+)
+
+target_link_libraries(Playground PRIVATE
+    glfw3
+    Jolt
+    opengl32
+    gdi32
+    ws2_32
+)
+
 # Target 2: Sidecar Configurator GUI Executable
 set(CONFIGURATOR_SOURCES
     FRCBananaSim/Source/Tools/Configurator/ConfiguratorState.cpp
@@ -134,6 +158,7 @@ set(CONFIGURATOR_SOURCES
     FRCBananaSim/Source/Tools/Configurator/Panels/SensorPanel.cpp
     FRCBananaSim/Source/Tools/Configurator/Panels/MassReconciliationPanel.cpp
     FRCBananaSim/Source/Tools/Configurator/Panels/BumperPanel.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/ContactZonePanel.cpp
     FRCBananaSim/Source/Tools/Configurator/Panels/LinterPanel.cpp
     FRCBananaSim/Source/Tools/Configurator/SidecarConfiguratorApplication.cpp
     FRCBananaSim/Source/Robot/Schema/MaterialLibrary.cpp
@@ -192,6 +217,10 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Robot/Mechanisms/Systems/MechanismSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/FlywheelSystem.cpp
     FRCBananaSim/Source/Robot/Mechanisms/Systems/DifferentialMechanismSystem.cpp
+    FRCBananaSim/Source/Interaction/ShooterSqueezeModel.cpp
+    FRCBananaSim/Source/Interaction/IntakeSurfaceModel.cpp
+    FRCBananaSim/Source/Interaction/Systems/RobotGamePieceSystem.cpp
+    FRCBananaSim/Source/Interaction/Systems/FlightAerodynamicsSystem.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
@@ -238,9 +267,19 @@ set(TEST_SOURCES
     Tests/Integration/FullRobotEnduranceTest.cpp
     Tests/Robot/ServoMechanismTest.cpp
     FRCBananaSim/Source/Tools/Configurator/ConfiguratorState.cpp
+    FRCBananaSim/Source/Tools/Configurator/Panels/CADViewportPanel.cpp
+    External/imgui/include/imgui/imgui.cpp
+    External/imgui/include/imgui/imgui_draw.cpp
+    External/imgui/include/imgui/imgui_tables.cpp
+    External/imgui/include/imgui/imgui_widgets.cpp
     Tests/Robot/SchemaSerializationTest.cpp
     Tests/Robot/ConfiguratorTest.cpp
     Tests/RoundTripPipelineTest.cpp
+    Tests/Interaction/ShooterSqueezeTest.cpp
+    Tests/Interaction/FlightAerodynamicsTest.cpp
+    Tests/Interaction/IntakeCaptureTest.cpp
+    Tests/Interaction/PipelineIntegrationTest.cpp
+    Tests/Interaction/GamePieceInteractionTest.cpp
 )
 
 add_executable(FRCBananaSim_Tests ${TEST_SOURCES})

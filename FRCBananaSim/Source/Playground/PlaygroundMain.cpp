@@ -26,20 +26,20 @@ int main(int argc, char* argv[])
     FRCBananaSim::Telemetry::TelemetryManager::Get().SetMode(FRCBananaSim::Telemetry::TelemetryMode::Minimal);
 
     // 2. Initialize 3D Hardware Renderer (1600x900 OpenGL 3.3 Core)
-    FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Differential Mechanism Visual Playground");
+    FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Prototyping Playground (Wrist & Shooter Squeeze)");
     if (!renderer.IsValid())
     {
         SIM_LOG_FATAL("Failed to initialize OpenGL renderer window");
         return -1;
     }
 
-    // Configure 3D Camera Orbiting Centered on the Wrist Pivot (0.0, 1.0, 0.2)
+    // Configure 3D Camera Orbiting Centered between Wrist and Shooter rigs
     auto& camera = renderer.GetCamera();
     camera.SetMode(FRCBananaSim::Renderer::Camera::Mode::Orbit);
-    camera.orbitTarget = glm::vec3(0.0f, 1.0f, 0.15f);
-    camera.orbitDistance = 1.8f;
-    camera.pitchDegrees = 18.0f;
-    camera.yawDegrees = -45.0f;
+    camera.orbitTarget = glm::vec3(0.0f, 1.0f, 0.2f);
+    camera.orbitDistance = 2.4f;
+    camera.pitchDegrees = 20.0f;
+    camera.yawDegrees = -35.0f;
 
     // 3. Initialize Jolt Physics
     FRCBananaSim::Physics::JoltContext joltContext;
@@ -57,6 +57,7 @@ int main(int argc, char* argv[])
 
     // 5. Initialize the Playground Scene
     PlaygroundScene playground;
+    playground.SetCamera(&camera);
     if (!playground.Initialize(scene, joltContext))
     {
         SIM_LOG_FATAL("Failed to initialize Differential Mechanism Playground");
@@ -64,7 +65,7 @@ int main(int argc, char* argv[])
     }
 
     std::cout << "===================================================================\n";
-    std::cout << "  FRC Banana Simulator: 2-DOF Differential Wrist Playground Ready\n";
+    std::cout << "  FRC Banana Simulator: Wrist & Shooter Squeeze Playground Ready\n";
     std::cout << "  Orbit Camera: Hold Right Mouse Button + Drag to rotate\n";
     std::cout << "  Zoom: Mouse Scroll Wheel\n";
     std::cout << "===================================================================\n";
@@ -91,9 +92,18 @@ int main(int argc, char* argv[])
             // Step camera navigation
             camera.ProcessInput(renderer.GetInput(), static_cast<float>(dt));
 
+            if (playground.cameraFocusRequested)
+            {
+                camera.orbitTarget = playground.cameraFocusTarget;
+                camera.orbitDistance = playground.cameraFocusDistance;
+                playground.cameraFocusRequested = false;
+            }
 
             // Render 3D Scene Mesh Hierarchy
             scene.RenderUpdateSystems();
+
+            // Submit 3D Debug Lines (Meters, Aiming Lasers, Spin Seams, Trajectory Arcs)
+            renderer.FlushDebugDraw();
 
             // Render Playground UI Overlay
             playground.RenderUI();

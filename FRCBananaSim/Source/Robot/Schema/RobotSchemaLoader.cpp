@@ -410,6 +410,7 @@ namespace FRCBananaSim::Robot::Schema
                 mech.gearRatio = mNode.value("gearRatio", 1.0);
                 mech.efficiency = mNode.value("efficiency", 1.0);
                 mech.drumRadiusM = mNode.value("drumRadius_m", 0.0);
+                mech.rollerRadiusM = mNode.value("rollerRadius_m", 0.0508);
                 mech.flywheelInertiaKgm2 = mNode.value("flywheelInertia_kgm2", 0.0);
                 mech.spinAxis = ParseOptionalVec3(mNode, "spinAxis", glm::dvec3(0.0, 1.0, 0.0));
                 mech.visualLink = mNode.value("visualLink", "");
@@ -762,6 +763,27 @@ namespace FRCBananaSim::Robot::Schema
             sidecar.bumpers.cutoutWidthM = bj.value("cutoutWidth_m", 0.40);
         }
 
+        // Contact Zones (Intake / Shooter / Indexer Interaction Volumes)
+        if (json.contains("contactZones") && json["contactZones"].is_array())
+        {
+            for (const auto& zNode : json["contactZones"])
+            {
+                ContactZoneDefinition zone;
+                zone.name = zNode.value("name", "");
+                zone.role = zNode.value("role", "intake");
+                zone.parentLink = zNode.value("parentLink", "");
+                zone.shape = zNode.value("shape", "box");
+                zone.originM = ParseOptionalVec3(zNode, "origin_m", glm::dvec3(0.0));
+                zone.rotationQuat = ParseOptionalQuat(zNode, "rotation_quat", glm::dquat(1.0, 0.0, 0.0, 0.0));
+                zone.dimensionsM = ParseOptionalVec3(zNode, "dimensions_m", glm::dvec3(0.0));
+                zone.tangentAxis = ParseOptionalVec3(zNode, "tangentAxis", glm::dvec3(1.0, 0.0, 0.0));
+                zone.compressionAxis = ParseOptionalVec3(zNode, "compressionAxis", glm::dvec3(0.0, 0.0, 1.0));
+                zone.nominalGapM = zNode.value("nominalGap_m", 0.0);
+
+                sidecar.contactZones.push_back(zone);
+            }
+        }
+
         return true;
     }
 
@@ -956,14 +978,24 @@ namespace FRCBananaSim::Robot::Schema
                 errors.push_back("Sensor '" + sensor.name + "' references missing targetJoint: '" + sensor.targetJoint + "'");
                 isValid = false;
             }
-            if (!sensor.contactZone.empty() && !manifest.FindContactZone(sensor.contactZone))
+            if (!sensor.contactZone.empty() && !manifest.FindContactZone(sensor.contactZone) && !sidecar.FindContactZone(sensor.contactZone))
             {
                 errors.push_back("Sensor '" + sensor.name + "' references missing contactZone: '" + sensor.contactZone + "'");
                 isValid = false;
             }
         }
 
-        // 9. Mass Reconciliation
+        // 9. Sidecar Contact Zones Validation
+        for (const auto& zone : sidecar.contactZones)
+        {
+            if (!zone.parentLink.empty() && !manifest.FindLink(zone.parentLink))
+            {
+                errors.push_back("Sidecar ContactZone '" + zone.name + "' references missing parentLink: '" + zone.parentLink + "'");
+                isValid = false;
+            }
+        }
+
+        // 10. Mass Reconciliation
         if (sidecar.massReconciliation.enabled)
         {
             if (sidecar.massReconciliation.unmodeledBallast.massKg > 0.0)

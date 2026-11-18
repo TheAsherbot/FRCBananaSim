@@ -118,8 +118,8 @@ namespace FRCBananaSim::Tests
             TEST_EXPECT_EQ(ctx, sidecar.swerve.steerMotorPreset, "KrakenX44");
             TEST_EXPECT_EQ(ctx, sidecar.swerve.modules.size(), static_cast<size_t>(4));
 
-            // Mechanisms (elevator, arm, wrist, 4-bar, flywheel)
-            TEST_EXPECT_EQ(ctx, sidecar.mechanisms.size(), static_cast<size_t>(5));
+            // Mechanisms (elevator, arm, wrist, 4-bar, flywheel, intake)
+            TEST_EXPECT_EQ(ctx, sidecar.mechanisms.size(), static_cast<size_t>(6));
             const MechanismConfig* elevMech = sidecar.FindMechanism("elevator_drive");
             TEST_EXPECT_TRUE(ctx, elevMech != nullptr);
             if (elevMech)

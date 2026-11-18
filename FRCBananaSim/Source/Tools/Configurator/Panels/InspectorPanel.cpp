@@ -10,6 +10,7 @@
 #include "Tools/Configurator/Panels/SensorPanel.h"
 #include "Tools/Configurator/Panels/MassReconciliationPanel.h"
 #include "Tools/Configurator/Panels/BumperPanel.h"
+#include "Tools/Configurator/Panels/ContactZonePanel.h"
 #include "Tools/Configurator/ConfiguratorState.h"
 #include "Tools/Configurator/Panels/ConfiguratorWidgets.h"
 #include "Robot/Schema/RobotSchemaLoader.h"
@@ -24,7 +25,8 @@ namespace FRCBananaSim::Tools::Configurator
           couplingsPanel(std::make_unique<CouplingsPanel>()),
           sensorPanel(std::make_unique<SensorPanel>()),
           massReconciliationPanel(std::make_unique<MassReconciliationPanel>()),
-          bumperPanel(std::make_unique<BumperPanel>())
+          bumperPanel(std::make_unique<BumperPanel>()),
+          contactZonePanel(std::make_unique<ContactZonePanel>())
     {
     }
 
@@ -79,12 +81,14 @@ namespace FRCBananaSim::Tools::Configurator
         ImGui::SameLine();
         renderNavButton("Bumpers", ConfiguratorState::ActiveInspectorTab::Bumpers, btnW4);
 
-        // Line 2: Couplings | Sensors | Mass & Scale
-        renderNavButton("Couplings", ConfiguratorState::ActiveInspectorTab::Couplings, btnW3);
+        // Line 2: Couplings | Sensors | Contact Zones | Mass & Scale
+        renderNavButton("Couplings", ConfiguratorState::ActiveInspectorTab::Couplings, btnW4);
         ImGui::SameLine();
-        renderNavButton("Sensors", ConfiguratorState::ActiveInspectorTab::Sensors, btnW3);
+        renderNavButton("Sensors", ConfiguratorState::ActiveInspectorTab::Sensors, btnW4);
         ImGui::SameLine();
-        renderNavButton("Mass & Scale", ConfiguratorState::ActiveInspectorTab::MassReconciliation, btnW3);
+        renderNavButton("Contact Zones", ConfiguratorState::ActiveInspectorTab::ContactZones, btnW4);
+        ImGui::SameLine();
+        renderNavButton("Mass & Scale", ConfiguratorState::ActiveInspectorTab::MassReconciliation, btnW4);
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -110,6 +114,9 @@ namespace FRCBananaSim::Tools::Configurator
             break;
         case ConfiguratorState::ActiveInspectorTab::Sensors:
             sensorPanel->Render(state);
+            break;
+        case ConfiguratorState::ActiveInspectorTab::ContactZones:
+            contactZonePanel->Render(state);
             break;
         case ConfiguratorState::ActiveInspectorTab::MassReconciliation:
             massReconciliationPanel->Render(state);

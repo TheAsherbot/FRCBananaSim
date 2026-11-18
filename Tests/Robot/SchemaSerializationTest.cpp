@@ -503,6 +503,127 @@ namespace FRCBananaSim::Tests
             TEST_EXPECT_EQ(ctx, loadedBumpers.color, "blue");
             TEST_EXPECT_NEAR(ctx, loadedBumpers.cutoutWidthM, 0.42, tolerance);
         }
+
+        // =============================================================
+        // SS8: Contact Zone Configuration Serialization & Override Round-Trip
+        // =============================================================
+        {
+            std::cout << "  -> SS8: Contact Zone Configuration Serialization & Override Round-Trip\n";
+
+            RobotSidecar sidecar;
+            ContactZoneDefinition intakeZone;
+            intakeZone.name = "intake_capture";
+            intakeZone.parentLink = "intake_link";
+            intakeZone.role = "intake";
+            intakeZone.originM = { 0.15, 0.0, 0.05 };
+            intakeZone.dimensionsM = { 0.25, 0.35, 0.10 };
+            intakeZone.tangentAxis = { 0.0, 1.0, 0.0 };
+            intakeZone.compressionAxis = { 0.0, 0.0, 1.0 };
+            intakeZone.nominalGapM = 0.038;
+
+            ContactZoneDefinition shooterZone;
+            shooterZone.name = "shooter_nip";
+            shooterZone.parentLink = "shooter_link";
+            shooterZone.role = "shooter";
+            shooterZone.originM = { 0.0, 0.0, 0.12 };
+            shooterZone.dimensionsM = { 0.15, 0.30, 0.15 };
+            shooterZone.tangentAxis = { 1.0, 0.0, 0.0 };
+            shooterZone.compressionAxis = { 0.0, 0.0, 1.0 };
+            shooterZone.nominalGapM = 0.025;
+
+            sidecar.contactZones.push_back(intakeZone);
+            sidecar.contactZones.push_back(shooterZone);
+
+            nlohmann::json j = RobotSidecarSerializer::SerializeToJson(sidecar);
+            TEST_EXPECT_TRUE(ctx, j.contains("contactZones"));
+            TEST_EXPECT_EQ(ctx, j["contactZones"].size(), static_cast<size_t>(2));
+
+            RobotSchemaLoader loader;
+            bool success = loader.LoadSidecarFromJson(j);
+            TEST_EXPECT_TRUE(ctx, success);
+
+            const auto& loadedZones = loader.GetSidecar().contactZones;
+            TEST_EXPECT_EQ(ctx, loadedZones.size(), static_cast<size_t>(2));
+
+            // Verify intake zone
+            const auto* z1 = loader.GetSidecar().FindContactZone("intake_capture");
+            TEST_EXPECT_TRUE(ctx, z1 != nullptr);
+            if (z1)
+            {
+                TEST_EXPECT_EQ(ctx, z1->parentLink, "intake_link");
+                TEST_EXPECT_EQ(ctx, z1->role, "intake");
+                TEST_EXPECT_NEAR(ctx, z1->originM.x, 0.15, tolerance);
+                TEST_EXPECT_NEAR(ctx, z1->originM.y, 0.0, tolerance);
+                TEST_EXPECT_NEAR(ctx, z1->originM.z, 0.05, tolerance);
+                TEST_EXPECT_NEAR(ctx, z1->dimensionsM.x, 0.25, tolerance);
+                TEST_EXPECT_NEAR(ctx, z1->dimensionsM.y, 0.35, tolerance);
+                TEST_EXPECT_NEAR(ctx, z1->dimensionsM.z, 0.10, tolerance);
+                TEST_EXPECT_NEAR(ctx, z1->tangentAxis.y, 1.0, tolerance);
+                TEST_EXPECT_NEAR(ctx, z1->compressionAxis.z, 1.0, tolerance);
+                TEST_EXPECT_NEAR(ctx, z1->nominalGapM, 0.038, tolerance);
+            }
+
+            // Verify shooter zone
+            const auto* z2 = loader.GetSidecar().FindContactZone("shooter_nip");
+            TEST_EXPECT_TRUE(ctx, z2 != nullptr);
+            if (z2)
+            {
+                TEST_EXPECT_EQ(ctx, z2->parentLink, "shooter_link");
+                TEST_EXPECT_EQ(ctx, z2->role, "shooter");
+                TEST_EXPECT_NEAR(ctx, z2->originM.z, 0.12, tolerance);
+                TEST_EXPECT_NEAR(ctx, z2->tangentAxis.x, 1.0, tolerance);
+                TEST_EXPECT_NEAR(ctx, z2->compressionAxis.z, 1.0, tolerance);
+                TEST_EXPECT_NEAR(ctx, z2->nominalGapM, 0.025, tolerance);
+            }
+
+            // Verify GetEffectiveContactZones with manifest merge / override
+            RobotManifest manifest;
+            ContactZoneDefinition cadIntake;
+            cadIntake.name = "intake_capture";
+            cadIntake.parentLink = "cad_intake_link";
+            cadIntake.role = "intake";
+            cadIntake.nominalGapM = 0.050; // Different in CAD
+
+            ContactZoneDefinition cadFeeder;
+            cadFeeder.name = "indexer_feeder";
+            cadFeeder.parentLink = "feeder_link";
+            cadFeeder.role = "intake";
+            cadFeeder.nominalGapM = 0.040;
+
+            manifest.contactZones.push_back(cadIntake);
+            manifest.contactZones.push_back(cadFeeder);
+
+            auto effectiveZones = loader.GetSidecar().GetEffectiveContactZones(manifest);
+            // Should contain sidecar's 2 zones (intake_capture overriding CAD, shooter_nip new) + CAD's indexer_feeder = 3 total
+            TEST_EXPECT_EQ(ctx, effectiveZones.size(), static_cast<size_t>(3));
+
+            bool foundOverridden = false;
+            bool foundNewSidecar = false;
+            bool foundCadPreserved = false;
+            for (const auto& ez : effectiveZones)
+            {
+                if (ez.name == "intake_capture")
+                {
+                    foundOverridden = true;
+                    // Ensure sidecar values took precedence
+                    TEST_EXPECT_EQ(ctx, ez.parentLink, "intake_link");
+                    TEST_EXPECT_NEAR(ctx, ez.nominalGapM, 0.038, tolerance);
+                }
+                else if (ez.name == "shooter_nip")
+                {
+                    foundNewSidecar = true;
+                    TEST_EXPECT_EQ(ctx, ez.parentLink, "shooter_link");
+                }
+                else if (ez.name == "indexer_feeder")
+                {
+                    foundCadPreserved = true;
+                    TEST_EXPECT_EQ(ctx, ez.parentLink, "feeder_link");
+                }
+            }
+            TEST_EXPECT_TRUE(ctx, foundOverridden);
+            TEST_EXPECT_TRUE(ctx, foundNewSidecar);
+            TEST_EXPECT_TRUE(ctx, foundCadPreserved);
+        }
         std::cout << "[DONE] SchemaSerializationTest" << std::endl;
         }
         catch (const std::exception& e)

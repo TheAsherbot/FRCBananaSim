@@ -1025,6 +1025,74 @@ Use this cheat sheet to choose how to configure any mechanism:
 
 ---
 
+### K. Hybrid Game-Piece Interaction Volumes & Contact Zones (`contactZones`)
+
+Block 6 introduces high-fidelity game-piece dynamics (continuous roller intake grip, shooter nip compression, and aerodynamic projectile flight). Rather than relying on discrete multi-body mesh collisions that glitch or tunnel at high RPM, BananaSim models active intake rollers and high-speed shooters via continuous **Contact Zones** (`ContactZoneDefinition`).
+
+#### 1. Architecture: Manifest CAD Zones vs Sidecar Overrides
+Contact zones can be authored in two complementary ways:
+* **CAD Exporter (`manifest.json`):** CAD designers create simplified trigger solids named `ZONE_intake_<name>` or `ZONE_shooter_<name>`. The exporter places these in `manifest.json["contactZones"]`.
+* **Sidecar Configurator (`sidecar.json`):** Programmers and drive coaches can define new contact zones or adjust existing ones directly in `sidecar.json["contactZones"]` without touching the CAD model or running an export.
+
+At runtime, `sidecar.GetEffectiveContactZones(manifest)` reconciles the two lists:
+1. Every contact zone defined in `sidecar.json` is loaded. If its `name` matches a zone in `manifest.json`, the sidecar definition **completely overrides** the CAD defaults (useful for tuning nip clearances or switching parent links).
+2. Any CAD zones from `manifest.json` that are *not* redefined in `sidecar.json` are retained as fallbacks.
+
+#### 2. Contact Zone JSON Specification
+```json
+{
+  "contactZones": [
+    {
+      "name": "zone_intake_roller",
+      "parentLink": "intake_arm",
+      "role": "intake",
+      "origin_m": [0.35, 0.0, 0.12],
+      "dimensions_m": [0.22, 0.45, 0.14],
+      "tangentAxis": [0.0, 0.0, 1.0],
+      "compressionAxis": [1.0, 0.0, 0.0],
+      "nominalGap_m": 0.038
+    },
+    {
+      "name": "zone_shooter_nip",
+      "parentLink": "turret_hood",
+      "role": "shooter",
+      "origin_m": [0.0, 0.0, 0.28],
+      "dimensions_m": [0.18, 0.32, 0.16],
+      "tangentAxis": [0.0, 0.7071, 0.7071],
+      "compressionAxis": [1.0, 0.0, 0.0],
+      "nominalGap_m": 0.025
+    }
+  ]
+}
+```
+
+#### 3. Field Definitions & Physics Meaning
+* **`name`** (`string`): Unique identifier for the interaction volume.
+* **`parentLink`** (`string`): Name of the link in `manifest.json` to which this zone is rigidly attached. The zone automatically moves and pitches in 3D space with the parent link (e.g. as an intake pivots or elevator extends).
+* **`role`** (`string`): Interaction mode:
+  * `"intake"`: Compliant roller intake. Ingests overlapping game pieces at tangential surface speed along `tangentAxis`, exerting inward tractive grip and motor back-EMF drag torque.
+  * `"shooter"`: Dual-roller or flywheel+hood nip accelerator. Computes nonlinear compressive depth $\delta = \max(0, D_{\text{piece}} - \text{nominalGap})$, applies normal squeeze force $F_N = k_1 \delta + k_2 \delta^2$, and accelerates the piece into aerodynamic ballistics upon exiting the volume.
+* **`origin_m`** (`[X, Y, Z]`): Center position of the contact volume in parent link coordinate space (meters NWU).
+* **`dimensions_m`** (`[X, Y, Z]`): Bounding dimensions (extents) of the box trigger volume in parent link coordinate space (meters). Must be strictly positive ($> 0$).
+* **`tangentAxis`** (`[X, Y, Z]` unit vector): Direction vector along which game pieces are fed/accelerated (tangential transit velocity).
+* **`compressionAxis`** (`[X, Y, Z]` unit vector): Normal direction along which foam/rubber deformation and nip clamping forces act. Must be orthogonal to `tangentAxis` ($|\text{tangent} \cdot \text{compression}| < 0.15$).
+* **`nominalGap_m`** (`float`): The physical gap clearance (meters) between the two opposing roller surfaces (or roller and fixed backing plate/hood).
+
+#### 4. Beam Break Sensor Quick-Binding
+Optical beam break sensors configured under `"sensors"` can directly bind to any contact zone via:
+```json
+{
+  "name": "intake_entry_sensor",
+  "type": "beam_break",
+  "bus": "dio_pwm",
+  "dioChannel": 2,
+  "contactZone": "zone_intake_roller"
+}
+```
+When a game piece penetrates into `"zone_intake_roller"`, the simulated digital input automatically trips to `true` (or `false` if `normallyClosed`), updating the WPILib HAL `SimDevice` in real time with zero CPU overhead.
+
+---
+
 ## 7. Master Configuration Dictionary for `robot_swerve.json` (Block 2)
 
 This table lists every single property read by `RobotSpawner` and `SwerveDrivetrainConfig`:
@@ -1146,3 +1214,11 @@ This table lists every single property read by `RobotSpawner` and `SwerveDrivetr
 | **`bumpers.mass_kg`** | `BumperSidecarConfig::mass_kg` | $\text{kg}$ | Total bumper assembly mass (FRC max limit: $15.0\text{ lbs} \approx 6.804\text{ kg}$). |
 | **`bumpers.material`** | `BumperSidecarConfig::material` | string | Surface contact material key in `materials.json` (e.g. `"bumper_fabric"`). |
 | **`bumpers.color`** | `BumperSidecarConfig::color` | string | Viewport visualization wireframe color (`"blue"`, `"red"`, `"black"`). |
+| **`contactZones[i].name`** | `ContactZoneDefinition::name` | string | Unique contact zone identifier (e.g. `"zone_intake_roller"`). Overrides matching manifest CAD zone. |
+| **`contactZones[i].role`** | `ContactZoneDefinition::role` | string | Interaction role: `"intake"` (surface transit) or `"shooter"` (nip compression & ballistic launch). |
+| **`contactZones[i].parentLink`** | `ContactZoneDefinition::parentLink` | string | Target link in `manifest.json` carrying the zone (e.g. `"intake_arm"`, `"turret_hood"`). |
+| **`contactZones[i].origin_m`** | `ContactZoneDefinition::originM` | $\text{m}$ | Local `[X, Y, Z]` box centroid offset relative to parent link origin. |
+| **`contactZones[i].dimensions_m`** | `ContactZoneDefinition::dimensionsM` | $\text{m}$ | Strictly positive `[X, Y, Z]` bounding dimensions of the interaction volume. |
+| **`contactZones[i].tangentAxis`** | `ContactZoneDefinition::tangentAxis` | unit vec | Unit feeding vector in parent link frame along which transit surface velocity acts. |
+| **`contactZones[i].compressionAxis`** | `ContactZoneDefinition::compressionAxis` | unit vec | Unit squeeze vector orthogonal to tangentAxis along which normal nip compression acts. |
+| **`contactZones[i].nominalGap_m`** | `ContactZoneDefinition::nominalGapM` | $\text{m}$ | Uncompressed gap between roller surfaces (or roller & hood) determining squeeze depth $\delta$. |

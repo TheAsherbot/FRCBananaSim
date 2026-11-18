@@ -23,6 +23,7 @@
 #include "Robot/Sensors/Components/BeamBreakComponent.h"
 #include "Robot/Sensors/Components/AnalogInputComponent.h"
 #include "Robot/Sensors/Components/ContactZoneComponent.h"
+#include "Interaction/Systems/RobotGamePieceSystem.h"
 #include "Actuation/Components/BatteryComponent.h"
 #include "Actuation/DCMotorModel.h"
 #include "Telemetry/TelemeteryViewer/TelemetryMacros.h"
@@ -75,6 +76,7 @@ namespace FRCBananaSim::Robot
 
         AssembledRobot result;
         result.robotName = manifest.robotName;
+        result.scene = &scene;
 
         // 1. Spawn Battery Component Entity
         result.batteryEntity = scene.CreateEntity();
@@ -771,6 +773,7 @@ namespace FRCBananaSim::Robot
                 fw.gearRatio = mech.gearRatio;
                 fw.motorCount = static_cast<uint32_t>(mech.controllers.empty() ? 1 : mech.controllers.size());
                 fw.flywheelInertiaKgm2 = (mech.flywheelInertiaKgm2 > 1e-9) ? mech.flywheelInertiaKgm2 : 0.0035;
+                fw.rollerRadiusM = (mech.rollerRadiusM > 1e-4) ? mech.rollerRadiusM : 0.0508;
                 fw.efficiency = mech.efficiency;
                 fw.coulombFrictionNm = (mech.coulombFriction > 1e-6) ? mech.coulombFriction : 0.02;
                 fw.viscousDampingNms = (mech.viscousDamping > 1e-9) ? mech.viscousDamping : 0.0001;
@@ -1074,7 +1077,39 @@ namespace FRCBananaSim::Robot
             }
         }
 
-        // 8. Spawn Sensors (CANcoders, IMUs, Limit Switches, Beam Breaks, Analog Inputs)
+        // 8. Spawn Contact Zones (Spawned before sensors so beam-breaks can bind directly)
+        // Uses sidecar overrides / custom additions over CAD defaults
+        for (const auto& cz : sidecar.GetEffectiveContactZones(manifest))
+        {
+            Core::ECS::Core::Entity cze = scene.CreateEntity();
+            result.contactZoneEntities[cz.name] = cze;
+
+            Sensors::Components::ContactZoneComponent comp;
+            comp.name = cz.name;
+            comp.role = cz.role;
+            auto lIt = result.linkEntities.find(cz.parentLink);
+            if (lIt != result.linkEntities.end())
+            {
+                comp.parentLink = lIt->second;
+            }
+            comp.localOrigin = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.originM));
+            comp.localRotation = glm::quat(Schema::RobotSchemaLoader::ConvertNWUQuatToEngine(cz.rotationQuat));
+            comp.dimensions = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.dimensionsM));
+            comp.tangentAxis = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.tangentAxis));
+            if (glm::length(comp.tangentAxis) > 1e-4f)
+            {
+                comp.tangentAxis = glm::normalize(comp.tangentAxis);
+            }
+            comp.compressionAxis = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.compressionAxis));
+            if (glm::length(comp.compressionAxis) > 1e-4f)
+            {
+                comp.compressionAxis = glm::normalize(comp.compressionAxis);
+            }
+            comp.nominalGapM = cz.nominalGapM;
+            scene.AddComponent(cze, comp);
+        }
+
+        // 9. Spawn Sensors (CANcoders, IMUs, Limit Switches, Beam Breaks, Analog Inputs)
         for (const auto& s : sidecar.sensors)
         {
             Core::ECS::Core::Entity se = scene.CreateEntity();
@@ -1087,7 +1122,9 @@ namespace FRCBananaSim::Robot
                 enc.bindingType = (s.type == "cancoder")
                     ? Sensors::Components::EncoderBindingType::CANcoder
                     : Sensors::Components::EncoderBindingType::JointOnly;
-                enc.slot = (s.type == "cancoder") ? s.canId : s.dioChannel;
+                enc.slot = (s.type == "cancoder")
+                    ? s.canId
+                    : ((s.bus.find("i2c") != std::string::npos) ? s.i2cAddress : s.dioChannel);
                 auto jIt = result.jointEntities.find(s.targetJoint);
                 if (jIt != result.jointEntities.end())
                 {
@@ -1135,7 +1172,15 @@ namespace FRCBananaSim::Robot
                 bb.dioChannel = s.dioChannel;
                 bb.normallyClosed = s.normallyClosed;
                 bb.debounceTimeS = s.debounceTimeS;
-                bb.sensorEntity = se;
+                auto czIt = result.contactZoneEntities.find(s.contactZone);
+                if (czIt != result.contactZoneEntities.end())
+                {
+                    bb.sensorEntity = czIt->second;
+                }
+                else
+                {
+                    bb.sensorEntity = Core::ECS::Core::invalidEntity;
+                }
                 scene.AddComponent(se, bb);
             }
             else if (s.type == "analog_input")
@@ -1155,24 +1200,6 @@ namespace FRCBananaSim::Robot
                 }
                 scene.AddComponent(se, aic);
             }
-        }
-
-        // 9. Spawn Contact Zones
-        for (const auto& cz : manifest.contactZones)
-        {
-            Core::ECS::Core::Entity cze = scene.CreateEntity();
-            result.contactZoneEntities[cz.name] = cze;
-
-            Sensors::Components::ContactZoneComponent comp;
-            comp.name = cz.name;
-            comp.role = cz.role;
-            auto lIt = result.linkEntities.find(cz.parentLink);
-            if (lIt != result.linkEntities.end())
-            {
-                comp.parentLink = lIt->second;
-            }
-            comp.dimensions = Schema::RobotSchemaLoader::ConvertNWUVectorToEngine(glm::vec3(cz.dimensionsM));
-            scene.AddComponent(cze, comp);
         }
 
         // 10. Configure Swerve Drivetrain Subsystem & Attach SwerveChassisComponent
@@ -1233,6 +1260,7 @@ namespace FRCBananaSim::Robot
         result.flywheelSystem = std::make_shared<Mechanisms::Systems::FlywheelSystem>(scene, joltContext);
         result.compositeMassSystem = std::make_shared<Mechanisms::Systems::CompositeMassSystem>(
             scene, result.swerveSystem ? result.swerveSystem->GetModel() : nullptr, joltContext);
+        result.flightAerodynamicsSystem = std::make_shared<Interaction::Systems::FlightAerodynamicsSystem>(scene, joltContext);
 
         if (joltContext && joltContext->IsInitialized())
         {
@@ -1292,10 +1320,28 @@ namespace FRCBananaSim::Robot
             robot.differentialSystem->FixedUpdate(dt);
         }
 
+        // Stage 3c: RobotGamePieceSystem Pre-Flywheel (Compression squeeze evaluation & load torque injection)
+        if (robot.scene)
+        {
+            Interaction::Systems::RobotGamePieceSystem::PreFlywheelUpdate(*robot.scene, robot, dt);
+        }
+
+        // Stage 3d: RobotGamePieceSystem Intake (Active intake compliant drag, capture handoff & motor load)
+        if (robot.scene)
+        {
+            Interaction::Systems::RobotGamePieceSystem::UpdateIntake(*robot.scene, robot, dt);
+        }
+
         // Stage 4: FlywheelSystem (Sub-stepped 1D rotational ODEs and body reaction recoil)
         if (robot.flywheelSystem)
         {
             robot.flywheelSystem->FixedUpdate(dt);
+        }
+
+        // Stage 4b: RobotGamePieceSystem Post-Flywheel (Muzzle handoff, linear recoil impulse, isEngaged)
+        if (robot.scene)
+        {
+            Interaction::Systems::RobotGamePieceSystem::PostFlywheelUpdate(*robot.scene, robot, dt);
         }
 
         // Stage 5: CompositeMassSystem (Dynamic CoM and Parallel Axis Theorem handoff to swerve model)
@@ -1308,6 +1354,12 @@ namespace FRCBananaSim::Robot
         if (robot.swerveSystem)
         {
             robot.swerveSystem->FixedUpdate(dt);
+        }
+
+        // Stage 6b: FlightAerodynamicsSystem (Scene-level aerodynamic drag & Magnus lift pass)
+        if (robot.flightAerodynamicsSystem)
+        {
+            robot.flightAerodynamicsSystem->FixedUpdate(dt);
         }
 
         // Stage 7: PhysicsSystem (Jolt rigid body step and ECS transform sync)

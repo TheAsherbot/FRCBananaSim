@@ -51,6 +51,13 @@ namespace FRCBananaSim::Physics::Systems
          */
         JPH::GroupFilterTable* GetGroupFilterTable() const;
 
+        /**
+         * @brief Retrieves the underlying Jolt physics context.
+         * @return Reference to JoltContext.
+         */
+        JoltContext& GetJoltContext() { return joltContext; }
+        const JoltContext& GetJoltContext() const { return joltContext; }
+
     private:
         /**
          * @brief Creates a Jolt body for any entity containing a RigidBodyComponent not yet initialized.

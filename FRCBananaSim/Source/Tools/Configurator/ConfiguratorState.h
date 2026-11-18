@@ -130,7 +130,8 @@ namespace FRCBananaSim::Tools::Configurator
             Couplings,
             Sensors,
             MassReconciliation,
-            Bumpers
+            Bumpers,
+            ContactZones
         };
         ActiveInspectorTab activeInspectorTab{ ActiveInspectorTab::CADSelection };
 
@@ -138,6 +139,10 @@ namespace FRCBananaSim::Tools::Configurator
         std::string selectedJoint;
         std::string selectedMechanism;
         std::string selectedSensor;
+        std::string selectedContactZone;
+
+        // Effective Contact Zones (Combines CAD manifest and Sidecar customizations)
+        std::vector<Robot::Schema::ContactZoneDefinition> GetEffectiveContactZones() const;
 
         // Diagnostics
         std::string statusMessage{ "Ready. Open a CAD folder or load Reference2026 to begin." };

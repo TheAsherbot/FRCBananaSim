@@ -13,6 +13,7 @@
 #include <glm/mat3x3.hpp>
 
 #include <cstdint>
+#include <ostream>
 
 namespace FRCBananaSim::Physics::Components
 {
@@ -26,6 +27,17 @@ namespace FRCBananaSim::Physics::Components
         Kinematic = 1, ///< Controlled programmatically (e.g. driven mechanisms, animation).
         Dynamic = 2    ///< Fully simulated by Jolt forces, gravity, and contacts.
     };
+
+    inline std::ostream& operator<<(std::ostream& os, const BodyMotionType& type)
+    {
+        switch (type)
+        {
+        case BodyMotionType::Static: return os << "Static";
+        case BodyMotionType::Kinematic: return os << "Kinematic";
+        case BodyMotionType::Dynamic: return os << "Dynamic";
+        default: return os << "Unknown";
+        }
+    }
 
     /**
      * @struct RigidBodyComponent

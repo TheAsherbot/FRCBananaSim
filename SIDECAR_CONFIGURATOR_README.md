@@ -187,14 +187,46 @@ Across the entire Sidecar Configurator application, all 3D viewports, sliders, o
   - Link Center of Mass coordinates ($X, Y, Z$), Collider bounding box dimensions & origins, and Joint motion axes are automatically presented in this Robot Coordinate Frame.
   - When you adjust any $X, Y, Z$ offset (e.g. Swerve Module positions, Sensor mounts, or Ballast locations), positive values always move the component **Right ($+X$)**, **Up ($+Y$)**, or **Forward ($+Z$)**.
 
+### Interactive 3D Orientation Gizmo & Canonical Orthogonal Snapping
+
+In the bottom-left corner of the CAD viewport is a Blender/Fusion-style **3D Orientation Gizmo**:
+- **Interactive Stalks & Axis Bubbles**:
+  - **`+X` (Red)**: Snaps camera to the **Right View (+X)**.
+  - **`-X` (Dark Red)**: Snaps camera to the **Left View (-X)**.
+  - **`+Y` (Green)**: Snaps camera to the **Top View (+Y)** (Front $+Z$ oriented upward, Right $+X$ oriented rightward).
+  - **`-Y` (Dark Green)**: Snaps camera to the **Bottom View (-Y)**.
+  - **`+Z` (Blue)**: Snaps camera to the **Front View (+Z)**.
+  - **`-Z` (Dark Blue)**: Snaps camera to the **Back View (-Z)**.
+- **One-Click Orthographic Auto-Switch**:
+  - Clicking any gizmo axis bubble automatically snaps the viewport camera to the exact canonical view and **switches projection to Orthographic (Ortho)** mode, providing a crisp, distortion-free technical drawing projection.
+- **Hover Highlights & Tooltips**:
+  - Hovering over any bubble illuminates a white highlight ring and displays a tooltip describing the viewpoint and action (e.g. `Right View (+X) - Click to snap [Orthographic]`).
+- **Gimbal Lock Protection**:
+  - The view matrix computation handles top-down and bottom-up vertical singularities seamlessly by auto-switching reference up-vectors, preventing numerical instability or flips.
+
+### Orthographic vs. Perspective Projection Modes
+
+- **Viewport Toolbar Toggle**:
+  - A small button `[Projection: Perspective (P)]` / `[Projection: Ortho (O)]` on the CAD viewport header toggles between 3D perspective and 2D orthographic projection at any time.
+- **Keyboard Shortcuts**:
+  - <kbd>O</kbd>: Switch to Orthographic projection.
+  - <kbd>P</kbd>: Switch to Perspective projection.
+  - <kbd>1</kbd> / <kbd>Numpad 1</kbd>: Snap to Front view (+Z) [Ctrl+1 for Back (-Z)].
+  - <kbd>3</kbd> / <kbd>Numpad 3</kbd>: Snap to Right view (+X) [Ctrl+3 for Left (-X)].
+  - <kbd>7</kbd> / <kbd>Numpad 7</kbd>: Snap to Top view (+Y) [Ctrl+7 for Bottom (-Y)].
+  - <kbd>5</kbd> / <kbd>Numpad 5</kbd>: Toggle Orthographic / Perspective projection.
+- **Camera Preferences Persistence**:
+  - All camera preferences—including `isOrthographic`, `cameraYaw`, `cameraPitch`, `cameraDistance`, `cameraTarget`, navigation preset, scroll zoom inversion, orbit inversions, sensitivities, and FOV—are automatically persisted to `configurator_settings.json` upon interaction and cleanly restored whenever the application launches.
+
 ### Camera Settings Modal
 Click **Camera Settings** in the top toolbar to adjust:
 - **Navigation Preset**: Switch between Fusion 360, Blender, or CAD Standard.
-- **Invert Scroll Zoom**: Toggle zoom direction to match personal preference.
+- **Projection & Optics**: Checkbox to toggle Orthographic projection directly.
+- **Invert Mouse Wheel Zoom**: Toggle zoom direction to match personal preference.
 - **Invert Orbit Direction (Horizontal X & Vertical Y)**: Customize horizontal turntable and vertical tilt orbit directions.
 - **Field of View (FOV)**: Adjust between 20° and 90° (default 45°).
 - **Orbit, Pan, and Zoom Sensitivities**: Fine-tune mouse tracking speed.
-- All camera settings are automatically saved across sessions in `configurator_settings.json`.
+- All camera settings and positions are automatically saved across sessions in `configurator_settings.json`.
 
 ### Gold Selection Highlighting & HUD Overlay
 - When you click any **Link**, **Joint**, or **Mechanism** in the hierarchy panel or the inspector, the viewport instantly draws that component highlighted in **Gold Wireframe & Silhouette**.
@@ -202,6 +234,12 @@ Click **Camera Settings** in the top toolbar to adjust:
   - Active Mechanism role and name.
   - Bound CAD Target Joint and kinematic type.
   - Bound Parent Link.
+
+### Contact Zone 3D Wireframes & Transit Direction Arrows
+- When viewing mechanisms or authoring contact zones, the 3D viewport renders real-time wireframe volumes representing intake and shooter interaction boundaries:
+  - **Intake Zones**: Rendered in **Emerald Green** (`#32CD32`) with an overlaid directional arrow indicating the inward feeding transit direction (`tangentAxis`).
+  - **Shooter Zones**: Rendered in **Vibrant Gold** (`#FFD700`) with an overlaid directional arrow indicating the projectile ejection trajectory (`tangentAxis`).
+- Volumes move and pitch rigidly in 3D screen space alongside their parent CAD link, allowing instant visual alignment with CAD roller geometries and intake mouths.
 
 ---
 
@@ -402,6 +440,30 @@ Dedicated subsystem inspector for mechanical transmissions between joints and ki
 
 ### Sensor Suite Panel (IMUs, CANcoders, Beam Breaks, Limit Switches, Analog)
 Author and calibrate all sensory instrumentation for autonomous navigation, mechanism feedback, and game piece detection:
+
+### Contact Zones & Interaction Volumes Panel
+Author and tune continuous game-piece interaction zones (`ActiveInspectorTab::ContactZones`) for roller intakes and high-speed shooters:
+- **Left Panel List**:
+  - Displays all active contact zones with role badge (`[INTAKE]` in green, `[SHOOTER]` in gold).
+  - Shows parent link tag and zone dimensions.
+  - `+ Add Contact Zone` and `Delete Zone` controls.
+  - Automatically merges CAD manifest zones and sidecar overrides (`GetEffectiveContactZones()`).
+- **Zone Identity & Role**:
+  - **Zone Name**: Unique identifier for the volume (e.g. `zone_intake_roller`, `zone_shooter_nip`).
+  - **Interaction Role**: Switch between `Intake (Roller Feed)` and `Shooter (Flywheel / Nip Compression)`.
+  - **Parent Link Binding**: Combo dropdown populated directly from CAD manifest links. Rigidly anchors the zone to the selected component.
+- **3D Spatial Geometry & Placement**:
+  - **Center Offset (`originM`)**: Unified $[X, Y, Z]$ sliders in meters relative to parent link frame ($+X=\text{Forward}, +Y=\text{Left}, +Z=\text{Up}$ in NWU).
+  - **Box Dimensions (`dimensionsM`)**: Length ($X$), Width ($Y$), Height ($Z$) bounds sliders (meters). Strictly validated $> 0$.
+- **Kinematic & Force Vectors**:
+  - **Tangent Axis (Transit Direction)**: Unit vector along which intake feeding or shooter launch occurs. Preset buttons: `+X Forward`, `-X Back`, `+Y Left`, `-Y Right`, `+Z Up`, `-Z Down`.
+  - **Compression Axis (Squeeze Direction)**: Unit vector normal to tangentAxis along which foam deformation acts.
+  - **Orthogonality Indicator**: Real-time visual badge confirming tangent and compression axes are strictly perpendicular ($|\mathbf{T} \cdot \mathbf{C}| \approx 0$).
+- **Transit Clearance**:
+  - **Nominal Gap (`nominalGapM`)**: Distance between opposing roller surfaces (or roller and fixed backing plate) in meters, with millimeter tooltip readout.
+- **Beam Break Quick-Binding**:
+  - Shows list of beam break optical sensors attached to this zone.
+  - `+ Bind Beam Break Sensor` button creates a calibrated optical sensor tripped whenever game pieces enter this zone.
 - **CTRE Pigeon 2.0 (`imu_pigeon2`)**:
   - 6-axis IMU reporting yaw, pitch, roll, angular rates, and 3-axis linear accelerations.
   - CAN ID and CAN Bus assignment (`roboRIO (rio)` vs `CANivore (canivore)`).
@@ -473,6 +535,11 @@ The bottom dock hosts the continuous schema linter. As you edit parameters, the 
 | 🛑 **Error** | **Orphan Joint Reference** | Mechanism references a target joint that does not exist in `manifest.json`. |
 | 🛑 **Error** | **Orphan Link Reference** | Chassis or ballast references a link missing from `manifest.json`. |
 | 🛑 **Error** | **Differential Joint Invalid** | Differential coupling targets a joint that is not revolute/continuous. |
+| 🛑 **Error** | **Contact Zone Non-Positive Size** | Contact zone dimensions ($X, Y, Z$) must be strictly positive ($> 0$). |
+| 🛑 **Error** | **Contact Zone Missing Parent Link** | Contact zone references a parent link not found in `manifest.json`. |
+| 🛑 **Error** | **Contact Zone Non-Orthogonal Axes** | Tangent feeding axis and compression axis must be perpendicular ($|\mathbf{T} \cdot \mathbf{C}| < 0.05$). |
+| ⚠️ **Warning** | **Contact Zone Missing Flywheel Joint** | Contact zone references a flywheel joint not found in `manifest.json`. |
+| ⚠️ **Warning** | **Duplicate Contact Zone Name** | Multiple contact zones share the exact same identifier. |
 | ⚠️ **Warning** | **High Stator Current** | Aggregate stator limits exceed 400A (potential brownout risk). |
 | ⚠️ **Warning** | **Missing Joint Limits** | Joint targeted by a mechanism has no physical stop limits defined in CAD. |
 

@@ -128,9 +128,10 @@ namespace FRCBananaSim::Tools::Configurator
                     newSens.dioChannel = 0;
                     newSens.normallyClosed = false;
                     newSens.debounceTimeS = 0.010;
-                    if (!state.manifest.contactZones.empty())
+                    auto effZones = state.GetEffectiveContactZones();
+                    if (!effZones.empty())
                     {
-                        newSens.contactZone = state.manifest.contactZones[0].name;
+                        newSens.contactZone = effZones[0].name;
                     }
                 }
                 else if (newSens.type == "limit_switch")
@@ -586,18 +587,19 @@ namespace FRCBananaSim::Tools::Configurator
                     }
 
                     // Contact Zone Picker
+                    auto effZones = state.GetEffectiveContactZones();
                     std::vector<const char*> zoneNames;
                     int selectedZoneIdx = -1;
-                    for (size_t z = 0; z < state.manifest.contactZones.size(); ++z)
+                    for (size_t z = 0; z < effZones.size(); ++z)
                     {
-                        zoneNames.push_back(state.manifest.contactZones[z].name.c_str());
-                        if (sens.contactZone == state.manifest.contactZones[z].name)
+                        zoneNames.push_back(effZones[z].name.c_str());
+                        if (sens.contactZone == effZones[z].name)
                         {
                             selectedZoneIdx = static_cast<int>(z);
                         }
                     }
                     ImGui::SetNextItemWidth(200.0f);
-                    if (ImGui::Combo("CAD Contact Zone##BeamBreak", &selectedZoneIdx, zoneNames.data(), static_cast<int>(zoneNames.size())))
+                    if (ImGui::Combo("Bound Contact Zone##BeamBreak", &selectedZoneIdx, zoneNames.data(), static_cast<int>(zoneNames.size())))
                     {
                         if (selectedZoneIdx >= 0 && selectedZoneIdx < static_cast<int>(zoneNames.size()))
                         {
@@ -605,9 +607,9 @@ namespace FRCBananaSim::Tools::Configurator
                             state.RunLinter();
                         }
                     }
-                    if (state.manifest.contactZones.empty())
+                    if (effZones.empty())
                     {
-                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Note: No contact zones defined in manifest.json.");
+                        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Note: No contact zones defined. Add one in the Contact Zones panel.");
                     }
 
                     // Normally Closed & Debounce
@@ -884,22 +886,50 @@ namespace FRCBananaSim::Tools::Configurator
 
                     if (!isQuad)
                     {
-                        // Hardware Route for Absolute Duty Cycle: roboRIO DIO vs SPARK Data Port
-                        int routeMode = (sens.attachToControllerCanId > 0) ? 1 : 0;
-                        BeginOptionRow("Hardware Connection:", 150.0f);
-                        if (ImGui::RadioButton("roboRIO DIO Pin##REVAbs", routeMode == 0))
+                        // Hardware Route for Absolute Mode:
+                        // 0: roboRIO DIO Pin (PWM DutyCycle)
+                        // 1: SPARK MAX/Flex Data Port
+                        // 2: roboRIO I2C Bus (Onboard / MXP)
+                        int routeMode = 0;
+                        if (sens.bus == "i2c_onboard" || sens.bus == "i2c_mxp")
                         {
+                            routeMode = 2;
+                        }
+                        else if (sens.attachToControllerCanId > 0)
+                        {
+                            routeMode = 1;
+                        }
+
+                        BeginOptionRow("Hardware Connection:", 150.0f);
+                        if (ImGui::RadioButton("roboRIO DIO Pin (PWM)##REVAbs", routeMode == 0))
+                        {
+                            routeMode = 0;
+                            sens.bus = "rio";
                             sens.attachToControllerCanId = 0;
                             state.RunLinter();
                         }
                         AutoWrapSameLine(210.0f);
                         if (ImGui::RadioButton("SPARK MAX/Flex Data Port##REVAbs", routeMode == 1))
                         {
+                            routeMode = 1;
+                            sens.bus = "rio";
                             sens.attachToControllerCanId = 1;
                             state.RunLinter();
                         }
+                        AutoWrapSameLine(180.0f);
+                        if (ImGui::RadioButton("roboRIO I2C Bus##REVAbs", routeMode == 2))
+                        {
+                            routeMode = 2;
+                            if (sens.bus != "i2c_onboard" && sens.bus != "i2c_mxp")
+                            {
+                                sens.bus = "i2c_onboard";
+                            }
+                            if (sens.i2cAddress == 0) sens.i2cAddress = 0x36; // Common magnetic encoder I2C address
+                            sens.attachToControllerCanId = 0;
+                            state.RunLinter();
+                        }
 
-                        if (sens.attachToControllerCanId == 0)
+                        if (routeMode == 0)
                         {
                             int dioChan = static_cast<int>(sens.dioChannel);
                             ImGui::SetNextItemWidth(70.0f);
@@ -910,7 +940,7 @@ namespace FRCBananaSim::Tools::Configurator
                             }
                             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Connects to the yellow Absolute PWM signal wire on the Through Bore cable");
                         }
-                        else
+                        else if (routeMode == 1)
                         {
                             int ctrlCanId = static_cast<int>(sens.attachToControllerCanId);
                             ImGui::SetNextItemWidth(70.0f);
@@ -920,6 +950,27 @@ namespace FRCBananaSim::Tools::Configurator
                                 state.RunLinter();
                             }
                             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Connected directly via 10-pin ribbon cable to SPARK MAX / Flex data port");
+                        }
+                        else if (routeMode == 2)
+                        {
+                            int busIdx = (sens.bus == "i2c_mxp") ? 1 : 0;
+                            const char* i2cBuses[] = { "I2C (Onboard)", "I2C (MXP Extension)" };
+                            ImGui::SetNextItemWidth(160.0f);
+                            if (ImGui::Combo("I2C Port##REVI2C", &busIdx, i2cBuses, 2))
+                            {
+                                sens.bus = (busIdx == 1) ? "i2c_mxp" : "i2c_onboard";
+                                state.RunLinter();
+                            }
+
+                            AutoWrapSameLine(140.0f, 12.0f);
+                            int addrHex = static_cast<int>(sens.i2cAddress);
+                            ImGui::SetNextItemWidth(90.0f);
+                            if (ImGui::InputInt("I2C Address (Hex)##REVI2C", &addrHex, 1, 16))
+                            {
+                                sens.i2cAddress = static_cast<uint32_t>(std::clamp(addrHex, 1, 127));
+                                state.RunLinter();
+                            }
+                            if (ImGui::IsItemHovered()) ImGui::SetTooltip("7-bit I2C device address (default 0x36 for magnetic absolute encoder chips, e.g. AS5600)");
                         }
                     }
                     else
