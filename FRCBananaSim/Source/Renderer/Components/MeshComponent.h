@@ -37,5 +37,6 @@ namespace FRCBananaSim::Renderer::Components
     {
         PrimitiveShape shape{ PrimitiveShape::Cube }; ///< The geometric primitive to draw.
         glm::vec3 color{ 1.0f, 1.0f, 1.0f };          ///< Diffuse surface color multiplier (RGB).
+        float alpha{ 1.0f };                          ///< Opacity (1.0 = solid, < 1.0 = translucent).
     };
 }

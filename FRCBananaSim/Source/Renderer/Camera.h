@@ -58,6 +58,17 @@ namespace FRCBananaSim::Renderer
         Mode GetMode() const;
 
         /**
+         * @brief Enables or disables keyboard translation and mode toggle.
+         * @param enabled True to allow keyboard navigation, false to lock to programmatic control.
+         */
+        void SetKeyboardMovementEnabled(bool enabled) { m_keyboardMovementEnabled = enabled; }
+
+        /**
+         * @brief Checks if keyboard camera navigation is enabled.
+         */
+        bool IsKeyboardMovementEnabled() const { return m_keyboardMovementEnabled; }
+
+        /**
          * @brief Computes the 4x4 View matrix for coordinate transformation to camera space.
          * @return View matrix.
          */
@@ -94,6 +105,7 @@ namespace FRCBananaSim::Renderer
         glm::vec3 Up() const;
 
         Mode mode{ Mode::FreeFly };
+        bool m_keyboardMovementEnabled{ true };
 
         double lastMouseX{ 0.0 };
         double lastMouseY{ 0.0 };

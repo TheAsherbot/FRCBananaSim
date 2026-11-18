@@ -50,6 +50,11 @@ namespace FRCBananaSim::Core::ECS::Core
         void DestroyEntity(Entity entity);
 
         /**
+         * @brief Destroys all active entities, cleans up all components, and empties all systems.
+         */
+        void Clear();
+
+        /**
          * @brief Retrieves the list of all currently active entities.
          * @return Const reference to the active entity vector.
          */

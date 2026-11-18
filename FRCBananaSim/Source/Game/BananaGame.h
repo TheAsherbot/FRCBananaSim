@@ -8,6 +8,7 @@
 #include "Core/ECS/Core/Scene.h"
 #include "Core/ECS/Core/Entity.h"
 #include "Physics/JoltContext.h"
+#include "Physics/Components/JointComponent.h"
 #include "Physics/Systems/JointSystem.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/Camera.h"
@@ -143,6 +144,7 @@ namespace FRCBananaSim::Game
         void UpdateArcadeRobotController(double dt);
         void CheckGoalScoring();
         void UpdateCamera(double dt);
+        void LockChassisPitchAndRoll(bool isSpinning = false);
         void DrawStartScreenUI();
         void DrawHUDUI();
         void DrawPauseUI();
@@ -166,6 +168,7 @@ namespace FRCBananaSim::Game
         Robot::Mechanisms::Components::FlywheelComponent* m_backIntake = nullptr;
         Robot::Mechanisms::Components::FlywheelComponent* m_bottomBasket = nullptr;
         Robot::Mechanisms::Components::FlywheelComponent* m_funnel = nullptr;
+        Physics::Components::JointComponent* m_intakeJoint = nullptr;
 
         // Game State & Rules
         GameState m_state = GameState::StartScreen;
@@ -185,25 +188,68 @@ namespace FRCBananaSim::Game
         int m_goalsScored = 0;
 
         // Goal Structure
-        glm::vec3 m_goalCenter{ 0.0f, 2.20f, 6.0f }; ///< Target rim center in world coordinates
-        float m_goalRadius = 0.50f;                   ///< Target rim radius
+        glm::vec3 m_goalCenter{ 0.0f, 2.20f, 5.5f };  ///< Target rim center in world coordinates
+        float m_goalRadius = 0.55f;                   ///< Target rim radius
         float m_goalFlashTimer = 0.0f;                ///< Visual flash effect countdown
 
         // Driving Demands & Gyro
         float m_fieldCentricHeadingRad = 0.0f;
         bool m_fieldCentric = true;
+        bool m_isSpinningHeading = false;
         bool m_intakeDeployed = false;
+        bool m_intakeToggled = false;
         bool m_flywheelSpinning = false;
         float m_targetTurretAngle = 0.0f;
+        float m_fireCooldown = 0.0f;
 
-        // Balls & Trajectories
+        // 3 Mechanism Button States
+        bool m_btnIntake = false;    ///< Button #1: Runs intake rollers + bottom basket
+        bool m_btnFunnel = false;    ///< Button #2: Runs funnel + bottom basket
+        bool m_btnFlywheel = false;  ///< Button #3: Runs shooter flywheel
+
+        // Intake Pivot Deployment State
+        float m_currentPivotAngle = 0.0f; ///< Current actual pivot angle (0.0 rad stowed UP, -1.85 rad deployed DOWN)
+
+        // Internal Ball Slot Tracking & Capacity Limits
+        enum class BallSlot
+        {
+            Carpet,
+            IntakeTray,
+            Basket,
+            Funnel,
+            MuzzleExit
+        };
+
+        struct HeldBallInfo
+        {
+            Core::ECS::Core::Entity entity = Core::ECS::Core::invalidEntity;
+            BallSlot slot = BallSlot::Carpet;
+            int slotIndex = 0; ///< Index within IntakeTray (0..3) or Basket (0..23)
+            glm::vec3 currentLocalPos{ 0.0f };
+            glm::vec3 targetLocalPos{ 0.0f };
+            float exitProgress = 0.0f;
+        };
+
+        std::unordered_map<Core::ECS::Core::Entity, HeldBallInfo> m_heldBalls;
+
+        // Arena & Balls Entities
+        std::vector<Core::ECS::Core::Entity> m_arenaEntities;
         std::vector<Core::ECS::Core::Entity> m_ballEntities;
+        std::unordered_map<Core::ECS::Core::Entity, float> m_ballScoreCooldown;
         std::vector<ScorePopup> m_scorePopups;
-        std::unordered_map<Core::ECS::Core::Entity, std::vector<glm::vec3>> m_ballTrails;
         float m_ballAutoDropTimer = 0.0f;
 
         // Follow Camera Smoothing
         glm::vec3 m_smoothCameraPos{ 0.0f, 2.0f, -4.0f };
         glm::vec3 m_smoothCameraTarget{ 0.0f, 0.4f, 0.0f };
+
+        // Link Reset Poses & Real Time Tracking
+        struct InitialLinkPose
+        {
+            glm::vec3 pos{ 0.0f };
+            glm::quat rot{ 1.0f, 0.0f, 0.0f, 0.0f };
+        };
+        std::unordered_map<std::string, InitialLinkPose> m_initialLinkPoses;
+        double m_lastRealTime = 0.0;
     };
 }

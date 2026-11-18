@@ -78,6 +78,16 @@ namespace FRCBananaSim::Core::ECS::Core
         freeEntities.push_back(entity);
     }
 
+    void Scene::Clear()
+    {
+        while (!entities.empty())
+        {
+            DestroyEntity(entities.back());
+        }
+        systems.clear();
+        storagesRaw.clear();
+    }
+
     const std::vector<Entity>& Scene::GetEntities() const
     {
         return entities;

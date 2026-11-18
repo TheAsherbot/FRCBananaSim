@@ -39,8 +39,8 @@ namespace FRCBananaSim::Utils
         frameDelta = now - lastTime;
         lastTime = now;
 
-        // Clamp to avoid spiral of death
-        double maxFrameDelta = fixedDelta * 4.0;
+        // Clamp to avoid spiral of death (allow up to 100 ms for normal frame pacing)
+        double maxFrameDelta = std::max(fixedDelta * 8.0, 0.100);
         if (frameDelta > maxFrameDelta)
         {
             SIM_LOG_WARN("Frame delta clamped: " << frameDelta << "s -> " << maxFrameDelta

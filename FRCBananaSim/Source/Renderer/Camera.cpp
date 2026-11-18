@@ -70,7 +70,7 @@ namespace FRCBananaSim::Renderer
         input.SetCursorCaptured(isLookButtonDown);
 
         // --- Mode toggle (Tab) using edge-triggered check from Input ---
-        if (input.WasKeyPressed(GLFW_KEY_TAB))
+        if (m_keyboardMovementEnabled && input.WasKeyPressed(GLFW_KEY_TAB))
         {
             SetMode(mode == Mode::FreeFly ? Mode::Orbit : Mode::FreeFly);
         }
@@ -83,32 +83,35 @@ namespace FRCBananaSim::Renderer
         glm::vec3 front = Front();
         glm::vec3 right = Right();
 
-        if (mode == Mode::FreeFly)
+        if (m_keyboardMovementEnabled)
         {
-            if (isLookButtonDown)
+            if (mode == Mode::FreeFly)
             {
-                if (input.IsKeyDown(GLFW_KEY_W)) position += front * velocity;
-                if (input.IsKeyDown(GLFW_KEY_S)) position -= front * velocity;
-                if (input.IsKeyDown(GLFW_KEY_A)) position -= right * velocity;
-                if (input.IsKeyDown(GLFW_KEY_D)) position += right * velocity;
+                if (isLookButtonDown)
+                {
+                    if (input.IsKeyDown(GLFW_KEY_W)) position += front * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_S)) position -= front * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_A)) position -= right * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_D)) position += right * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_SPACE))        position += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_LEFT_CONTROL)) position -= glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+                }
             }
-            if (input.IsKeyDown(GLFW_KEY_SPACE))        position += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
-            if (input.IsKeyDown(GLFW_KEY_LEFT_CONTROL)) position -= glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
-        }
-        else // Mode::Orbit
-        {
-            if (isLookButtonDown)
+            else // Mode::Orbit
             {
-                if (input.IsKeyDown(GLFW_KEY_W)) orbitTarget += front * velocity;
-                if (input.IsKeyDown(GLFW_KEY_S)) orbitTarget -= front * velocity;
-                if (input.IsKeyDown(GLFW_KEY_A)) orbitTarget -= right * velocity;
-                if (input.IsKeyDown(GLFW_KEY_D)) orbitTarget += right * velocity;
-            }
-            if (input.IsKeyDown(GLFW_KEY_SPACE))        orbitTarget += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
-            if (input.IsKeyDown(GLFW_KEY_LEFT_CONTROL)) orbitTarget -= glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+                if (isLookButtonDown)
+                {
+                    if (input.IsKeyDown(GLFW_KEY_W)) orbitTarget += front * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_S)) orbitTarget -= front * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_A)) orbitTarget -= right * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_D)) orbitTarget += right * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_SPACE))        orbitTarget += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+                    if (input.IsKeyDown(GLFW_KEY_LEFT_CONTROL)) orbitTarget -= glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+                }
 
-            orbitDistance -= static_cast<float>(scrollThisFrame) * zoomSpeed;
-            orbitDistance = std::clamp(orbitDistance, minOrbitDistance, maxOrbitDistance);
+                orbitDistance -= static_cast<float>(scrollThisFrame) * zoomSpeed;
+                orbitDistance = std::clamp(orbitDistance, minOrbitDistance, maxOrbitDistance);
+            }
         }
 
         // Apply mouse-look only when the cursor is captured

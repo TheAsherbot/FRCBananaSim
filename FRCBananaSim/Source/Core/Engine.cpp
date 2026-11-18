@@ -102,8 +102,8 @@ namespace FRCBananaSim::Core
                 continue;
             }
 
-            // Cap catch-up steps per frame to avoid spiral of death after window drag stalls
-            steps = std::min<std::uint32_t>(steps, 2u);
+            // Cap catch-up steps per frame to avoid spiral of death after window drag stalls (allow up to 8 steps = 40 ms at 200 Hz)
+            steps = std::min<std::uint32_t>(steps, 8u);
 
             auto frameStart = std::chrono::high_resolution_clock::now();
             double fixedDeltaTime = fixedTimestep->FixedDeltaSeconds();
@@ -145,6 +145,11 @@ namespace FRCBananaSim::Core
 
                     auto updateEnd = std::chrono::high_resolution_clock::now();
                     updateMs = std::chrono::duration<double, std::milli>(updateEnd - updateStart).count();
+                }
+
+                if (!isRunning)
+                {
+                    break;
                 }
 
                 double alpha = fixedTimestep->Alpha();

@@ -13,6 +13,7 @@
 #include "Renderer/Components/MeshComponent.h"
 #include "Robot/Schema/RobotSchemaLoader.h"
 #include "Robot/Drivetrain/Components/SwerveChassisComponent.h"
+#include "Robot/Drivetrain/Components/SwerveModuleComponent.h"
 #include "Robot/Drivetrain/Model/SwerveDrivetrainModel.h"
 #include "Robot/Sensors/Components/BeamBreakComponent.h"
 #include "Interaction/Systems/RobotGamePieceSystem.h"
@@ -36,6 +37,7 @@ using namespace FRCBananaSim::Core::ECS::Components;
 using namespace FRCBananaSim::Physics::Components;
 using namespace FRCBananaSim::Renderer::Components;
 using namespace FRCBananaSim::Control;
+using namespace FRCBananaSim::Robot::Drivetrain::Components;
 using namespace FRCBananaSim::Robot::Mechanisms::Components;
 using namespace FRCBananaSim::Robot::Sensors::Components;
 using namespace FRCBananaSim::Interaction::Components;
@@ -51,6 +53,138 @@ namespace FRCBananaSim::Game
 
     BananaGame::~BananaGame()
     {
+        SIM_LOG_INFO("[BananaGame] Shutting down and cleaning physics entities...");
+
+        // 1. Destroy joint system first so all constraints are removed from Jolt before bodies
+        m_jointSystem.reset();
+
+        // 2. Clear all joint constraints in ECS scene so no JPH::Ref<JPH::Constraint> remains
+        auto jointEntities = m_scene.Query<JointComponent>();
+        for (Entity e : jointEntities)
+        {
+            auto* joint = m_scene.GetComponent<JointComponent>(e);
+            if (joint)
+            {
+                joint->constraint = nullptr;
+                joint->isCreated = false;
+            }
+            m_scene.DestroyEntity(e);
+        }
+        m_robot.jointEntities.clear();
+
+        // 3. Destroy ball bodies cleanly
+        for (Entity e : m_ballEntities)
+        {
+            if (m_scene.IsEntityValid(e))
+            {
+                if (m_robot.physicsSystem)
+                {
+                    m_robot.physicsSystem->DestroyBody(e);
+                }
+                else if (m_joltContext.IsInitialized())
+                {
+                    auto* rb = m_scene.GetComponent<RigidBodyComponent>(e);
+                    if (rb && !rb->bodyID.IsInvalid() && m_joltContext.GetBodyInterface().IsAdded(rb->bodyID))
+                    {
+                        m_joltContext.GetBodyInterface().RemoveBody(rb->bodyID);
+                        m_joltContext.GetBodyInterface().DestroyBody(rb->bodyID);
+                        rb->bodyID = JPH::BodyID();
+                    }
+                }
+                m_scene.DestroyEntity(e);
+            }
+        }
+        m_ballEntities.clear();
+
+        // 4. Destroy arena bodies (floor, walls, goal posts, hoop)
+        for (Entity e : m_arenaEntities)
+        {
+            if (m_scene.IsEntityValid(e))
+            {
+                if (m_robot.physicsSystem)
+                {
+                    m_robot.physicsSystem->DestroyBody(e);
+                }
+                else if (m_joltContext.IsInitialized())
+                {
+                    auto* rb = m_scene.GetComponent<RigidBodyComponent>(e);
+                    if (rb && !rb->bodyID.IsInvalid() && m_joltContext.GetBodyInterface().IsAdded(rb->bodyID))
+                    {
+                        m_joltContext.GetBodyInterface().RemoveBody(rb->bodyID);
+                        m_joltContext.GetBodyInterface().DestroyBody(rb->bodyID);
+                        rb->bodyID = JPH::BodyID();
+                    }
+                }
+                m_scene.DestroyEntity(e);
+            }
+        }
+        m_arenaEntities.clear();
+
+        // 5. Destroy robot link bodies cleanly via physics system and destroy entities
+        for (auto& [name, entity] : m_robot.linkEntities)
+        {
+            if (m_scene.IsEntityValid(entity))
+            {
+                if (m_robot.physicsSystem)
+                {
+                    m_robot.physicsSystem->DestroyBody(entity);
+                }
+                else if (m_joltContext.IsInitialized())
+                {
+                    auto* rb = m_scene.GetComponent<RigidBodyComponent>(entity);
+                    if (rb && !rb->bodyID.IsInvalid() && m_joltContext.GetBodyInterface().IsAdded(rb->bodyID))
+                    {
+                        m_joltContext.GetBodyInterface().RemoveBody(rb->bodyID);
+                        m_joltContext.GetBodyInterface().DestroyBody(rb->bodyID);
+                        rb->bodyID = JPH::BodyID();
+                    }
+                }
+                m_scene.DestroyEntity(entity);
+            }
+        }
+        m_robot.linkEntities.clear();
+
+        // Destroy chassis entity if valid
+        if (m_scene.IsEntityValid(m_robot.chassisEntity))
+        {
+            if (m_robot.physicsSystem)
+            {
+                m_robot.physicsSystem->DestroyBody(m_robot.chassisEntity);
+            }
+            m_scene.DestroyEntity(m_robot.chassisEntity);
+            m_robot.chassisEntity = invalidEntity;
+        }
+
+        // Destroy remaining robot entities (mechanisms, sensors, contact zones)
+        for (auto& [name, entity] : m_robot.mechanismEntities)
+        {
+            if (m_scene.IsEntityValid(entity)) m_scene.DestroyEntity(entity);
+        }
+        m_robot.mechanismEntities.clear();
+
+        for (auto& [name, entity] : m_robot.sensorEntities)
+        {
+            if (m_scene.IsEntityValid(entity)) m_scene.DestroyEntity(entity);
+        }
+        m_robot.sensorEntities.clear();
+
+        for (auto& [name, entity] : m_robot.contactZoneEntities)
+        {
+            if (m_scene.IsEntityValid(entity)) m_scene.DestroyEntity(entity);
+        }
+        m_robot.contactZoneEntities.clear();
+
+        // 6. Cleanly reset robot subsystems in reverse dependency order
+        m_robot.physicsSystem.reset();
+        m_robot.swerveSystem.reset();
+        m_robot.flywheelSystem.reset();
+        m_robot.mechanismSystem.reset();
+        m_robot.electricalSystem.reset();
+        m_robot.elevatorSystem.reset();
+        m_robot.sensorSystem.reset();
+        m_robot.flightAerodynamicsSystem.reset();
+
+        SIM_LOG_INFO("[BananaGame] Teardown complete.");
     }
 
     bool BananaGame::Initialize()
@@ -69,6 +203,26 @@ namespace FRCBananaSim::Game
         bool foundRobot = false;
         for (const auto& prefix : searchPrefixes)
         {
+            std::string editCandidate = prefix + "Resources/Robots/Comp 2 Robot EDITED/manifest.json";
+            std::string editPrefixCandidate = prefix + "FRCBananaSim/Resources/Robots/Comp 2 Robot EDITED/manifest.json";
+            if (std::filesystem::exists(editCandidate))
+            {
+                manifestPath = editCandidate;
+                sidecarPath = prefix + "Resources/Robots/Comp 2 Robot EDITED/sidecar.json";
+                materialsPath = prefix + "Resources/Config/materials.json";
+                foundRobot = true;
+                SIM_LOG_INFO("[BananaGame] Loaded edited robot: " << manifestPath);
+                break;
+            }
+            if (std::filesystem::exists(editPrefixCandidate))
+            {
+                manifestPath = editPrefixCandidate;
+                sidecarPath = prefix + "FRCBananaSim/Resources/Robots/Comp 2 Robot EDITED/sidecar.json";
+                materialsPath = prefix + "FRCBananaSim/Resources/Config/materials.json";
+                foundRobot = true;
+                SIM_LOG_INFO("[BananaGame] Loaded edited robot: " << manifestPath);
+                break;
+            }
             std::string candidate = prefix + manifestPath;
             if (std::filesystem::exists(candidate))
             {
@@ -105,6 +259,16 @@ namespace FRCBananaSim::Game
         {
             SIM_LOG_FATAL("[BananaGame] Failed to assemble Robot Comp 2: " << m_robot.errorMessage);
             return false;
+        }
+
+        // Cache initial assembled poses for all links to support flawless resets
+        for (const auto& [name, entity] : m_robot.linkEntities)
+        {
+            auto* tc = m_scene.GetComponent<TransformComponent>(entity);
+            if (tc)
+            {
+                m_initialLinkPoses[name] = { tc->position, tc->rotation };
+            }
         }
 
         // 3. Allocate Joint System for Jolt constraints management
@@ -150,6 +314,33 @@ namespace FRCBananaSim::Game
             }
         }
 
+        // Cache Intake Pivot Hinge Joint for Jolt Position Motor control
+        auto jIt = m_robot.jointEntities.find("intake_1_Revolute 21");
+        if (jIt != m_robot.jointEntities.end())
+        {
+            m_intakeJoint = m_scene.GetComponent<Physics::Components::JointComponent>(jIt->second);
+            if (m_intakeJoint)
+            {
+                m_intakeJoint->motorMode = Physics::Components::JointMotorMode::Position;
+                m_intakeJoint->springFrequency = 8.0f;
+                m_intakeJoint->springDamping = 1.0f;
+                m_intakeJoint->maxMotorTorque = 300.0f;
+                m_intakeJoint->targetAngle = 0.0f; // Stowed upright by default
+            }
+        }
+
+        // Ensure Flywheel & Funnel Rollers are located at their true CAD throat coordinates
+        if (m_flywheel)
+        {
+            m_flywheel->visualLocalOffset = glm::vec3(0.0f, 0.406618f, 0.156811f);
+            m_flywheel->spinAxis = glm::vec3(1.0f, 0.0f, 0.0f);
+        }
+        if (m_funnel)
+        {
+            m_funnel->visualLocalOffset = glm::vec3(0.0f, 0.301143f, 0.135771f);
+            m_funnel->spinAxis = glm::vec3(1.0f, 0.0f, 0.0f);
+        }
+
         // 5. Construct Arena Environment & Visuals
         SetupArena();
         SetupRobotVisuals();
@@ -160,8 +351,9 @@ namespace FRCBananaSim::Game
         // Configure Initial Camera Position
         auto& camera = m_renderer.GetCamera();
         camera.SetMode(Renderer::Camera::Mode::FreeFly);
-        m_smoothCameraPos = spawnPos + glm::vec3(0.0f, 2.2f, -3.8f);
-        m_smoothCameraTarget = spawnPos + glm::vec3(0.0f, 0.4f, 1.0f);
+        camera.SetKeyboardMovementEnabled(false);
+        m_smoothCameraPos = spawnPos + glm::vec3(0.0f, 2.50f, -4.50f);
+        m_smoothCameraTarget = spawnPos + glm::vec3(0.0f, 0.40f, 0.80f);
         camera.position = m_smoothCameraPos;
         camera.orbitTarget = m_smoothCameraTarget;
         glm::vec3 initDir = glm::normalize(camera.orbitTarget - camera.position);
@@ -192,6 +384,7 @@ namespace FRCBananaSim::Game
 
         // A. FRC Field Carpet (18m x 14m, Surface at Y = 0.0m)
         Entity carpet = m_scene.CreateEntity();
+        m_arenaEntities.push_back(carpet);
         {
             assignTransforms(carpet, glm::vec3(0.0f, -0.05f, 0.0f), glm::vec3(18.0f, 0.10f, 14.0f));
 
@@ -212,15 +405,19 @@ namespace FRCBananaSim::Game
             m_scene.AddComponent(carpet, col);
         }
 
-        // B. Perimeter Arena Barrier Walls
-        auto createWall = [&](const glm::vec3& pos, const glm::vec3& size, const glm::vec3& color)
+        // B. Perimeter Arena Barrier Walls (Transparent Polycarbonate Walls)
+        auto createWall = [&](const glm::vec3& visualPos, const glm::vec3& visualSize,
+                              const glm::vec3& colOffset, const glm::vec3& colHalfExtents,
+                              const glm::vec3& color, float alpha = 0.35f)
         {
             Entity wall = m_scene.CreateEntity();
-            assignTransforms(wall, pos, size);
+            m_arenaEntities.push_back(wall);
+            assignTransforms(wall, visualPos, visualSize);
 
             MeshComponent mesh;
             mesh.shape = PrimitiveShape::Cube;
             mesh.color = color;
+            mesh.alpha = alpha; // Translucent arena wall so user can always see through
             m_scene.AddComponent(wall, mesh);
 
             RigidBodyComponent rb;
@@ -231,25 +428,31 @@ namespace FRCBananaSim::Game
 
             ColliderComponent col;
             col.shape = ColliderShape::Box;
-            col.boxHalfExtents = size * 0.5f;
+            col.localOffset = colOffset;
+            col.boxHalfExtents = colHalfExtents; // Extra thick collider so fast impacts cannot tunnel
             m_scene.AddComponent(wall, col);
         };
 
-        const glm::vec3 wallColor(0.22f, 0.32f, 0.45f); // Steel Blue Perimeter Walls
-        // North Wall (+Z far end behind goal)
-        createWall(glm::vec3(0.0f, 0.6f, 7.0f), glm::vec3(18.0f, 1.2f, 0.3f), wallColor);
-        // South Wall (-Z driver station side)
-        createWall(glm::vec3(0.0f, 0.6f, -7.0f), glm::vec3(18.0f, 1.2f, 0.3f), glm::vec3(0.20f, 0.28f, 0.60f));
-        // East Wall (+X right side)
-        createWall(glm::vec3(9.0f, 0.6f, 0.0f), glm::vec3(0.3f, 1.2f, 14.0f), wallColor);
-        // West Wall (-X left side)
-        createWall(glm::vec3(-9.0f, 0.6f, 0.0f), glm::vec3(0.3f, 1.2f, 14.0f), wallColor);
+        const glm::vec3 wallColor(0.35f, 0.55f, 0.85f); // Sleek Ice-Blue Translucent Polycarbonate
+        // North Wall (+Z far end behind goal): visual at Z=7.0m, thick collider extending outward
+        createWall(glm::vec3(0.0f, 0.6f, 7.0f), glm::vec3(18.0f, 1.2f, 0.3f),
+                   glm::vec3(0.0f, 0.0f, 0.6f), glm::vec3(10.0f, 1.5f, 0.8f), wallColor, 0.32f);
+        // South Wall (-Z driver station side): visual at Z=-7.0m, thick collider extending outward
+        createWall(glm::vec3(0.0f, 0.6f, -7.0f), glm::vec3(18.0f, 1.2f, 0.3f),
+                   glm::vec3(0.0f, 0.0f, -0.6f), glm::vec3(10.0f, 1.5f, 0.8f), glm::vec3(0.30f, 0.45f, 0.85f), 0.32f);
+        // East Wall (+X right side): visual at X=9.0m, thick collider extending outward
+        createWall(glm::vec3(9.0f, 0.6f, 0.0f), glm::vec3(0.3f, 1.2f, 14.0f),
+                   glm::vec3(0.6f, 0.0f, 0.0f), glm::vec3(0.8f, 1.5f, 8.0f), wallColor, 0.32f);
+        // West Wall (-X left side): visual at X=-9.0m, thick collider extending outward
+        createWall(glm::vec3(-9.0f, 0.6f, 0.0f), glm::vec3(0.3f, 1.2f, 14.0f),
+                   glm::vec3(-0.6f, 0.0f, 0.0f), glm::vec3(0.8f, 1.5f, 8.0f), wallColor, 0.32f);
 
         // C. Target High Goal Tower & Hoop (Centered at X = 0.0m, Y = 2.2m, Z = 5.5m)
         m_goalCenter = glm::vec3(0.0f, 2.20f, 5.5f);
 
         // 1. Goal Support Post
         Entity goalPost = m_scene.CreateEntity();
+        m_arenaEntities.push_back(goalPost);
         {
             assignTransforms(goalPost, glm::vec3(0.0f, 1.0f, 5.9f), glm::vec3(0.20f, 2.0f, 0.20f));
 
@@ -270,6 +473,7 @@ namespace FRCBananaSim::Game
 
         // 2. Goal Target Backboard
         Entity backboard = m_scene.CreateEntity();
+        m_arenaEntities.push_back(backboard);
         {
             assignTransforms(backboard, glm::vec3(0.0f, 2.35f, 5.95f), glm::vec3(1.80f, 1.10f, 0.08f));
 
@@ -290,6 +494,7 @@ namespace FRCBananaSim::Game
 
         // 3. Goal Rim / Funnel Catch Bounding Structure
         Entity rimFront = m_scene.CreateEntity();
+        m_arenaEntities.push_back(rimFront);
         {
             assignTransforms(rimFront, glm::vec3(0.0f, 2.15f, 5.0f), glm::vec3(1.10f, 0.12f, 0.08f));
 
@@ -309,6 +514,7 @@ namespace FRCBananaSim::Game
         }
 
         Entity rimLeft = m_scene.CreateEntity();
+        m_arenaEntities.push_back(rimLeft);
         {
             assignTransforms(rimLeft, glm::vec3(-0.55f, 2.15f, 5.5f), glm::vec3(0.08f, 0.12f, 0.95f));
 
@@ -328,6 +534,7 @@ namespace FRCBananaSim::Game
         }
 
         Entity rimRight = m_scene.CreateEntity();
+        m_arenaEntities.push_back(rimRight);
         {
             assignTransforms(rimRight, glm::vec3(0.55f, 2.15f, 5.5f), glm::vec3(0.08f, 0.12f, 0.95f));
 
@@ -349,6 +556,34 @@ namespace FRCBananaSim::Game
 
     void BananaGame::SetupRobotVisuals()
     {
+        auto createCustomVisual = [&](Entity linkEntity, PrimitiveShape shape, const glm::vec3& color,
+                                      const glm::vec3& scale, const glm::vec3& offset,
+                                      const glm::quat& rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
+        {
+            if (linkEntity == invalidEntity) return;
+
+            Entity visual = m_scene.CreateEntity();
+            TransformComponent vt;
+            vt.position = offset;
+            vt.rotation = rot;
+            vt.scale = scale;
+            m_scene.AddComponent(visual, vt);
+
+            auto* linkT = m_scene.GetComponent<TransformComponent>(linkEntity);
+            WorldTransformComponent vwt;
+            vwt.worldPosition = linkT ? (linkT->position + (linkT->rotation * offset)) : offset;
+            vwt.worldRotation = linkT ? (linkT->rotation * rot) : rot;
+            vwt.worldScale = scale;
+            m_scene.AddComponent(visual, vwt);
+
+            m_scene.SetParent(visual, linkEntity);
+
+            MeshComponent mesh;
+            mesh.shape = shape;
+            mesh.color = color;
+            m_scene.AddComponent(visual, mesh);
+        };
+
         auto attachVisual = [&](Entity linkEntity, PrimitiveShape shape, const glm::vec3& color,
                                 const glm::vec3& fallbackScale = glm::vec3(0.08f),
                                 const glm::vec3& fallbackOffset = glm::vec3(0.0f))
@@ -411,56 +646,120 @@ namespace FRCBananaSim::Game
 
             if (name == "base_link")
             {
-                // Dark Titanium Chassis Body
-                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.16f, 0.22f, 0.32f));
-                // Add Red Perimeter Bumper Visual
-                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.85f, 0.15f, 0.18f),
-                             glm::vec3(0.92f, 0.14f, 0.80f), glm::vec3(0.0f, 0.09f, 0.0f));
+                // Sleek Chassis Baseplate (replaces the oversized auto-box CAD block that obstructed view)
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.18f, 0.22f, 0.28f),
+                                   glm::vec3(0.72f, 0.04f, 0.72f), glm::vec3(0.0f, 0.02f, 0.0f));
+
+                // Low-profile Red Perimeter Bumpers (keeps internal mechanisms & field visible)
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.85f, 0.15f, 0.18f),
+                                   glm::vec3(0.82f, 0.09f, 0.06f), glm::vec3(0.0f, 0.05f, 0.38f));  // Front
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.85f, 0.15f, 0.18f),
+                                   glm::vec3(0.82f, 0.09f, 0.06f), glm::vec3(0.0f, 0.05f, -0.38f)); // Back
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.85f, 0.15f, 0.18f),
+                                   glm::vec3(0.06f, 0.09f, 0.70f), glm::vec3(-0.38f, 0.05f, 0.0f)); // Left
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.85f, 0.15f, 0.18f),
+                                   glm::vec3(0.06f, 0.09f, 0.70f), glm::vec3(0.38f, 0.05f, 0.0f));  // Right
             }
             else if (name == "gear")
             {
                 // Turret Ring Brass Gear
-                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.90f, 0.72f, 0.18f));
+                createCustomVisual(entity, PrimitiveShape::Cylinder, glm::vec3(0.90f, 0.72f, 0.18f),
+                                   glm::vec3(0.28f, 0.04f, 0.28f), glm::vec3(0.0f, 0.02f, 0.0f));
             }
             else if (name == "sidepannel")
             {
-                // Basket Hopper Side Panels
-                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.24f, 0.27f, 0.31f));
+                // Basket Hopper Side Panels (Brushed Polycarbonate)
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.24f, 0.27f, 0.31f),
+                                   glm::vec3(0.02f, 0.14f, 0.32f), glm::vec3(-0.24f, 0.06f, -0.05f));
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.24f, 0.27f, 0.31f),
+                                   glm::vec3(0.02f, 0.14f, 0.32f), glm::vec3(0.24f, 0.06f, -0.05f));
             }
             else if (name == "moving_hood")
             {
                 // Adjustable Shooter Hood (Neon Cyan)
-                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.12f, 0.75f, 0.92f));
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.12f, 0.75f, 0.92f),
+                                   glm::vec3(0.20f, 0.03f, 0.16f), glm::vec3(0.0f, 0.02f, 0.06f));
             }
             else if (name == "side_plates_2")
             {
-                // Intake Pivot Arm (Anodized Orange)
-                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.96f, 0.48f, 0.08f));
+                // Intake Pivot Arm: Sleek twin anodized orange intake arms on Left & Right + Crossbar
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.96f, 0.48f, 0.08f),
+                                   glm::vec3(0.025f, 0.05f, 0.30f), glm::vec3(-0.25f, 0.0f, -0.15f)); // Left arm
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.96f, 0.48f, 0.08f),
+                                   glm::vec3(0.025f, 0.05f, 0.30f), glm::vec3(0.25f, 0.0f, -0.15f));  // Right arm
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.96f, 0.48f, 0.08f),
+                                   glm::vec3(0.50f, 0.02f, 0.02f), glm::vec3(0.0f, 0.02f, -0.30f));   // Front tie bar
             }
             else if (name == "wheels")
             {
-                // High-RPM Flywheel Rollers (Safety Yellow)
-                attachVisual(entity, PrimitiveShape::CylinderX, glm::vec3(0.98f, 0.88f, 0.12f));
+                // High-RPM Flywheel Rollers (Safety Yellow with Dark Anodized Hub Endcaps)
+                createCustomVisual(entity, PrimitiveShape::CylinderX, glm::vec3(0.98f, 0.88f, 0.12f),
+                                   glm::vec3(0.18f, 0.08f, 0.08f), glm::vec3(0.0f, 0.0f, 0.0f));
+                createCustomVisual(entity, PrimitiveShape::CylinderX, glm::vec3(0.18f, 0.18f, 0.22f),
+                                   glm::vec3(0.02f, 0.085f, 0.085f), glm::vec3(-0.09f, 0.0f, 0.0f));
+                createCustomVisual(entity, PrimitiveShape::CylinderX, glm::vec3(0.18f, 0.18f, 0.22f),
+                                   glm::vec3(0.02f, 0.085f, 0.085f), glm::vec3(0.09f, 0.0f, 0.0f));
             }
             else if (name == "side_plates")
             {
-                // Funnel Side Plates (Brushed Aluminum)
-                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.70f, 0.74f, 0.80f));
+                // Funnel Feed Roller (Electric Cyan High-Traction Roller pushing balls upward into flywheel)
+                createCustomVisual(entity, PrimitiveShape::CylinderX, glm::vec3(0.15f, 0.65f, 0.95f),
+                                   glm::vec3(0.18f, 0.065f, 0.065f), glm::vec3(0.0f, 0.0f, 0.0f));
+                // Funnel Cheek Guide Plates (Brushed Aluminum)
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.70f, 0.74f, 0.80f),
+                                   glm::vec3(0.02f, 0.10f, 0.12f), glm::vec3(-0.10f, 0.0f, 0.0f));
+                createCustomVisual(entity, PrimitiveShape::Cube, glm::vec3(0.70f, 0.74f, 0.80f),
+                                   glm::vec3(0.02f, 0.10f, 0.12f), glm::vec3(0.10f, 0.0f, 0.0f));
             }
             else if (name.find("hex_shaft") != std::string::npos)
             {
-                // Indexer Basket Rollers (Vibrant Green)
-                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.20f, 0.82f, 0.35f));
+                // Indexer Basket Rollers (Vibrant Green Rollers spanning across width)
+                createCustomVisual(entity, PrimitiveShape::CylinderX, glm::vec3(0.20f, 0.82f, 0.35f),
+                                   glm::vec3(0.46f, 0.035f, 0.035f), glm::vec3(0.0f, 0.0f, 0.0f));
             }
             else if (name.find("sprocket") != std::string::npos)
             {
-                // Intake Grip Rollers (Grippy Purple/Red)
-                attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.78f, 0.25f, 0.40f));
+                // Intake Grip Rollers (Grippy Purple/Red Rubberized Rollers)
+                createCustomVisual(entity, PrimitiveShape::CylinderX, glm::vec3(0.78f, 0.25f, 0.40f),
+                                   glm::vec3(0.48f, 0.05f, 0.05f), glm::vec3(0.0f, 0.0f, 0.0f));
             }
             else
             {
                 // Other Robot Links (Anodized Dark Gray)
                 attachVisual(entity, PrimitiveShape::Cube, glm::vec3(0.42f, 0.45f, 0.48f));
+            }
+        }
+
+        // Add visual meshes to Swerve Steer Housings and Wheels so driving/steering is visible
+        if (m_robot.chassisEntity != invalidEntity)
+        {
+            auto* chassisComp = m_scene.GetComponent<SwerveChassisComponent>(m_robot.chassisEntity);
+            if (chassisComp)
+            {
+                for (uint32_t i = 0; i < 4; ++i)
+                {
+                    Entity modEnt = chassisComp->moduleEntities[i];
+                    if (modEnt == invalidEntity) continue;
+
+                    auto* modComp = m_scene.GetComponent<SwerveModuleComponent>(modEnt);
+                    if (!modComp) continue;
+
+                    if (modComp->steerEntity != invalidEntity && !m_scene.GetComponent<MeshComponent>(modComp->steerEntity))
+                    {
+                        MeshComponent steerMesh;
+                        steerMesh.shape = PrimitiveShape::Cylinder;
+                        steerMesh.color = glm::vec3(0.35f, 0.38f, 0.42f); // Anodized aluminum steer module
+                        m_scene.AddComponent(modComp->steerEntity, steerMesh);
+                    }
+
+                    if (modComp->wheelEntity != invalidEntity && !m_scene.GetComponent<MeshComponent>(modComp->wheelEntity))
+                    {
+                        MeshComponent wheelMesh;
+                        wheelMesh.shape = PrimitiveShape::CylinderX;
+                        wheelMesh.color = glm::vec3(0.08f, 0.08f, 0.10f); // High-traction tread wheel
+                        m_scene.AddComponent(modComp->wheelEntity, wheelMesh);
+                    }
+                }
             }
         }
     }
@@ -470,20 +769,20 @@ namespace FRCBananaSim::Game
         Entity ballEntity = m_scene.CreateEntity();
 
         GamePieceComponent piece;
-        piece.spec.name = "Cargo Ball (Bouncy Foam)";
-        piece.spec.massKg = 0.270;
-        piece.spec.thicknessM = 0.2413;
-        piece.spec.outerRadiusM = 0.1206; // 9.5-inch diameter sphere (0.12m radius)
+        piece.spec.name = "Cargo Ball (6-inch Foam)";
+        piece.spec.massKg = 0.150;
+        piece.spec.thicknessM = 0.1524;
+        piece.spec.outerRadiusM = 0.0762; // 6.0-inch diameter sphere (0.0762m radius)
         piece.spec.dragCoefficientCd = 0.47;
         piece.spec.liftSlopeClAlpha = 0.85;
-        piece.spec.crossSectionalAreaM2 = 0.0457;
+        piece.spec.crossSectionalAreaM2 = 0.01824;
         piece.spec.complianceK = 28000.0;
-        piece.spec.restitutionE = 0.35;
+        piece.spec.restitutionE = 0.40;
         piece.spec.surfaceFriction = 0.72;
 
         TransformComponent tc;
         tc.position = position;
-        tc.scale = glm::vec3(static_cast<float>(piece.spec.outerRadiusM * 2.0));
+        tc.scale = glm::vec3(0.1524f); // 6.0 inches diameter
         m_scene.AddComponent(ballEntity, tc);
 
         WorldTransformComponent wt;
@@ -517,7 +816,7 @@ namespace FRCBananaSim::Game
             rb.mass = static_cast<float>(piece.spec.massKg);
             rb.motionType = BodyMotionType::Dynamic;
             rb.friction = 0.70f;
-            rb.restitution = 0.35f;
+            rb.restitution = 0.40f;
             rb.allowSleeping = true;
             m_scene.AddComponent(ballEntity, rb);
 
@@ -535,7 +834,12 @@ namespace FRCBananaSim::Game
 
     void BananaGame::ResetField()
     {
-        // 1. Remove Existing Balls
+        // 1. Clear held balls tracking and intake deployment state
+        m_heldBalls.clear();
+        m_currentPivotAngle = -1.85f; // Stowed upright inside chassis frame
+        m_intakeDeployed = false;
+
+        // 2. Remove Existing Balls
         for (Entity e : m_ballEntities)
         {
             if (m_scene.IsEntityValid(e))
@@ -550,27 +854,41 @@ namespace FRCBananaSim::Game
             }
         }
         m_ballEntities.clear();
-        m_ballTrails.clear();
 
-        // 2. Spawn 12 Foam Balls in Strategic Formations
-        // Centerline Wing Clusters
+        // 3. Spawn 28 6-inch Foam Balls in Strategic Formations
         const std::vector<glm::vec3> spawnLocations = {
-            // Midfield line
-            { -3.0f, 0.15f, 1.0f },
-            { -1.5f, 0.15f, 1.2f },
-            {  0.0f, 0.15f, 1.5f },
-            {  1.5f, 0.15f, 1.2f },
-            {  3.0f, 0.15f, 1.0f },
-            // Left Wing
-            { -4.5f, 0.15f, -1.0f },
-            { -3.5f, 0.15f, -2.2f },
-            { -2.0f, 0.15f, -3.2f },
-            // Right Wing
-            {  4.5f, 0.15f, -1.0f },
-            {  3.5f, 0.15f, -2.2f },
-            {  2.0f, 0.15f, -3.2f },
-            // Near Spawn
-            {  0.0f, 0.15f, -1.0f }
+            // Midfield arc (10 balls)
+            { -3.6f, 0.12f, 1.0f },
+            { -2.8f, 0.12f, 1.2f },
+            { -2.0f, 0.12f, 1.4f },
+            { -1.2f, 0.12f, 1.5f },
+            { -0.4f, 0.12f, 1.6f },
+            {  0.4f, 0.12f, 1.6f },
+            {  1.2f, 0.12f, 1.5f },
+            {  2.0f, 0.12f, 1.4f },
+            {  2.8f, 0.12f, 1.2f },
+            {  3.6f, 0.12f, 1.0f },
+            // Left Wing Cluster (6 balls)
+            { -4.5f, 0.12f, -0.6f },
+            { -3.8f, 0.12f, -1.2f },
+            { -4.2f, 0.12f, -1.8f },
+            { -3.2f, 0.12f, -2.2f },
+            { -2.5f, 0.12f, -2.8f },
+            { -3.6f, 0.12f, -3.2f },
+            // Right Wing Cluster (6 balls)
+            {  4.5f, 0.12f, -0.6f },
+            {  3.8f, 0.12f, -1.2f },
+            {  4.2f, 0.12f, -1.8f },
+            {  3.2f, 0.12f, -2.2f },
+            {  2.5f, 0.12f, -2.8f },
+            {  3.6f, 0.12f, -3.2f },
+            // Near Arena Center / Goal Approach (6 balls)
+            { -0.8f, 0.12f, -0.8f },
+            {  0.0f, 0.12f, -0.6f },
+            {  0.8f, 0.12f, -0.8f },
+            { -0.6f, 0.12f, -1.8f },
+            {  0.0f, 0.12f, -1.6f },
+            {  0.6f, 0.12f, -1.8f }
         };
 
         for (const auto& pos : spawnLocations)
@@ -578,39 +896,56 @@ namespace FRCBananaSim::Game
             SpawnBall(pos);
         }
 
-        // 3. Reset Robot Position & Motion
-        const glm::vec3 startPos(0.0f, 0.20f, -4.5f);
-        const glm::quat startRot(1.0f, 0.0f, 0.0f, 0.0f);
+        // 3. Reset All Robot Links to Exact Initial Assembled Poses (Zero Relative Joint Strain)
+        for (const auto& [name, entity] : m_robot.linkEntities)
+        {
+            auto it = m_initialLinkPoses.find(name);
+            if (it == m_initialLinkPoses.end()) continue;
 
-        auto* chassisRb = m_scene.GetComponent<RigidBodyComponent>(m_robot.chassisEntity);
-        if (chassisRb && !chassisRb->bodyID.IsInvalid() && m_joltContext.IsInitialized())
-        {
-            JPH::BodyInterface& bi = m_joltContext.GetBodyInterface();
-            bi.SetPositionAndRotation(chassisRb->bodyID,
-                JPH::RVec3(startPos.x, startPos.y, startPos.z),
-                JPH::Quat(startRot.x, startRot.y, startRot.z, startRot.w),
-                JPH::EActivation::Activate);
-            bi.SetLinearAndAngularVelocity(chassisRb->bodyID, JPH::Vec3::sZero(), JPH::Vec3::sZero());
-        }
+            auto* tc = m_scene.GetComponent<TransformComponent>(entity);
+            if (tc)
+            {
+                tc->position = it->second.pos;
+                tc->rotation = it->second.rot;
+            }
+            auto* wt = m_scene.GetComponent<WorldTransformComponent>(entity);
+            if (wt)
+            {
+                wt->worldPosition = it->second.pos;
+                wt->worldRotation = it->second.rot;
+            }
 
-        auto* chassisT = m_scene.GetComponent<TransformComponent>(m_robot.chassisEntity);
-        if (chassisT)
-        {
-            chassisT->position = startPos;
-            chassisT->rotation = startRot;
-        }
-        auto* chassisWt = m_scene.GetComponent<WorldTransformComponent>(m_robot.chassisEntity);
-        if (chassisWt)
-        {
-            chassisWt->worldPosition = startPos;
-            chassisWt->worldRotation = startRot;
+            auto* rb = m_scene.GetComponent<RigidBodyComponent>(entity);
+            if (rb && !rb->bodyID.IsInvalid() && m_joltContext.IsInitialized())
+            {
+                JPH::BodyInterface& bi = m_joltContext.GetBodyInterface();
+                glm::vec3 joltPos = it->second.pos;
+                glm::quat joltRot = it->second.rot;
+                auto* col = m_scene.GetComponent<ColliderComponent>(entity);
+                if (col)
+                {
+                    joltPos += it->second.rot * col->localOffset;
+                    joltRot = glm::normalize(it->second.rot * col->localRotation);
+                }
+                bi.SetPositionAndRotation(rb->bodyID,
+                    JPH::RVec3(joltPos.x, joltPos.y, joltPos.z),
+                    JPH::Quat(joltRot.x, joltRot.y, joltRot.z, joltRot.w),
+                    JPH::EActivation::Activate);
+                bi.SetLinearAndAngularVelocity(rb->bodyID, JPH::Vec3::sZero(), JPH::Vec3::sZero());
+            }
         }
 
         if (m_robot.swerveSystem && m_robot.swerveSystem->GetModel())
         {
-            glm::vec3 posNWU = Robot::Schema::RobotSchemaLoader::ConvertEngineVectorToNWU(startPos);
-            glm::quat rotNWU = glm::quat(Robot::Schema::RobotSchemaLoader::ConvertEngineQuatToNWU(glm::dquat(startRot)));
+            const glm::vec3 spawnPos(0.0f, 0.20f, -2.5f);
+            const glm::quat spawnRot(1.0f, 0.0f, 0.0f, 0.0f);
+            glm::vec3 posNWU = Robot::Schema::RobotSchemaLoader::ConvertEngineVectorToNWU(spawnPos);
+            glm::quat rotNWU = glm::quat(Robot::Schema::RobotSchemaLoader::ConvertEngineQuatToNWU(glm::dquat(spawnRot)));
             m_robot.swerveSystem->GetModel()->ApplyExternalCorrections(posNWU, rotNWU, glm::vec3(0.0f), glm::vec3(0.0f));
+            for (uint32_t i = 0; i < 4; ++i)
+            {
+                m_robot.swerveSystem->GetModel()->GetModule(i).GetState() = Robot::Drivetrain::Model::SwerveModuleState{};
+            }
         }
 
         m_fieldCentricHeadingRad = 0.0f;
@@ -634,34 +969,18 @@ namespace FRCBananaSim::Game
 
     void BananaGame::FireShooter()
     {
-        // Check if there is a ball currently stored inside the robot indexer/throat
-        for (Entity e : m_ballEntities)
+        // Advance funnel ball into shooter compression nip if available
+        for (auto& [entity, info] : m_heldBalls)
         {
-            if (!m_scene.IsEntityValid(e)) continue;
-
-            auto* piece = m_scene.GetComponent<GamePieceComponent>(e);
-            if (!piece) continue;
-
-            if (piece->state == GamePieceState::Stored || piece->state == GamePieceState::Intaking)
+            if (info.slot == BallSlot::Funnel && m_fireCooldown <= 0.0f)
             {
-                // Transition ball directly into shooter compression zone
-                piece->state = GamePieceState::Engaged;
-                auto czIt = m_robot.contactZoneEntities.find("FlyWHeelZone");
-                if (czIt != m_robot.contactZoneEntities.end())
-                {
-                    piece->boundContactZone = czIt->second;
-                }
-                piece->capturingRobot = m_robot.chassisEntity;
-                piece->transitProgressM = 0.0;
-                piece->transitVelocityMPerS = 3.0;
-                m_ballsFired++;
+                info.slot = BallSlot::MuzzleExit;
+                info.targetLocalPos = glm::vec3(0.0f, 0.46f, 0.24f);
+                info.exitProgress = 0.0f;
+                m_fireCooldown = 0.25f;
                 return;
             }
         }
-
-        // If no ball was currently captured inside, spawn one directly into the shooter muzzle for rapid fun!
-        SpawnBall(glm::vec3(0.0f, 0.45f, 0.0f), true);
-        m_ballsFired++;
     }
 
     void BananaGame::FixedUpdate(double dt)
@@ -684,32 +1003,110 @@ namespace FRCBananaSim::Game
             m_jointSystem->ReadbackTelemetry();
         }
 
+        // 4b. Lock Chassis Pitch and Roll (keep robot perfectly level on carpet)
+        // Strictly zero out yaw spin unless user is actively pressing Q or E
+        LockChassisPitchAndRoll(m_isSpinningHeading);
+
         // 5. Goal Trigger & Scoring Pass
         if (m_state == GameState::Playing || m_state == GameState::Countdown)
         {
             CheckGoalScoring();
         }
+    }
 
-        // 6. Record Ballistic Trajectory Trails
-        for (Entity e : m_ballEntities)
+    void BananaGame::LockChassisPitchAndRoll(bool isSpinning)
+    {
+        if (m_robot.chassisEntity == invalidEntity) return;
+
+        // 1. Enforce pure Yaw on Jolt RigidBody (zero Pitch around X and Roll around Z)
+        auto* chassisRb = m_scene.GetComponent<RigidBodyComponent>(m_robot.chassisEntity);
+        if (chassisRb && !chassisRb->bodyID.IsInvalid() && m_joltContext.IsInitialized())
         {
-            if (!m_scene.IsEntityValid(e)) continue;
+            JPH::BodyInterface& bi = m_joltContext.GetBodyInterface();
 
-            auto* piece = m_scene.GetComponent<GamePieceComponent>(e);
-            auto* tc = m_scene.GetComponent<TransformComponent>(e);
-            if (!piece || !tc) continue;
+            // Zero out pitch (X) and roll (Z) angular velocities in Engine frame (+Y Up)
+            // AND if not pressing Q or E, strictly zero out yaw rate so WASD translation NEVER turns the robot!
+            JPH::Vec3 angVel = bi.GetAngularVelocity(chassisRb->bodyID);
+            float yawRate = isSpinning ? angVel.GetY() : 0.0f;
+            bi.SetAngularVelocity(chassisRb->bodyID, JPH::Vec3(0.0f, yawRate, 0.0f));
 
-            if (piece->state == GamePieceState::Launched)
+            // Extract pure yaw twist quaternion around Y axis
+            JPH::Quat rot = bi.GetRotation(chassisRb->bodyID);
+            float y = rot.GetY();
+            float w = rot.GetW();
+            float len = std::hypot(y, w);
+            if (len > 1e-5f)
             {
-                auto& trail = m_ballTrails[e];
-                if (trail.empty() || glm::distance(trail.back(), tc->position) > 0.04f)
-                {
-                    trail.push_back(tc->position);
-                    if (trail.size() > 120)
-                    {
-                        trail.erase(trail.begin());
-                    }
-                }
+                JPH::Quat yawOnly(0.0f, y / len, 0.0f, w / len);
+                bi.SetRotation(chassisRb->bodyID, yawOnly, JPH::EActivation::DontActivate);
+            }
+
+            // Arena boundary clamp: prevent robot from ever penetrating or getting stuck in walls
+            JPH::RVec3 curPos = bi.GetPosition(chassisRb->bodyID);
+            float px = static_cast<float>(curPos.GetX());
+            float pz = static_cast<float>(curPos.GetZ());
+            constexpr float kMaxX = 8.40f;
+            constexpr float kMaxZ = 6.40f;
+
+            if (std::abs(px) > kMaxX || std::abs(pz) > kMaxZ)
+            {
+                float cx = std::clamp(px, -kMaxX, kMaxX);
+                float cz = std::clamp(pz, -kMaxZ, kMaxZ);
+                bi.SetPosition(chassisRb->bodyID, JPH::RVec3(cx, curPos.GetY(), cz), JPH::EActivation::Activate);
+                JPH::Vec3 v = bi.GetLinearVelocity(chassisRb->bodyID);
+                bi.SetLinearVelocity(chassisRb->bodyID, JPH::Vec3(
+                    (cx != px) ? 0.0f : v.GetX(),
+                    v.GetY(),
+                    (cz != pz) ? 0.0f : v.GetZ()
+                ));
+            }
+        }
+
+        // 2. Sync pure Yaw to ECS Transform and WorldTransform
+        auto* tc = m_scene.GetComponent<TransformComponent>(m_robot.chassisEntity);
+        if (tc)
+        {
+            float y = tc->rotation.y;
+            float w = tc->rotation.w;
+            float len = std::hypot(y, w);
+            if (len > 1e-5f)
+            {
+                tc->rotation = glm::quat(w / len, 0.0f, y / len, 0.0f);
+            }
+            tc->position.x = std::clamp(tc->position.x, -8.40f, 8.40f);
+            tc->position.z = std::clamp(tc->position.z, -6.40f, 6.40f);
+        }
+        auto* wt = m_scene.GetComponent<WorldTransformComponent>(m_robot.chassisEntity);
+        if (wt)
+        {
+            float y = wt->worldRotation.y;
+            float w = wt->worldRotation.w;
+            float len = std::hypot(y, w);
+            if (len > 1e-5f)
+            {
+                wt->worldRotation = glm::quat(w / len, 0.0f, y / len, 0.0f);
+            }
+            wt->worldPosition.x = std::clamp(wt->worldPosition.x, -8.40f, 8.40f);
+            wt->worldPosition.z = std::clamp(wt->worldPosition.z, -6.40f, 6.40f);
+        }
+
+        // 3. Clear Roll and Pitch in underlying Swerve Drivetrain Model (in NWU: +Z is Up/Yaw)
+        if (m_robot.swerveSystem && m_robot.swerveSystem->GetModel())
+        {
+            auto& state = m_robot.swerveSystem->GetModel()->GetChassisState();
+            state.angularVelocity.x = 0.0f; // Roll
+            state.angularVelocity.y = 0.0f; // Pitch
+            if (!isSpinning)
+            {
+                state.angularVelocity.z = 0.0f; // Zero yaw rate when not pressing Q/E
+            }
+
+            float z = state.orientation.z;
+            float w = state.orientation.w;
+            float len = std::hypot(z, w);
+            if (len > 1e-5f)
+            {
+                state.orientation = glm::quat(w / len, 0.0f, 0.0f, z / len);
             }
         }
     }
@@ -721,6 +1118,7 @@ namespace FRCBananaSim::Game
 
         if (m_state != GameState::Playing)
         {
+            m_isSpinningHeading = false;
             if (m_robot.swerveSystem)
             {
                 m_robot.swerveSystem->SetInputs(inputs);
@@ -742,43 +1140,32 @@ namespace FRCBananaSim::Game
         if (io.IsKeyDown(GLFW_KEY_Q)) spinRate += 9.0f;
         if (io.IsKeyDown(GLFW_KEY_E)) spinRate -= 9.0f;
 
-        // Toggle Field-Centric mode with H
-        if (io.WasKeyPressed(GLFW_KEY_H))
-        {
-            m_fieldCentric = !m_fieldCentric;
-        }
+        m_isSpinningHeading = (std::abs(spinRate) > 1e-3f);
 
         // Zero Gyro Heading with Z
         if (io.WasKeyPressed(GLFW_KEY_Z))
         {
-            auto* chassisT = m_scene.GetComponent<TransformComponent>(m_robot.chassisEntity);
-            if (chassisT)
+            if (m_robot.swerveSystem)
             {
-                glm::vec3 euler = glm::eulerAngles(chassisT->rotation);
-                m_fieldCentricHeadingRad = euler.y;
+                m_fieldCentricHeadingRad = static_cast<float>(m_robot.swerveSystem->GetOutputs().gyroYaw);
             }
         }
 
         // Get Chassis Yaw for Field-Centric Translation
         float chassisYaw = 0.0f;
-        auto* chassisT = m_scene.GetComponent<TransformComponent>(m_robot.chassisEntity);
-        if (chassisT)
+        if (m_robot.swerveSystem)
         {
-            glm::vec3 euler = glm::eulerAngles(chassisT->rotation);
-            chassisYaw = euler.y - m_fieldCentricHeadingRad;
+            chassisYaw = static_cast<float>(m_robot.swerveSystem->GetOutputs().gyroYaw) - m_fieldCentricHeadingRad;
         }
 
         float cmdVx = fieldVz; // In NWU: +X is Forward (towards goal Z)
         float cmdVy = fieldVx; // In NWU: +Y is Left (towards -X)
 
-        if (m_fieldCentric)
-        {
-            // Rotate field translation vector into robot chassis frame
-            float cosY = std::cos(-chassisYaw);
-            float sinY = std::sin(-chassisYaw);
-            cmdVx = (fieldVz * cosY) - (fieldVx * sinY);
-            cmdVy = (fieldVz * sinY) + (fieldVx * cosY);
-        }
+        // Permanent Field-Centric Drive Translation
+        float cosY = std::cos(-chassisYaw);
+        float sinY = std::sin(-chassisYaw);
+        cmdVx = (fieldVz * cosY) - (fieldVx * sinY);
+        cmdVy = (fieldVz * sinY) + (fieldVx * cosY);
 
         // 4-Module Swerve Kinematics Demands
         constexpr double kP = 18.0;
@@ -801,41 +1188,42 @@ namespace FRCBananaSim::Game
         }
 
         double desaturate = (maxModMag > 12.0) ? (12.0 / maxModMag) : 1.0;
-        auto outputs = m_robot.sensorSystem ? m_robot.sensorSystem->GetOutputs() : SimOutputs{};
+        const auto& swerveOutputs = m_robot.swerveSystem ? m_robot.swerveSystem->GetOutputs() : SimOutputs{};
 
         for (uint32_t i = 0; i < 4; ++i)
         {
-            double targetAngle = 0.0;
-            double driveV = 0.0;
-
-            if (modMag[i] > 1e-3)
+            if (modMag[i] <= 1e-3)
             {
-                targetAngle = std::atan2(modVy[i], modVx[i]);
-                driveV = modMag[i] * desaturate;
+                // When idle, supply 0V to prevent jitter and spurious steering torques
+                inputs.motorCommands[i].mode = MotorControlMode::Voltage;
+                inputs.motorCommands[i].demand = 0.0;
+                inputs.motorCommands[4 + i].mode = MotorControlMode::Voltage;
+                inputs.motorCommands[4 + i].demand = 0.0;
+                continue;
             }
 
-            double curAngle = outputs.encoderPositions[i];
-            double curVel = outputs.encoderVelocities[i];
+            double targetAngle = std::atan2(modVy[i], modVx[i]);
+            double driveV = modMag[i] * desaturate;
+
+            double curAngle = swerveOutputs.encoderPositions[i];
+            double curVel = swerveOutputs.encoderVelocities[i];
             double err = targetAngle - curAngle;
 
             while (err > 3.141592653589793) err -= 6.283185307179586;
             while (err < -3.141592653589793) err += 6.283185307179586;
 
             // Swerve 180-degree module azimuth optimization
-            if (std::abs(driveV) > 1e-3)
+            if (err > 1.5707963267948966)
             {
-                if (err > 1.5707963267948966)
-                {
-                    err -= 3.141592653589793;
-                    driveV = -driveV;
-                }
-                else if (err < -1.5707963267948966)
-                {
-                    err += 3.141592653589793;
-                    driveV = -driveV;
-                }
-                driveV *= std::cos(err);
+                err -= 3.141592653589793;
+                driveV = -driveV;
             }
+            else if (err < -1.5707963267948966)
+            {
+                err += 3.141592653589793;
+                driveV = -driveV;
+            }
+            driveV *= std::cos(err);
 
             double steerV = std::clamp((err * kP) - (curVel * kD), -12.0, 12.0);
 
@@ -850,57 +1238,493 @@ namespace FRCBananaSim::Game
             m_robot.swerveSystem->SetInputs(inputs);
         }
 
-        // B. Intake Mechanism Control (Spacebar / Shift)
-        m_intakeDeployed = io.IsKeyDown(GLFW_KEY_SPACE) || io.IsKeyDown(GLFW_KEY_LEFT_SHIFT);
+        // B. 3 Independent Mechanism Controls (Can all be pressed simultaneously)
+        // #1 Intake: Runs intake rollers + bottom basket + deploys arm (Hold Spacebar or Shift)
+        m_btnIntake = io.IsKeyDown(GLFW_KEY_SPACE) || io.IsKeyDown(GLFW_KEY_LEFT_SHIFT);
+
+        // #2 Funnel: Runs funnel roller + bottom basket (Hold F or Right Mouse Button or V)
+        m_btnFunnel = io.IsKeyDown(GLFW_KEY_F) || io.IsMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT) || io.IsKeyDown(GLFW_KEY_V);
+
+        // #3 Flywheel: Runs shooter flywheel (Hold Left Mouse Button or C)
+        m_btnFlywheel = io.IsMouseButtonDown(GLFW_MOUSE_BUTTON_LEFT) || io.IsKeyDown(GLFW_KEY_C);
+        m_flywheelSpinning = m_btnFlywheel;
+
+        // Toggle Intake Pivot Deployment with I key
+        if (io.WasKeyPressed(GLFW_KEY_I))
+        {
+            m_intakeDeployed = !m_intakeDeployed;
+        }
+
+        // Animate Intake Pivot deployment smoothly toward commanded angle
+        // In Jolt / CAD: -1.85 rad is resting flat on carpet (DEPLOYED), 0.0 rad is folded upright into chassis frame (STOWED)
+        constexpr float kPivotAngleDeployed = -1.85f;
+        constexpr float kPivotAngleStowed = 0.0f;
+
+        bool wantDeployed = (m_btnIntake || m_intakeDeployed);
+        float targetPivotAngle = wantDeployed ? kPivotAngleDeployed : kPivotAngleStowed;
+        float pivotSpeed = 4.8f; // rad/s realistic deployment speed
+        if (m_currentPivotAngle < targetPivotAngle)
+        {
+            m_currentPivotAngle = std::min(m_currentPivotAngle + static_cast<float>(pivotSpeed * dt), targetPivotAngle);
+        }
+        else if (m_currentPivotAngle > targetPivotAngle)
+        {
+            m_currentPivotAngle = std::max(m_currentPivotAngle - static_cast<float>(pivotSpeed * dt), targetPivotAngle);
+        }
+
+        // Gate: ONLY allow intaking balls when the intake pivot is physically DOWN on the carpet
+        bool isPivotDown = (m_currentPivotAngle <= -1.40f);
+
+        // Drive Intake Pivot via Jolt Joint Position Motor
+        if (m_intakeJoint)
+        {
+            m_intakeJoint->motorMode = Physics::Components::JointMotorMode::Position;
+            m_intakeJoint->springFrequency = 12.0f;
+            m_intakeJoint->springDamping = 1.0f;
+            m_intakeJoint->maxMotorTorque = 450.0f;
+            m_intakeJoint->targetAngle = m_currentPivotAngle;
+        }
 
         if (m_intakePivotArm)
         {
-            // Joint intake_1_Revolute 21 has limits [-2.705, 0.0] rad
-            double targetPivot = m_intakeDeployed ? -1.65 : 0.0; // Deployed: -95 deg down to carpet
-            double curAngle = m_intakePivotArm->currentAngleRad;
-            double curVel = m_intakePivotArm->currentVelocityRadPerSec;
-            double err = targetPivot - curAngle;
-            double pivotVolts = std::clamp((err * 35.0) - (curVel * 2.8), -12.0, 12.0);
-            m_intakePivotArm->commandedVoltage = pivotVolts;
+            m_intakePivotArm->commandedVoltage = wantDeployed ? 8.0 : -8.0;
         }
 
-        // Front & Back Intake Rollers
-        double intakeRollerV = m_intakeDeployed ? 12.0 : 0.0;
+        // Intake Rollers (Button #1)
+        double intakeRollerV = m_btnIntake ? 12.0 : 0.0;
         if (m_frontIntake)  m_frontIntake->commandedVoltage = intakeRollerV;
         if (m_backIntake)   m_backIntake->commandedVoltage = intakeRollerV;
 
-        // Bottom Basket & Funnel Feeders
-        double indexerV = m_intakeDeployed ? 9.0 : 0.0;
-        if (m_bottomBasket) m_bottomBasket->commandedVoltage = indexerV;
-        if (m_funnel)       m_funnel->commandedVoltage = indexerV;
+        // Bottom Basket (Button #1 OR Button #2)
+        double basketV = (m_btnIntake || m_btnFunnel) ? 10.0 : 0.0;
+        if (m_bottomBasket) m_bottomBasket->commandedVoltage = basketV;
 
-        // C. Shooter Flywheel & Fire Action (Left Click or F)
-        bool firing = io.IsMouseButtonDown(GLFW_MOUSE_BUTTON_LEFT) || io.IsKeyDown(GLFW_KEY_F);
-        m_flywheelSpinning = firing;
+        // Funnel Roller (Button #2)
+        double funnelV = m_btnFunnel ? 12.0 : 0.0;
+        if (m_funnel)       m_funnel->commandedVoltage = funnelV;
 
-        if (m_flywheel)
+        // Flywheel (Button #3)
+        double flywheelV = m_btnFlywheel ? 12.0 : 0.0;
+        if (m_flywheel)     m_flywheel->commandedVoltage = flywheelV;
+
+        // C. Multi-Slot Ball Queue & Physical Conveyor
+        constexpr int kNumIntakeSlots = 3;
+        constexpr int kNumBasketSlots = 18;
+
+        // Waypoint Generator for Basket: 3 columns wide x 2 rows deep x 3 layers tall = 18 slots
+        auto GetBasketSlotPos = [](int idx) -> glm::vec3 {
+            idx = std::clamp(idx, 0, kNumBasketSlots - 1);
+            int layer = idx / 6; // 0, 1, 2 (bottom, middle, top layer)
+            int rem = idx % 6;
+            int row = rem / 3;   // 0 (front row near funnel), 1 (rear row near intake)
+            int col = rem % 3;   // 0..2 (3 wide across robot width)
+
+            // 3 columns across: cleanly clears the hopper polycarbonate side panels (at X = +/- 0.22m)
+            static const float colX[3] = { -0.115f, 0.0f, +0.115f };
+            // 2 rows along length of basket (from funnel throat at Z = -0.095m to rear near intake at Z = -0.235m)
+            static const float rowZ[2] = { -0.095f, -0.235f };
+            // 3 vertical layers resting cleanly on bottom rollers (roller top is at Y = 0.206m)
+            static const float layerY[3] = { 0.235f, 0.355f, 0.475f };
+
+            glm::vec3 pos(colX[col], layerY[layer], rowZ[row]);
+
+            // Stagger middle layer (layer 1) into the valleys between layer 0 balls
+            if (layer == 1)
+            {
+                pos.x += (col == 1) ? 0.00f : ((col == 0) ? +0.025f : -0.025f);
+                pos.z += (row == 0) ? -0.015f : +0.015f;
+            }
+            else if (layer == 2)
+            {
+                pos.x += (col == 0) ? +0.015f : ((col == 2) ? -0.015f : 0.0f);
+            }
+
+            // Organic deterministic offsets so balls look naturally packed into the hopper
+            float jitterX = std::sin(static_cast<float>(idx) * 2.83f + 0.7f) * 0.008f;
+            float jitterZ = std::cos(static_cast<float>(idx) * 3.41f + 1.3f) * 0.008f;
+            float jitterY = std::sin(static_cast<float>(idx) * 5.17f + 2.1f) * 0.004f;
+
+            return pos + glm::vec3(jitterX, jitterY, jitterZ);
+        };
+
+        // Intake Tray: 3 columns wide across intake mouth (fits cleanly between orange intake arms)
+        auto GetIntakeTraySlotPos = [](int col) -> glm::vec3 {
+            col = std::clamp(col, 0, kNumIntakeSlots - 1);
+            static const float colX[3] = { -0.115f, 0.0f, +0.115f };
+            return glm::vec3(colX[col], 0.14f, -0.52f);
+        };
+
+        const glm::vec3 P_Funnel(0.0f, 0.34f, 0.08f);       // Funnel throat beneath flywheel
+        const glm::vec3 P_MuzzleExit(0.0f, 0.46f, 0.24f);   // Shooter compression nip
+
+        auto* chassisT = m_scene.GetComponent<TransformComponent>(m_robot.chassisEntity);
+        if (!chassisT) return;
+        glm::vec3 chassisPos = chassisT->position;
+        glm::quat chassisRot = chassisT->rotation;
+        JPH::BodyInterface* bi = m_joltContext.IsInitialized() ? &m_joltContext.GetBodyInterface() : nullptr;
+
+        // Identify current slot occupancy across all slots
+        std::array<Entity, kNumIntakeSlots> intakeSlots;
+        intakeSlots.fill(invalidEntity);
+        std::array<Entity, kNumBasketSlots> basketSlots;
+        basketSlots.fill(invalidEntity);
+        Entity ballInFunnel = invalidEntity;
+
+        for (const auto& [entity, info] : m_heldBalls)
         {
-            m_flywheel->commandedVoltage = firing ? 12.0 : 0.0;
+            if (!m_scene.IsEntityValid(entity)) continue;
+            switch (info.slot)
+            {
+            case BallSlot::IntakeTray:
+                if (info.slotIndex >= 0 && info.slotIndex < kNumIntakeSlots)
+                    intakeSlots[info.slotIndex] = entity;
+                break;
+            case BallSlot::Basket:
+                if (info.slotIndex >= 0 && info.slotIndex < kNumBasketSlots)
+                    basketSlots[info.slotIndex] = entity;
+                break;
+            case BallSlot::Funnel:
+                ballInFunnel = entity;
+                break;
+            default:
+                break;
+            }
         }
 
-        // Rapid Fire Trigger on leading edge click
-        if (io.WasKeyPressed(GLFW_KEY_F) || io.WasKeyPressed(GLFW_KEY_SPACE) && firing)
+        // 1. Button #1 (Intake): Vacuum balls on carpet into Intake Tray
+        // Strictly gated: requires Button #1 held, pivot DOWN, and at least one empty Intake Tray slot!
+        if (m_btnIntake && isPivotDown)
         {
-            FireShooter();
+            glm::vec3 intakeMouth = chassisPos + (chassisRot * glm::vec3(0.0f, 0.12f, -0.65f));
+
+            // Check each free intake slot
+            for (int col = 0; col < kNumIntakeSlots; ++col)
+            {
+                if (intakeSlots[col] != invalidEntity) continue; // slot occupied
+
+                Entity bestBall = invalidEntity;
+                float bestDistSq = 0.70f * 0.70f;
+                float targetLocalX = (col == 0) ? -0.115f : (col == 1) ? 0.0f : 0.115f;
+
+                for (Entity e : m_ballEntities)
+                {
+                    if (!m_scene.IsEntityValid(e)) continue;
+                    if (m_heldBalls.find(e) != m_heldBalls.end()) continue; // already held
+
+                    auto* piece = m_scene.GetComponent<GamePieceComponent>(e);
+                    auto* tc = m_scene.GetComponent<TransformComponent>(e);
+                    if (!piece || !tc) continue;
+
+                    if (piece->state == GamePieceState::Free)
+                    {
+                        glm::vec3 delta = tc->position - intakeMouth;
+                        float dSq = glm::dot(delta, delta);
+                        if (dSq < bestDistSq)
+                        {
+                            glm::vec3 localPos = glm::inverse(chassisRot) * (tc->position - chassisPos);
+                            // Prefer balls closest to this column's lateral lane
+                            float laneErr = std::abs(localPos.x - targetLocalX);
+                            if (laneErr < 0.22f)
+                            {
+                                bestDistSq = dSq;
+                                bestBall = e;
+                            }
+                        }
+                    }
+                }
+
+                if (bestBall != invalidEntity)
+                {
+                    auto* tc = m_scene.GetComponent<TransformComponent>(bestBall);
+                    auto* piece = m_scene.GetComponent<GamePieceComponent>(bestBall);
+                    auto* rb = m_scene.GetComponent<RigidBodyComponent>(bestBall);
+
+                    glm::vec3 localPos = glm::inverse(chassisRot) * (tc->position - chassisPos);
+                    localPos.x = std::clamp(localPos.x, -0.22f, 0.22f);
+                    localPos.y = std::clamp(localPos.y, 0.10f, 0.18f);
+                    localPos.z = std::clamp(localPos.z, -0.72f, -0.58f);
+
+                    if (bi && rb && !rb->bodyID.IsInvalid() && bi->IsAdded(rb->bodyID))
+                    {
+                        bi->SetMotionType(rb->bodyID, JPH::EMotionType::Kinematic, JPH::EActivation::DontActivate);
+                        bi->SetLinearVelocity(rb->bodyID, JPH::Vec3(0, 0, 0));
+                        bi->SetAngularVelocity(rb->bodyID, JPH::Vec3(0, 0, 0));
+                    }
+
+                    piece->state = GamePieceState::Intaking;
+                    piece->capturingRobot = m_robot.chassisEntity;
+
+                    HeldBallInfo info;
+                    info.entity = bestBall;
+                    info.slot = BallSlot::IntakeTray;
+                    info.slotIndex = col;
+                    info.currentLocalPos = localPos;
+                    info.targetLocalPos = GetIntakeTraySlotPos(col);
+                    m_heldBalls[bestBall] = info;
+                    intakeSlots[col] = bestBall;
+                    m_ballsCollected++;
+                }
+            }
         }
 
-        // D. Reset Field (R key)
+        // 2. Progression through bottom basket and funnel
+        // A. Funnel -> MuzzleExit (Shooter firing)
+        if (m_fireCooldown > 0.0f)
+        {
+            m_fireCooldown -= static_cast<float>(dt);
+        }
+
+        if (m_btnFlywheel && m_fireCooldown <= 0.0f && ballInFunnel != invalidEntity)
+        {
+            auto& info = m_heldBalls[ballInFunnel];
+            info.slot = BallSlot::MuzzleExit;
+            info.targetLocalPos = P_MuzzleExit;
+            info.exitProgress = 0.0f;
+            m_fireCooldown = 0.30f; // Controlled satisfying shooting cadence (~3.3 shots/sec)
+            ballInFunnel = invalidEntity;
+        }
+
+        // B. Basket -> Funnel (Button #2 runs funnel)
+        if (m_btnFunnel && ballInFunnel == invalidEntity)
+        {
+            // Find lowest index ball in basket (closest to funnel entry)
+            for (int bIdx = 0; bIdx < kNumBasketSlots; ++bIdx)
+            {
+                Entity e = basketSlots[bIdx];
+                if (e != invalidEntity)
+                {
+                    auto& info = m_heldBalls[e];
+                    info.slot = BallSlot::Funnel;
+                    info.slotIndex = 0;
+                    info.targetLocalPos = P_Funnel;
+                    auto* piece = m_scene.GetComponent<GamePieceComponent>(e);
+                    if (piece) piece->state = GamePieceState::Engaged;
+                    ballInFunnel = e;
+                    basketSlots[bIdx] = invalidEntity;
+                    break;
+                }
+            }
+        }
+
+        // C. Internal Basket Cascade (Shift forward toward funnel)
+        if (m_btnIntake || m_btnFunnel)
+        {
+            for (int dst = 0; dst < kNumBasketSlots; ++dst)
+            {
+                if (basketSlots[dst] == invalidEntity)
+                {
+                    // Find first ball in a higher slot to shift down
+                    for (int src = dst + 1; src < kNumBasketSlots; ++src)
+                    {
+                        if (basketSlots[src] != invalidEntity)
+                        {
+                            Entity e = basketSlots[src];
+                            auto& info = m_heldBalls[e];
+                            info.slotIndex = dst;
+                            info.targetLocalPos = GetBasketSlotPos(dst);
+                            basketSlots[dst] = e;
+                            basketSlots[src] = invalidEntity;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // D. IntakeTray -> Basket (Button #1 runs intake rollers and basket)
+        if (m_btnIntake)
+        {
+            for (int col = 0; col < kNumIntakeSlots; ++col)
+            {
+                Entity e = intakeSlots[col];
+                if (e == invalidEntity) continue;
+
+                auto& info = m_heldBalls[e];
+                if (glm::distance(info.currentLocalPos, info.targetLocalPos) <= 0.14f)
+                {
+                    // Find first empty slot in basket (layer 0 first, then layer 1, then layer 2)
+                    int emptyBasketIdx = -1;
+                    for (int bIdx = 0; bIdx < kNumBasketSlots; ++bIdx)
+                    {
+                        if (basketSlots[bIdx] == invalidEntity)
+                        {
+                            emptyBasketIdx = bIdx;
+                            break;
+                        }
+                    }
+
+                    if (emptyBasketIdx != -1)
+                    {
+                        info.slot = BallSlot::Basket;
+                        info.slotIndex = emptyBasketIdx;
+                        info.targetLocalPos = GetBasketSlotPos(emptyBasketIdx);
+                        auto* piece = m_scene.GetComponent<GamePieceComponent>(e);
+                        if (piece) piece->state = GamePieceState::Stored;
+                        basketSlots[emptyBasketIdx] = e;
+                        intakeSlots[col] = invalidEntity;
+                    }
+                    // If no empty basket slot, basket is 18/18 FULL: ball remains in intake slot!
+                }
+            }
+        }
+
+        // 3. Smooth Physical Translation of All Held Balls (No Teleportation)
+        std::vector<Entity> ballsToErase;
+        float baseTransferSpeed = 2.6f; // m/s realistic conveyor speed
+
+        for (auto& [e, info] : m_heldBalls)
+        {
+            if (!m_scene.IsEntityValid(e))
+            {
+                ballsToErase.push_back(e);
+                continue;
+            }
+
+            float speed = (info.slot == BallSlot::MuzzleExit) ? 15.0f : baseTransferSpeed;
+            glm::vec3 diff = info.targetLocalPos - info.currentLocalPos;
+            float dist = glm::length(diff);
+            float maxStep = speed * static_cast<float>(dt);
+
+            if (dist <= maxStep)
+            {
+                info.currentLocalPos = info.targetLocalPos;
+            }
+            else
+            {
+                info.currentLocalPos += (diff / dist) * maxStep;
+            }
+
+            // Check if muzzle exit is reached for dynamic launch
+            if (info.slot == BallSlot::MuzzleExit && glm::distance(info.currentLocalPos, P_MuzzleExit) <= 0.02f)
+            {
+                glm::vec3 launchPos = chassisPos + (chassisRot * P_MuzzleExit);
+
+                // Ballistic Trajectory targeting m_goalCenter (0.0f, 2.20f, 5.5f)
+                glm::vec3 toGoal = m_goalCenter - launchPos;
+                float horizDist = std::hypot(toGoal.x, toGoal.z);
+                float deltaY = toGoal.y; // 2.20 - launchPos.y ~ 1.74m
+
+                // Robot forward direction in world space (+Z in robot frame)
+                glm::vec3 robotFwd = chassisRot * glm::vec3(0.0f, 0.0f, 1.0f);
+                glm::vec2 fwd2D = glm::normalize(glm::vec2(robotFwd.x, robotFwd.z));
+                glm::vec2 goal2D = (horizDist > 0.1f) ? glm::vec2(toGoal.x / horizDist, toGoal.z / horizDist) : fwd2D;
+
+                float aimDot = glm::dot(fwd2D, goal2D);
+                glm::vec3 exitVel;
+                constexpr float g = 9.81f;
+
+                // When robot is generally facing toward the goal (+/- 55 degrees) and within field range
+                if (aimDot > 0.35f && horizDist > 1.0f && horizDist < 14.0f)
+                {
+                    // Auto-assist: gently guide launch azimuth towards goal center
+                    float assistStrength = 0.70f;
+                    glm::vec2 blended2D = glm::normalize(glm::mix(fwd2D, goal2D, assistStrength));
+
+                    // Elevation angle tuned for high arching swish
+                    float elevationDeg = std::clamp(54.0f - (horizDist - 2.0f) * 1.5f, 38.0f, 54.0f);
+                    float theta = glm::radians(elevationDeg);
+                    float cosT = std::cos(theta);
+                    float tanT = std::tan(theta);
+
+                    // Trajectory velocity: v^2 = g * D^2 / (2 * cos^2(theta) * (D * tan(theta) - deltaY))
+                    float denom = 2.0f * (cosT * cosT) * (horizDist * tanT - deltaY);
+                    float speed = 15.0f;
+                    if (denom > 0.1f)
+                    {
+                        speed = std::sqrt((g * horizDist * horizDist) / denom);
+                        speed *= 1.03f; // slight nudge to drop cleanly through hoop center
+                    }
+                    speed = std::clamp(speed, 7.5f, 22.0f);
+
+                    exitVel = glm::vec3(
+                        blended2D.x * speed * cosT,
+                        speed * std::sin(theta),
+                        blended2D.y * speed * cosT
+                    );
+                }
+                else
+                {
+                    // Unassisted shot straight forward
+                    glm::vec3 localDir(0.0f, 0.61566f, 0.78801f); // 38 deg
+                    glm::vec3 worldDir = glm::normalize(chassisRot * localDir);
+                    exitVel = worldDir * 15.0f;
+                }
+
+                glm::vec3 chassisLinVel(0.0f);
+                auto* chassisRb = m_scene.GetComponent<RigidBodyComponent>(m_robot.chassisEntity);
+                if (bi && chassisRb && !chassisRb->bodyID.IsInvalid())
+                {
+                    JPH::Vec3 lv = bi->GetLinearVelocity(chassisRb->bodyID);
+                    chassisLinVel = glm::vec3(lv.GetX(), lv.GetY(), lv.GetZ());
+                }
+
+                exitVel += chassisLinVel * 0.25f;
+
+                auto* tc = m_scene.GetComponent<TransformComponent>(e);
+                auto* wt = m_scene.GetComponent<WorldTransformComponent>(e);
+                auto* rb = m_scene.GetComponent<RigidBodyComponent>(e);
+                auto* piece = m_scene.GetComponent<GamePieceComponent>(e);
+
+                if (tc) tc->position = launchPos;
+                if (wt) wt->worldPosition = launchPos;
+
+                if (bi && rb && !rb->bodyID.IsInvalid() && bi->IsAdded(rb->bodyID))
+                {
+                    bi->SetMotionType(rb->bodyID, JPH::EMotionType::Dynamic, JPH::EActivation::Activate);
+                    bi->SetPosition(rb->bodyID, JPH::RVec3(launchPos.x, launchPos.y, launchPos.z), JPH::EActivation::Activate);
+                    bi->SetLinearVelocity(rb->bodyID, JPH::Vec3(exitVel.x, exitVel.y, exitVel.z));
+                    bi->SetAngularVelocity(rb->bodyID, JPH::Vec3(-28.0f, 0.0f, 0.0f)); // backspin
+                }
+
+                if (piece)
+                {
+                    piece->state = GamePieceState::Launched;
+                    piece->linearVelocity = exitVel;
+                    piece->capturingRobot = invalidEntity;
+                    piece->boundContactZone = invalidEntity;
+                }
+
+                m_ballsFired++;
+                ballsToErase.push_back(e);
+                continue;
+            }
+
+            // Sync smooth kinematic position to ECS and Jolt
+            glm::vec3 worldPos = chassisPos + (chassisRot * info.currentLocalPos);
+            auto* tc = m_scene.GetComponent<TransformComponent>(e);
+            auto* wt = m_scene.GetComponent<WorldTransformComponent>(e);
+            auto* rb = m_scene.GetComponent<RigidBodyComponent>(e);
+
+            if (tc) tc->position = worldPos;
+            if (wt) wt->worldPosition = worldPos;
+
+            if (bi && rb && !rb->bodyID.IsInvalid() && bi->IsAdded(rb->bodyID))
+            {
+                bi->SetPosition(rb->bodyID, JPH::RVec3(worldPos.x, worldPos.y, worldPos.z), JPH::EActivation::DontActivate);
+            }
+        }
+
+        for (Entity e : ballsToErase)
+        {
+            m_heldBalls.erase(e);
+        }
+
+        // D. Reset Field (R key - strictly disallowed mid arcade challenge, permitted in Free Practice)
         if (io.WasKeyPressed(GLFW_KEY_R))
         {
-            ResetField();
+            bool isMidChallenge = (m_mode == GameMode::ArcadeRush && (m_state == GameState::Playing || m_state == GameState::Countdown));
+            if (!isMidChallenge)
+            {
+                ResetField();
+            }
         }
     }
 
     void BananaGame::CheckGoalScoring()
     {
         // High Goal Trigger Bounding Cylinder around m_goalCenter (X=0, Y=2.2m, Z=5.5m)
-        const float targetY = m_goalCenter.y;
         const float targetRadiusSq = m_goalRadius * m_goalRadius;
+        JPH::BodyInterface* bi = m_joltContext.IsInitialized() ? &m_joltContext.GetBodyInterface() : nullptr;
 
         for (Entity e : m_ballEntities)
         {
@@ -910,30 +1734,45 @@ namespace FRCBananaSim::Game
             auto* piece = m_scene.GetComponent<GamePieceComponent>(e);
             if (!tc || !piece) continue;
 
-            // Only score balls that are in flight or descending
-            if (piece->state == GamePieceState::Launched || piece->state == GamePieceState::Free)
+            // Only score balls that are in flight or descending, and not currently on cooldown
+            if ((piece->state == GamePieceState::Launched || piece->state == GamePieceState::Free) && m_ballScoreCooldown[e] <= 0.0f)
             {
                 float dx = tc->position.x - m_goalCenter.x;
                 float dz = tc->position.z - m_goalCenter.z;
                 float distSq = dx * dx + dz * dz;
 
                 // Inside rim diameter and passing downward through net level
-                if (distSq < targetRadiusSq && tc->position.y >= 1.95f && tc->position.y <= 2.35f)
+                if (distSq < targetRadiusSq && tc->position.y >= 1.80f && tc->position.y <= 2.45f)
                 {
                     auto* rb = m_scene.GetComponent<RigidBodyComponent>(e);
-                    bool isFalling = (rb && rb->linearVelocity.y < 0.2f) || (piece->linearVelocity.y < 0.2f);
+                    bool isFalling = (rb && rb->linearVelocity.y < 0.25f) || (piece->linearVelocity.y < 0.25f);
 
                     if (isFalling)
                     {
                         TriggerGoalScored(tc->position);
 
-                        // Recycle ball: drop through net back to floor
-                        tc->position = glm::vec3(0.0f, 0.4f, 5.2f);
-                        if (rb)
+                        // Prevent counting multiple scores for the same ball
+                        m_ballScoreCooldown[e] = 2.5f;
+
+                        // Recycle ball: move both ECS and Jolt physical body immediately below net onto floor
+                        glm::vec3 recyclePos(0.0f, 0.40f, 4.8f);
+                        tc->position = recyclePos;
+                        auto* wt = m_scene.GetComponent<WorldTransformComponent>(e);
+                        if (wt) wt->worldPosition = recyclePos;
+
+                        if (bi && rb && !rb->bodyID.IsInvalid() && bi->IsAdded(rb->bodyID))
                         {
-                            rb->linearVelocity = glm::vec3(0.0f, -1.0f, -1.0f);
+                            bi->SetPositionAndRotation(rb->bodyID,
+                                JPH::RVec3(recyclePos.x, recyclePos.y, recyclePos.z),
+                                JPH::Quat::sIdentity(),
+                                JPH::EActivation::Activate);
+                            bi->SetLinearAndAngularVelocity(rb->bodyID,
+                                JPH::Vec3(0.0f, -0.5f, -1.0f),
+                                JPH::Vec3::sZero());
                         }
+
                         piece->state = GamePieceState::Free;
+                        piece->linearVelocity = glm::vec3(0.0f, -0.5f, -1.0f);
                     }
                 }
             }
@@ -972,6 +1811,22 @@ namespace FRCBananaSim::Game
 
     void BananaGame::Update(double dt)
     {
+        // High-precision real wall-clock delta time (guarantees timer ticks exactly 1 sec per real sec)
+        double now = glfwGetTime();
+        if (m_lastRealTime <= 0.0)
+        {
+            m_lastRealTime = now;
+        }
+        float realDt = static_cast<float>(now - m_lastRealTime);
+        m_lastRealTime = now;
+        realDt = std::clamp(realDt, 0.001f, 0.100f);
+
+        // Decay ball score cooldowns
+        for (auto& [e, cd] : m_ballScoreCooldown)
+        {
+            if (cd > 0.0f) cd -= realDt;
+        }
+
         auto& io = m_renderer.GetInput();
 
         // Pause Toggle with ESC
@@ -987,27 +1842,20 @@ namespace FRCBananaSim::Game
             }
         }
 
-        // Camera Perspective Mode Toggle with TAB
-        if (io.WasKeyPressed(GLFW_KEY_TAB))
+        // Reset Field (R key: available in Free Practice, menus, or paused; blocked mid Arcade Rush)
+        if (io.WasKeyPressed(GLFW_KEY_R))
         {
-            if (m_camMode == CameraMode::FollowRobot)
+            bool isMidChallenge = (m_mode == GameMode::ArcadeRush && (m_state == GameState::Playing || m_state == GameState::Countdown));
+            if (!isMidChallenge)
             {
-                m_camMode = CameraMode::DriverStation;
-            }
-            else if (m_camMode == CameraMode::DriverStation)
-            {
-                m_camMode = CameraMode::FreeOrbit;
-            }
-            else
-            {
-                m_camMode = CameraMode::FollowRobot;
+                ResetField();
             }
         }
 
         // Game State Machine Transitions
         if (m_state == GameState::Countdown)
         {
-            m_countdownTimer -= static_cast<float>(dt);
+            m_countdownTimer -= realDt;
             if (m_countdownTimer <= 0.0f)
             {
                 m_state = GameState::Playing;
@@ -1017,31 +1865,11 @@ namespace FRCBananaSim::Game
         {
             if (m_mode == GameMode::ArcadeRush)
             {
-                m_sessionTimer -= static_cast<float>(dt);
+                m_sessionTimer -= realDt;
                 if (m_sessionTimer <= 0.0f)
                 {
                     m_sessionTimer = 0.0f;
                     m_state = GameState::GameOver;
-                }
-            }
-
-            // Continuous Field Ball Refresh (Keep at least 4 balls on carpet)
-            m_ballAutoDropTimer += static_cast<float>(dt);
-            if (m_ballAutoDropTimer >= 4.0f)
-            {
-                m_ballAutoDropTimer = 0.0f;
-                int freeBalls = 0;
-                for (Entity e : m_ballEntities)
-                {
-                    if (!m_scene.IsEntityValid(e)) continue;
-                    auto* p = m_scene.GetComponent<GamePieceComponent>(e);
-                    if (p && p->state == GamePieceState::Free) freeBalls++;
-                }
-
-                if (freeBalls < 5)
-                {
-                    float dropX = static_cast<float>((rand() % 100 - 50) * 0.08f);
-                    SpawnBall(glm::vec3(dropX, 1.8f, 1.5f));
                 }
             }
         }
@@ -1049,8 +1877,8 @@ namespace FRCBananaSim::Game
         // Animate Floating Score Popups
         for (auto it = m_scorePopups.begin(); it != m_scorePopups.end();)
         {
-            it->lifetime += static_cast<float>(dt);
-            it->worldPos.y += static_cast<float>(dt * 0.6f); // Float upward
+            it->lifetime += realDt;
+            it->worldPos.y += static_cast<float>(realDt * 0.6f); // Float upward
             if (it->lifetime >= it->maxLifetime)
             {
                 it = m_scorePopups.erase(it);
@@ -1064,11 +1892,11 @@ namespace FRCBananaSim::Game
         // Visual Goal Rim Flash Decay
         if (m_goalFlashTimer > 0.0f)
         {
-            m_goalFlashTimer -= static_cast<float>(dt);
+            m_goalFlashTimer -= realDt;
         }
 
         // Smooth Camera Follow
-        UpdateCamera(dt);
+        UpdateCamera(realDt);
     }
 
     void BananaGame::UpdateCamera(double dt)
@@ -1078,65 +1906,34 @@ namespace FRCBananaSim::Game
         if (!chassisT) return;
 
         glm::vec3 robotPos = chassisT->position;
-        glm::quat robotRot = chassisT->rotation;
-        glm::vec3 robotFwd = robotRot * glm::vec3(0.0f, 0.0f, 1.0f);
 
-        if (m_camMode == CameraMode::FollowRobot)
-        {
-            camera.SetMode(Renderer::Camera::Mode::FreeFly);
+        // Dedicated field-aligned follow camera: smooth follow behind (-Z) and above (+Y)
+        // Does NOT rotate with robot yaw, matching natural field-centric driver controls
+        camera.SetMode(Renderer::Camera::Mode::FreeFly);
+        const glm::vec3 worldOffset(0.0f, 2.50f, -4.50f);
+        glm::vec3 targetCamPos = robotPos + worldOffset;
+        glm::vec3 targetLookAt = robotPos + glm::vec3(0.0f, 0.40f, 0.80f);
 
-            // Position camera smoothly behind and above robot, looking forward
-            glm::vec3 targetCamPos = robotPos - (robotFwd * 3.4f) + glm::vec3(0.0f, 1.85f, 0.0f);
-            glm::vec3 targetLookAt = robotPos + (robotFwd * 1.5f) + glm::vec3(0.0f, 0.45f, 0.0f);
+        float blend = std::clamp(static_cast<float>(dt * 8.0), 0.01f, 1.0f);
+        m_smoothCameraPos = glm::mix(m_smoothCameraPos, targetCamPos, blend);
+        m_smoothCameraTarget = glm::mix(m_smoothCameraTarget, targetLookAt, blend);
 
-            float blend = std::clamp(static_cast<float>(dt * 7.5), 0.01f, 1.0f);
-            m_smoothCameraPos = glm::mix(m_smoothCameraPos, targetCamPos, blend);
-            m_smoothCameraTarget = glm::mix(m_smoothCameraTarget, targetLookAt, blend);
+        camera.position = m_smoothCameraPos;
+        camera.orbitTarget = m_smoothCameraTarget;
 
-            camera.position = m_smoothCameraPos;
-            camera.orbitTarget = m_smoothCameraTarget;
-
-            glm::vec3 dir = glm::normalize(m_smoothCameraTarget - m_smoothCameraPos);
-            camera.pitchDegrees = glm::degrees(std::asin(std::clamp(dir.y, -0.999f, 0.999f)));
-            camera.yawDegrees = glm::degrees(std::atan2(dir.z, dir.x));
-        }
-        else if (m_camMode == CameraMode::DriverStation)
-        {
-            // Fixed Driver Station View from Alliance Wall
-            camera.SetMode(Renderer::Camera::Mode::FreeFly);
-            camera.position = glm::vec3(0.0f, 2.10f, -6.8f);
-            camera.orbitTarget = robotPos + glm::vec3(0.0f, 0.40f, 0.0f);
-
-            glm::vec3 dir = glm::normalize(camera.orbitTarget - camera.position);
-            camera.pitchDegrees = glm::degrees(std::asin(std::clamp(dir.y, -0.999f, 0.999f)));
-            camera.yawDegrees = glm::degrees(std::atan2(dir.z, dir.x));
-        }
-        else
-        {
-            // Free Orbit
-            camera.SetMode(Renderer::Camera::Mode::Orbit);
-            camera.orbitTarget = robotPos + glm::vec3(0.0f, 0.40f, 0.0f);
-        }
+        glm::vec3 dir = glm::normalize(m_smoothCameraTarget - m_smoothCameraPos);
+        camera.pitchDegrees = glm::degrees(std::asin(std::clamp(dir.y, -0.999f, 0.999f)));
+        camera.yawDegrees = glm::degrees(std::atan2(dir.z, dir.x));
     }
 
     void BananaGame::Render3D()
     {
-        // 1. Render all solid 3D meshes (Field carpet, arena perimeter walls, goal post & backboard, balls, robot links)
-        m_scene.RenderUpdateSystems();
+        // 1. Update mechanism & wheel visual mesh transforms before drawing pass
         if (m_robot.flywheelSystem) m_robot.flywheelSystem->RenderUpdate();
         if (m_robot.swerveSystem) m_robot.swerveSystem->RenderUpdate();
 
-        // 2. Draw Ballistic Trajectory Trails for Flying Balls
-        for (const auto& [entity, trail] : m_ballTrails)
-        {
-            if (trail.size() < 2) continue;
-            for (size_t i = 0; i + 1 < trail.size(); ++i)
-            {
-                float alpha = static_cast<float>(i) / static_cast<float>(trail.size());
-                glm::vec3 trailColor = glm::mix(glm::vec3(0.1f, 0.6f, 1.0f), glm::vec3(1.0f, 0.85f, 0.1f), alpha);
-                Utils::DebugDraw::Line(trail[i], trail[i + 1], trailColor, true);
-            }
-        }
+        // 2. Render all solid 3D meshes (Field carpet, arena perimeter walls, goal post & backboard, balls, robot links)
+        m_scene.RenderUpdateSystems();
 
         // 3. Draw Target Goal Rim Highlight & Flash FX
         glm::vec3 hoopColor = (m_goalFlashTimer > 0.0f)
@@ -1256,24 +2053,29 @@ namespace FRCBananaSim::Game
         ImGui::Text("Rotate Robot Heading");
         ImGui::NextColumn();
 
-        ImGui::BulletText("Spacebar / Shift (Hold)");
+        ImGui::BulletText("[1] Spacebar / Shift");
         ImGui::NextColumn();
-        ImGui::Text("Deploy Intake & Vacuum Rollers");
-        ImGui::NextColumn();
-
-        ImGui::BulletText("Left Mouse / F");
-        ImGui::NextColumn();
-        ImGui::Text("Spool Flywheel & Fire Ball");
+        ImGui::Text("Intake: Runs Rollers + Basket (Deploys Intake)");
         ImGui::NextColumn();
 
-        ImGui::BulletText("Tab");
+        ImGui::BulletText("[2] F / RMB / V");
         ImGui::NextColumn();
-        ImGui::Text("Cycle Camera (Follow / Cockpit / Orbit)");
+        ImGui::Text("Funnel: Feeds Basket into Funnel Throat");
         ImGui::NextColumn();
 
-        ImGui::BulletText("H");
+        ImGui::BulletText("[3] Left Mouse / C");
         ImGui::NextColumn();
-        ImGui::Text("Toggle Field-Centric / Robot-Centric");
+        ImGui::Text("Flywheel: Spins Shooter Flywheel to Fire");
+        ImGui::NextColumn();
+
+        ImGui::BulletText("I");
+        ImGui::NextColumn();
+        ImGui::Text("Toggle Intake Deploy / Undeploy");
+        ImGui::NextColumn();
+
+        ImGui::BulletText("R");
+        ImGui::NextColumn();
+        ImGui::Text("Reset Field (Free Practice only)");
         ImGui::NextColumn();
 
         ImGui::BulletText("Z");
@@ -1281,12 +2083,15 @@ namespace FRCBananaSim::Game
         ImGui::Text("Zero Gyroscope Forward Heading");
         ImGui::NextColumn();
 
-        ImGui::BulletText("R");
+        ImGui::BulletText("ESC / P");
         ImGui::NextColumn();
-        ImGui::Text("Respawn All Balls on Field");
+        ImGui::Text("Pause Game");
         ImGui::NextColumn();
 
         ImGui::Columns(1);
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.2f, 0.95f, 0.4f, 1.0f),
+            "* Pro-tip: Intake must be DOWN to pick up balls! Press all 3 buttons together to vacuum, feed, and stream balls continuously into the goal!");
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
@@ -1402,53 +2207,117 @@ namespace FRCBananaSim::Game
         }
 
         // 3. Bottom-Left Robot Status Card
-        ImGui::SetNextWindowPos(ImVec2(18, io.DisplaySize.y - 120), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
-        ImGui::SetNextWindowSize(ImVec2(320, 105), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(ImVec2(18, io.DisplaySize.y - 190), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowSize(ImVec2(410, 175), ImGuiCond_Always);
         ImGui::Begin("##RobotHUD", nullptr, hudFlags);
 
         ImVec2 r0 = ImGui::GetWindowPos();
-        ImVec2 r1 = ImVec2(r0.x + 320, r0.y + 105);
-        drawList->AddRectFilled(r0, r1, IM_COL32(18, 22, 28, 200), 8.0f);
-        drawList->AddRect(r0, r1, IM_COL32(60, 100, 160, 150), 8.0f);
+        ImVec2 r1 = ImVec2(r0.x + 410, r0.y + 175);
+        drawList->AddRectFilled(r0, r1, IM_COL32(18, 22, 28, 215), 8.0f);
+        drawList->AddRect(r0, r1, IM_COL32(60, 100, 160, 160), 8.0f);
 
-        ImGui::SetCursorPos(ImVec2(12, 10));
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "ROBOT COMP 2 (SWERVE)");
+        ImGui::SetCursorPos(ImVec2(12, 8));
+        ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), "ROBOT COMP 2 (3-STAGE MECH)");
 
-        // Ball Loaded Sensor Indicator
-        bool ballLoaded = false;
-        for (Entity e : m_ballEntities)
+        // Intake Pivot Status
+        bool isPivotDown = (m_currentPivotAngle <= -1.40f);
+        float pivotDeg = glm::degrees(m_currentPivotAngle);
+        ImGui::SetCursorPos(ImVec2(12, 26));
+        if (isPivotDown)
         {
-            if (!m_scene.IsEntityValid(e)) continue;
-            auto* p = m_scene.GetComponent<GamePieceComponent>(e);
-            if (p && (p->state == GamePieceState::Stored || p->state == GamePieceState::Engaged))
-            {
-                ballLoaded = true;
-                break;
-            }
+            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "PIVOT: [ DEPLOYED / DOWN ] (%.0f deg)", pivotDeg);
         }
-
-        ImGui::SetCursorPos(ImVec2(12, 32));
-        if (ballLoaded)
+        else if (m_currentPivotAngle >= -0.25f)
         {
-            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "LOADED: [ BALL READY TO FIRE ]");
+            ImGui::TextColored(ImVec4(0.6f, 0.65f, 0.7f, 1.0f), "PIVOT: [ STOWED / UP ] (Press I / Hold Space)");
         }
         else
         {
-            ImGui::TextColored(ImVec4(0.6f, 0.65f, 0.7f, 1.0f), "LOADED: [ NO BALL (HOLD SPACE) ]");
+            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "PIVOT: [ MOVING... ] (%.0f deg)", pivotDeg);
         }
 
-        // Flywheel RPM Indicator
-        float rpm = m_flywheel ? static_cast<float>(m_flywheel->angularVelocityRpm) : 0.0f;
-        ImGui::SetCursorPos(ImVec2(12, 54));
-        ImGui::Text("FLYWHEEL: %.0f RPM", rpm);
-        ImGui::SameLine();
-        ImGui::ProgressBar(rpm / 5000.0f, ImVec2(120, 14), "");
+        // Button #1: Intake (Spacebar / Shift)
+        ImGui::SetCursorPos(ImVec2(12, 46));
+        if (m_btnIntake)
+            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "[1] INTAKE:   RUNNING + BASKET (SPACE)");
+        else
+            ImGui::TextColored(ImVec4(0.55f, 0.6f, 0.65f, 1.0f), "[1] INTAKE:   OFF (HOLD SPACE)");
 
-        // Mode Status
-        ImGui::SetCursorPos(ImVec2(12, 78));
-        ImGui::TextDisabled("MODE: %s | CAM: %s",
-            m_fieldCentric ? "FIELD-CENTRIC" : "ROBOT-CENTRIC",
-            m_camMode == CameraMode::FollowRobot ? "FOLLOW" : (m_camMode == CameraMode::DriverStation ? "COCKPIT" : "ORBIT"));
+        // Button #2: Funnel (F / RMB)
+        ImGui::SetCursorPos(ImVec2(12, 66));
+        if (m_btnFunnel)
+            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "[2] FUNNEL:   FEEDING + BASKET (F/RMB)");
+        else
+            ImGui::TextColored(ImVec4(0.55f, 0.6f, 0.65f, 1.0f), "[2] FUNNEL:   OFF (HOLD F / RMB)");
+
+        // Button #3: Flywheel (LMB / C)
+        float rpm = m_flywheel ? static_cast<float>(m_flywheel->angularVelocityRpm) : 0.0f;
+        ImGui::SetCursorPos(ImVec2(12, 86));
+        if (m_btnFlywheel)
+            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "[3] FLYWHEEL: %.0f RPM [FIRING] (LMB)", rpm);
+        else
+            ImGui::TextColored(ImVec4(0.55f, 0.6f, 0.65f, 1.0f), "[3] FLYWHEEL: %.0f RPM [OFF] (HOLD LMB)", rpm);
+
+        // Count held balls by slot
+        int cntIntake = 0;
+        int cntBasket = 0;
+        int cntFunnel = 0;
+        for (const auto& [e, info] : m_heldBalls)
+        {
+            if (!m_scene.IsEntityValid(e)) continue;
+            switch (info.slot)
+            {
+            case BallSlot::IntakeTray:  cntIntake++; break;
+            case BallSlot::Basket:      cntBasket++; break;
+            case BallSlot::Funnel:
+            case BallSlot::MuzzleExit:  cntFunnel++; break;
+            default: break;
+            }
+        }
+        int totalHeld = cntIntake + cntBasket + cntFunnel;
+
+        // Ball Capacity & Inventory Display (Basket: 3 wide x 3 tall = up to 18, Intake: 3 wide = 3, Funnel = 1)
+        ImGui::SetCursorPos(ImVec2(12, 108));
+        if (cntIntake >= 3 && cntBasket >= 18)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.15f, 1.0f), "BALLS: [ %d/22 FULL ] Basket 18/18 | Intake 3/3 | Funnel %d/1",
+                totalHeld, cntFunnel);
+        }
+        else if (totalHeld > 0)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.90f, 0.20f, 1.0f), "BALLS: [ %d/22 HELD ] Basket %d/18 | Intake %d/3 | Funnel %d/1",
+                totalHeld, cntBasket, cntIntake, cntFunnel);
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "BALLS: [ 0/22 EMPTY ] - DEPLOY INTAKE & DRIVE OVER BALLS");
+        }
+
+        // Intake Status / Guidance
+        ImGui::SetCursorPos(ImVec2(12, 128));
+        if (cntIntake >= 3 && cntBasket >= 18)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.50f, 0.20f, 1.0f), "INTAKE FULL: Feed (F) or Fire (LMB) to take more");
+        }
+        else if (!isPivotDown)
+        {
+            ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.20f, 1.0f), "INTAKE IS UP: Press 'I' or Hold Space to deploy");
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0.2f, 0.95f, 0.40f, 1.0f), "INTAKE READY: Rollers vacuuming from carpet");
+        }
+
+        // Mode & Reset Indicator
+        ImGui::SetCursorPos(ImVec2(12, 148));
+        if (m_mode == GameMode::FreePractice)
+        {
+            ImGui::TextDisabled("MODE: FIELD-CENTRIC | RESET: [R] KEY READY");
+        }
+        else
+        {
+            ImGui::TextDisabled("MODE: FIELD-CENTRIC | RESET: LOCKED DURING MATCH");
+        }
 
         ImGui::End();
     }

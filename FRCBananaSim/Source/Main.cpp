@@ -267,8 +267,92 @@ static void RenderSceneDebugDraw(Scene& scene, bool showColliders, bool showWhee
 }
 
 
+static int RunStandaloneGame()
+{
+    // 1. Initialize Hardware Renderer (1600x900 OpenGL 3.3 Core)
+    FRCBananaSim::Renderer::Renderer renderer(1600, 900, "FRC Banana Simulator — Robot Comp 2 Shootout");
+    if (!renderer.IsValid())
+    {
+        SIM_LOG_FATAL("Failed to initialize OpenGL renderer window");
+        return -1;
+    }
+
+    // 2. Initialize Jolt Physics Subsystem
+    FRCBananaSim::Physics::JoltContext joltContext;
+    if (!joltContext.Initialize())
+    {
+        SIM_LOG_FATAL("Failed to initialize Jolt Physics Context");
+        return -1;
+    }
+
+    {
+        // 3. ECS Scene & Core Presentation Systems
+        Scene scene;
+        scene.SetFixedDeltaTime(FRCBananaSim::Physics::PhysicsConfig::fixedDeltaTime);
+
+        scene.AddSystem(std::make_unique<FRCBananaSim::Core::ECS::Systems::TransformPropagationSystem>(scene));
+        scene.AddSystem(std::make_unique<FRCBananaSim::Renderer::Systems::RenderSystem>(scene, renderer));
+
+        // 4. Scoped Game Execution
+        {
+            FRCBananaSim::Game::BananaGame game(scene, joltContext, renderer);
+            if (!game.Initialize())
+            {
+                SIM_LOG_FATAL("Failed to initialize BananaGame with Robot Comp 2");
+                return -1;
+            }
+
+            FRCBananaSim::Core::Engine engine(200.0, 0.0);
+
+            engine.SetFixedUpdateCallback([&](double dt)
+                {
+                    game.FixedUpdate(dt);
+                });
+
+            engine.SetUpdateCallback([&](double dt)
+                {
+                    if (renderer.ShouldClose() || game.ShouldExit())
+                    {
+                        engine.RequestExit();
+                        return;
+                    }
+
+                    renderer.BeginFrame();
+                    game.Update(dt);
+                });
+
+            engine.SetRenderCallback([&](double alpha)
+                {
+                    if (renderer.ShouldClose()) return;
+
+                    game.Render3D();
+                    game.RenderUI();
+
+                    renderer.EndFrame();
+                });
+
+            engine.Run();
+        } // game is destroyed here cleanly, removing all its physics bodies
+
+        scene.Clear();
+    } // scene is destroyed here cleanly before joltContext.Shutdown()
+
+    // 5. Clean teardown in reverse initialization order
+    joltContext.Shutdown();
+
+    SIM_LOG_INFO("[FRCBananaSim] Standalone game exited cleanly.");
+    return 0;
+}
+
 int main(int argc, char* argv[])
 {
+    // Boot directly into Robot Comp 2 Shootout Game unless --test-station flag is passed
+    bool runTestStation = (argc > 1 && std::string(argv[1]) == "--test-station");
+    if (!runTestStation)
+    {
+        return RunStandaloneGame();
+    }
+
     // 1. Initialize Telemetry & Profiler Subsystems
     FRCBananaSim::Telemetry::TelemetryManager::Get().Initialize();
     FRCBananaSim::Telemetry::TelemetryManager::Get().SetMode(FRCBananaSim::Telemetry::TelemetryMode::Minimal);
@@ -293,62 +377,16 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    // 4. Start WPILib HALSim WebSocket Server (:3300/wpilibws)
-    FRCBananaSim::Bridge::HALSimWebSocketServer wsServer;
-    wsServer.Start();
-
-    // 5. ECS Scene & Core Presentation Systems
+    // 4. ECS Scene & Core Presentation Systems
     Scene scene;
     scene.SetFixedDeltaTime(FRCBananaSim::Physics::PhysicsConfig::fixedDeltaTime);
 
     scene.AddSystem(std::make_unique<FRCBananaSim::Core::ECS::Systems::TransformPropagationSystem>(scene));
     scene.AddSystem(std::make_unique<FRCBananaSim::Renderer::Systems::RenderSystem>(scene, renderer));
 
-    // Boot directly into Robot Comp 2 Shootout Game unless --test-station flag is passed
-    bool runTestStation = (argc > 1 && std::string(argv[1]) == "--test-station");
-    if (!runTestStation)
-    {
-        FRCBananaSim::Game::BananaGame game(scene, joltContext, renderer);
-        if (!game.Initialize())
-        {
-            SIM_LOG_FATAL("Failed to initialize BananaGame with Robot Comp 2");
-            return -1;
-        }
-
-        FRCBananaSim::Core::Engine engine(200.0, 0.0);
-
-        engine.SetFixedUpdateCallback([&](double dt)
-            {
-                game.FixedUpdate(dt);
-            });
-
-        engine.SetUpdateCallback([&](double dt)
-            {
-                if (renderer.ShouldClose() || game.ShouldExit())
-                {
-                    engine.RequestExit();
-                    return;
-                }
-
-                renderer.BeginFrame();
-                game.Update(dt);
-            });
-
-        engine.SetRenderCallback([&](double alpha)
-            {
-                if (renderer.ShouldClose()) return;
-
-                game.Render3D();
-                game.RenderUI();
-
-                renderer.EndFrame();
-            });
-
-        engine.Run();
-
-        FRCBananaSim::Telemetry::TelemetryManager::Get().Shutdown();
-        return 0;
-    }
+    // Start WPILib HALSim WebSocket Server (:3300/wpilibws) for Test Station
+    FRCBananaSim::Bridge::HALSimWebSocketServer wsServer;
+    wsServer.Start();
 
     auto assignTransforms = [&](Entity entity, const glm::vec3& pos, const glm::vec3& scale,
         const glm::quat& rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
@@ -1922,6 +1960,8 @@ int main(int argc, char* argv[])
     {
         profilerWindow.Close(renderer.GetWindow());
     }
+
+    scene.Clear();
 
     joltContext.Shutdown();
     FRCBananaSim::Telemetry::TelemetryManager::Get().Shutdown();

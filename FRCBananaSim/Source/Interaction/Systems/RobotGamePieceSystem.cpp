@@ -150,7 +150,10 @@ namespace FRCBananaSim::Interaction::Systems
         for (const auto& [name, entity] : robot.mechanismEntities)
         {
             auto* fw = scene.GetComponent<FlywheelComponent>(entity);
-            if (fw && (fw->name.find("intake") != std::string::npos || name.find("intake") != std::string::npos))
+            if (!fw) continue;
+            std::string n = name;
+            for (char& c : n) c = static_cast<char>(std::tolower(c));
+            if (n.find("intake") != std::string::npos || n.find("basket") != std::string::npos)
             {
                 intakeFlywheel = fw;
                 break;
@@ -162,7 +165,10 @@ namespace FRCBananaSim::Interaction::Systems
         for (const auto& [name, cze] : robot.contactZoneEntities)
         {
             auto* candidate = scene.GetComponent<ContactZoneComponent>(cze);
-            if (candidate && candidate->role == "intake")
+            if (!candidate) continue;
+            std::string n = name;
+            for (char& c : n) c = static_cast<char>(std::tolower(c));
+            if (candidate->role == "intake" && n.find("intake") != std::string::npos)
             {
                 intakeZoneEntity = cze;
                 czIntake = candidate;
