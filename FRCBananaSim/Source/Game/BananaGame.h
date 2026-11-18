@@ -142,7 +142,7 @@ namespace FRCBananaSim::Game
         void SetupArena();
         void SetupRobotVisuals();
         void UpdateArcadeRobotController(double dt);
-        void CheckGoalScoring();
+        void CheckGoalScoring(double dt);
         void UpdateCamera(double dt);
         void LockChassisPitchAndRoll(bool isSpinning = false);
         void DrawStartScreenUI();
@@ -150,6 +150,9 @@ namespace FRCBananaSim::Game
         void DrawPauseUI();
         void DrawGameOverUI();
         void TriggerGoalScored(const glm::vec3& ballPos);
+        void LoadHighScore();
+        void SaveHighScore();
+        std::string GetHighScoreFilePath() const;
 
         // Core Engine References
         Core::ECS::Core::Scene& m_scene;
@@ -236,6 +239,7 @@ namespace FRCBananaSim::Game
         std::vector<Core::ECS::Core::Entity> m_arenaEntities;
         std::vector<Core::ECS::Core::Entity> m_ballEntities;
         std::unordered_map<Core::ECS::Core::Entity, float> m_ballScoreCooldown;
+        std::unordered_map<Core::ECS::Core::Entity, float> m_activeShots;
         std::vector<ScorePopup> m_scorePopups;
         float m_ballAutoDropTimer = 0.0f;
 

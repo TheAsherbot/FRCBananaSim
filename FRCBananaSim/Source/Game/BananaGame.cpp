@@ -29,8 +29,10 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <nlohmann/json.hpp>
 
 using namespace FRCBananaSim::Core::ECS::Core;
 using namespace FRCBananaSim::Core::ECS::Components;
@@ -95,6 +97,8 @@ namespace FRCBananaSim::Game
             }
         }
         m_ballEntities.clear();
+        m_activeShots.clear();
+        m_heldBalls.clear();
 
         // 4. Destroy arena bodies (floor, walls, goal posts, hoop)
         for (Entity e : m_arenaEntities)
@@ -183,6 +187,8 @@ namespace FRCBananaSim::Game
         m_robot.elevatorSystem.reset();
         m_robot.sensorSystem.reset();
         m_robot.flightAerodynamicsSystem.reset();
+
+        SaveHighScore();
 
         SIM_LOG_INFO("[BananaGame] Teardown complete.");
     }
@@ -359,6 +365,9 @@ namespace FRCBananaSim::Game
         glm::vec3 initDir = glm::normalize(camera.orbitTarget - camera.position);
         camera.pitchDegrees = glm::degrees(std::asin(std::clamp(initDir.y, -0.999f, 0.999f)));
         camera.yawDegrees = glm::degrees(std::atan2(initDir.z, initDir.x));
+
+        // Load Persistent High Score from Disk
+        LoadHighScore();
 
         SIM_LOG_INFO("[BananaGame] Robot Comp 2 Arcade Shootout Game initialized successfully!");
         return true;
@@ -834,8 +843,10 @@ namespace FRCBananaSim::Game
 
     void BananaGame::ResetField()
     {
-        // 1. Clear held balls tracking and intake deployment state
+        // 1. Clear held balls tracking, active shots, combo, and intake deployment state
         m_heldBalls.clear();
+        m_activeShots.clear();
+        m_comboStreak = 0;
         m_currentPivotAngle = -1.85f; // Stowed upright inside chassis frame
         m_intakeDeployed = false;
 
@@ -1010,7 +1021,7 @@ namespace FRCBananaSim::Game
         // 5. Goal Trigger & Scoring Pass
         if (m_state == GameState::Playing || m_state == GameState::Countdown)
         {
-            CheckGoalScoring();
+            CheckGoalScoring(dt);
         }
     }
 
@@ -1684,6 +1695,7 @@ namespace FRCBananaSim::Game
                     piece->boundContactZone = invalidEntity;
                 }
 
+                m_activeShots[e] = 0.0f;
                 m_ballsFired++;
                 ballsToErase.push_back(e);
                 continue;
@@ -1720,7 +1732,7 @@ namespace FRCBananaSim::Game
         }
     }
 
-    void BananaGame::CheckGoalScoring()
+    void BananaGame::CheckGoalScoring(double dt)
     {
         // High Goal Trigger Bounding Cylinder around m_goalCenter (X=0, Y=2.2m, Z=5.5m)
         const float targetRadiusSq = m_goalRadius * m_goalRadius;
@@ -1750,6 +1762,7 @@ namespace FRCBananaSim::Game
                     if (isFalling)
                     {
                         TriggerGoalScored(tc->position);
+                        m_activeShots.erase(e);
 
                         // Prevent counting multiple scores for the same ball
                         m_ballScoreCooldown[e] = 2.5f;
@@ -1777,6 +1790,51 @@ namespace FRCBananaSim::Game
                 }
             }
         }
+
+        // Active shot flight tracking: detect misses and reset combo
+        std::vector<Entity> missedShots;
+        for (auto& [e, flightTime] : m_activeShots)
+        {
+            flightTime += static_cast<float>(dt);
+            if (!m_scene.IsEntityValid(e))
+            {
+                missedShots.push_back(e);
+                continue;
+            }
+
+            auto* tc = m_scene.GetComponent<TransformComponent>(e);
+            auto* piece = m_scene.GetComponent<GamePieceComponent>(e);
+            if (!tc || !piece)
+            {
+                missedShots.push_back(e);
+                continue;
+            }
+
+            // Ball missed: either hit floor after flight (flightTime >= 0.35s and pos.y <= 0.15m) or timed out (> 3.5s)
+            bool hitFloor = (flightTime >= 0.35f && tc->position.y <= 0.15f);
+            bool timedOut = (flightTime > 3.5f);
+
+            if (hitFloor || timedOut)
+            {
+                if (m_comboStreak > 0)
+                {
+                    m_comboStreak = 0;
+                    ScorePopup popup;
+                    popup.text = "COMBO LOST!";
+                    popup.color = glm::vec3(1.0f, 0.2f, 0.2f);
+                    popup.worldPos = tc->position + glm::vec3(0.0f, 0.35f, 0.0f);
+                    popup.lifetime = 0.0f;
+                    popup.maxLifetime = 1.2f;
+                    m_scorePopups.push_back(popup);
+                }
+                piece->state = GamePieceState::Free;
+                missedShots.push_back(e);
+            }
+        }
+        for (Entity e : missedShots)
+        {
+            m_activeShots.erase(e);
+        }
     }
 
     void BananaGame::TriggerGoalScored(const glm::vec3& ballPos)
@@ -1787,7 +1845,11 @@ namespace FRCBananaSim::Game
 
         int addedPoints = 100 * m_comboStreak;
         m_score += addedPoints;
-        if (m_score > m_highScore) m_highScore = m_score;
+        if (m_score > m_highScore)
+        {
+            m_highScore = m_score;
+            SaveHighScore();
+        }
 
         m_goalFlashTimer = 0.6f;
 
@@ -1807,6 +1869,101 @@ namespace FRCBananaSim::Game
         m_scorePopups.push_back(popup);
 
         SIM_LOG_INFO("[BananaGame] GOAL SCORED! +" << addedPoints << " PTS! Total: " << m_score);
+    }
+
+    std::string BananaGame::GetHighScoreFilePath() const
+    {
+        const std::vector<std::string> searchPrefixes = {
+            "", "Resources/Config/", "FRCBananaSim/Resources/Config/",
+            "../Resources/Config/", "../../Resources/Config/",
+            "../../FRCBananaSim/Resources/Config/", "../", "../../"
+        };
+
+        // If file already exists anywhere in standard search paths, use that exact path
+        for (const auto& prefix : searchPrefixes)
+        {
+            std::string candidate = prefix + "highscore.json";
+            if (std::filesystem::exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        // If not found yet, prefer writing to Resources/Config/ if that directory exists
+        for (const auto& prefix : searchPrefixes)
+        {
+            if (!prefix.empty() && std::filesystem::is_directory(prefix))
+            {
+                return prefix + "highscore.json";
+            }
+        }
+
+        return "highscore.json";
+    }
+
+    void BananaGame::LoadHighScore()
+    {
+        std::string path = GetHighScoreFilePath();
+        if (!std::filesystem::exists(path))
+        {
+            SIM_LOG_INFO("[BananaGame] No previous highscore.json found at: " << path);
+            return;
+        }
+
+        std::ifstream file(path);
+        if (!file.is_open())
+        {
+            SIM_LOG_WARN("[BananaGame] Failed to open high score file: " << path);
+            return;
+        }
+
+        try
+        {
+            nlohmann::json j;
+            file >> j;
+            if (j.contains("highScore"))
+            {
+                m_highScore = j["highScore"].get<int>();
+            }
+            if (j.contains("maxCombo"))
+            {
+                m_maxCombo = j["maxCombo"].get<int>();
+            }
+            SIM_LOG_INFO("[BananaGame] Loaded persistent high score: " << m_highScore << " PTS (Best Combo: x" << m_maxCombo << ") from " << path);
+        }
+        catch (const std::exception& e)
+        {
+            SIM_LOG_WARN("[BananaGame] Could not parse high score JSON (" << path << "): " << e.what());
+        }
+    }
+
+    void BananaGame::SaveHighScore()
+    {
+        if (m_highScore <= 0)
+        {
+            return;
+        }
+
+        std::string path = GetHighScoreFilePath();
+        std::ofstream file(path);
+        if (!file.is_open())
+        {
+            SIM_LOG_WARN("[BananaGame] Could not open " << path << " to write high score.");
+            return;
+        }
+
+        try
+        {
+            nlohmann::json j;
+            j["highScore"] = m_highScore;
+            j["maxCombo"] = m_maxCombo;
+            file << j.dump(4) << std::endl;
+            SIM_LOG_INFO("[BananaGame] Saved persistent high score: " << m_highScore << " PTS to " << path);
+        }
+        catch (const std::exception& e)
+        {
+            SIM_LOG_WARN("[BananaGame] Failed to serialize high score: " << e.what());
+        }
     }
 
     void BananaGame::Update(double dt)
@@ -1870,6 +2027,7 @@ namespace FRCBananaSim::Game
                 {
                     m_sessionTimer = 0.0f;
                     m_state = GameState::GameOver;
+                    SaveHighScore();
                 }
             }
         }
@@ -1954,8 +2112,87 @@ namespace FRCBananaSim::Game
         m_renderer.FlushDebugDraw();
     }
 
+    namespace
+    {
+        void ApplyGameTheme()
+        {
+            ImGuiStyle& style = ImGui::GetStyle();
+            style.WindowRounding    = 14.0f;
+            style.ChildRounding     = 10.0f;
+            style.FrameRounding     = 8.0f;
+            style.PopupRounding     = 12.0f;
+            style.ScrollbarRounding = 8.0f;
+            style.GrabRounding      = 6.0f;
+            style.TabRounding       = 8.0f;
+
+            style.WindowBorderSize  = 1.5f;
+            style.FrameBorderSize   = 1.0f;
+            style.PopupBorderSize   = 1.5f;
+
+            style.WindowPadding     = ImVec2(24.0f, 24.0f);
+            style.FramePadding      = ImVec2(14.0f, 10.0f);
+            style.ItemSpacing       = ImVec2(12.0f, 12.0f);
+            style.ItemInnerSpacing  = ImVec2(8.0f, 6.0f);
+
+            ImVec4* colors = style.Colors;
+            colors[ImGuiCol_Text]                  = ImVec4(0.95f, 0.96f, 0.98f, 1.00f);
+            colors[ImGuiCol_TextDisabled]          = ImVec4(0.50f, 0.55f, 0.65f, 1.00f);
+            colors[ImGuiCol_WindowBg]              = ImVec4(0.06f, 0.09f, 0.14f, 0.96f);
+            colors[ImGuiCol_ChildBg]               = ImVec4(0.08f, 0.12f, 0.18f, 0.60f);
+            colors[ImGuiCol_PopupBg]               = ImVec4(0.06f, 0.09f, 0.14f, 0.96f);
+            colors[ImGuiCol_Border]                = ImVec4(0.20f, 0.38f, 0.60f, 0.65f);
+            colors[ImGuiCol_BorderShadow]          = ImVec4(0.00f, 0.00f, 0.00f, 0.40f);
+            colors[ImGuiCol_FrameBg]               = ImVec4(0.10f, 0.16f, 0.25f, 0.70f);
+            colors[ImGuiCol_FrameBgHovered]        = ImVec4(0.14f, 0.24f, 0.38f, 0.85f);
+            colors[ImGuiCol_FrameBgActive]         = ImVec4(0.18f, 0.30f, 0.48f, 1.00f);
+            colors[ImGuiCol_TitleBg]               = ImVec4(0.06f, 0.09f, 0.14f, 1.00f);
+            colors[ImGuiCol_TitleBgActive]         = ImVec4(0.08f, 0.13f, 0.20f, 1.00f);
+            colors[ImGuiCol_TitleBgCollapsed]      = ImVec4(0.04f, 0.06f, 0.10f, 0.75f);
+            colors[ImGuiCol_Button]                = ImVec4(0.12f, 0.26f, 0.44f, 0.85f);
+            colors[ImGuiCol_ButtonHovered]         = ImVec4(0.18f, 0.38f, 0.64f, 1.00f);
+            colors[ImGuiCol_ButtonActive]          = ImVec4(0.10f, 0.48f, 0.80f, 1.00f);
+            colors[ImGuiCol_Header]                = ImVec4(0.12f, 0.26f, 0.44f, 0.70f);
+            colors[ImGuiCol_HeaderHovered]         = ImVec4(0.18f, 0.38f, 0.64f, 0.85f);
+            colors[ImGuiCol_HeaderActive]          = ImVec4(0.22f, 0.44f, 0.72f, 1.00f);
+            colors[ImGuiCol_Separator]             = ImVec4(0.18f, 0.32f, 0.50f, 0.40f);
+            colors[ImGuiCol_SeparatorHovered]      = ImVec4(0.24f, 0.44f, 0.68f, 0.80f);
+            colors[ImGuiCol_SeparatorActive]       = ImVec4(0.30f, 0.55f, 0.85f, 1.00f);
+            colors[ImGuiCol_CheckMark]             = ImVec4(0.20f, 0.90f, 0.50f, 1.00f);
+        }
+
+        void DrawKeycapBadge(ImDrawList* dl, ImVec2 pos, ImVec2 size, const char* label, bool active)
+        {
+            ImVec2 p0 = pos;
+            ImVec2 p1 = ImVec2(pos.x + size.x, pos.y + size.y);
+
+            // Drop shadow
+            dl->AddRectFilled(ImVec2(p0.x + 1, p0.y + 2), ImVec2(p1.x + 1, p1.y + 2), IM_COL32(0, 0, 0, 110), 5.0f);
+
+            // Keycap body
+            ImU32 fillCol = active ? IM_COL32(0, 190, 100, 255) : IM_COL32(22, 32, 46, 255);
+            dl->AddRectFilled(p0, p1, fillCol, 5.0f);
+
+            // Bevel highlight
+            dl->AddLine(ImVec2(p0.x + 2, p0.y + 1), ImVec2(p1.x - 2, p0.y + 1),
+                        active ? IM_COL32(180, 255, 220, 220) : IM_COL32(65, 90, 125, 200), 1.0f);
+
+            // Border
+            ImU32 borderCol = active ? IM_COL32(0, 255, 140, 255) : IM_COL32(45, 68, 98, 200);
+            dl->AddRect(p0, p1, borderCol, 5.0f, 0, 1.0f);
+
+            // Text
+            ImVec2 textSize = ImGui::CalcTextSize(label);
+            ImVec2 textPos(p0.x + (size.x - textSize.x) * 0.5f, p0.y + (size.y - textSize.y) * 0.5f);
+            ImU32 textCol = active ? IM_COL32(10, 24, 14, 255) : IM_COL32(220, 232, 248, 255);
+            dl->AddText(textPos, textCol, label);
+        }
+    }
+
     void BananaGame::RenderUI()
     {
+        // Apply modern dark glass game styling
+        ApplyGameTheme();
+
         // Dispatch UI views based on GameState
         switch (m_state)
         {
@@ -1978,7 +2215,7 @@ namespace FRCBananaSim::Game
             break;
         }
 
-        // Draw In-World Floating Score Text
+        // Draw In-World Floating Score Badges with glowing pill backgrounds
         auto& camera = m_renderer.GetCamera();
         float aspect = (ImGui::GetIO().DisplaySize.y > 0.0f) ? (ImGui::GetIO().DisplaySize.x / ImGui::GetIO().DisplaySize.y) : (1280.0f / 720.0f);
         glm::mat4 vp = camera.GetProjectionMatrix(aspect) * camera.GetViewMatrix();
@@ -1997,11 +2234,24 @@ namespace FRCBananaSim::Game
                     float screenY = (1.0f - (ndcY * 0.5f + 0.5f)) * ImGui::GetIO().DisplaySize.y;
 
                     float fade = 1.0f - (popup.lifetime / popup.maxLifetime);
-                    ImU32 textColor = ImColor(popup.color.r, popup.color.g, popup.color.b, fade);
-                    ImU32 shadowColor = ImColor(0.0f, 0.0f, 0.0f, fade * 0.8f);
+                    if (fade <= 0.0f) continue;
 
-                    drawList->AddText(ImVec2(screenX + 2, screenY + 2), shadowColor, popup.text.c_str());
-                    drawList->AddText(ImVec2(screenX, screenY), textColor, popup.text.c_str());
+                    ImVec2 textSize = ImGui::CalcTextSize(popup.text.c_str());
+                    ImVec2 pillMin(screenX - textSize.x * 0.5f - 14.0f, screenY - textSize.y * 0.5f - 6.0f);
+                    ImVec2 pillMax(screenX + textSize.x * 0.5f + 14.0f, screenY + textSize.y * 0.5f + 6.0f);
+
+                    // Soft drop shadow
+                    drawList->AddRectFilled(ImVec2(pillMin.x + 2, pillMin.y + 3), ImVec2(pillMax.x + 2, pillMax.y + 3),
+                        IM_COL32(0, 0, 0, static_cast<int>(fade * 140.0f)), 8.0f);
+                    // Dark glass pill background
+                    drawList->AddRectFilled(pillMin, pillMax,
+                        IM_COL32(10, 16, 26, static_cast<int>(fade * 230.0f)), 8.0f);
+                    // Glowing border
+                    ImU32 borderCol = ImColor(popup.color.r, popup.color.g, popup.color.b, fade * 0.9f);
+                    drawList->AddRect(pillMin, pillMax, borderCol, 8.0f, 0, 1.5f);
+                    // Badge Text
+                    ImU32 textColor = ImColor(popup.color.r, popup.color.g, popup.color.b, fade);
+                    drawList->AddText(ImVec2(screenX - textSize.x * 0.5f, screenY - textSize.y * 0.5f), textColor, popup.text.c_str());
                 }
             }
         }
@@ -2010,118 +2260,141 @@ namespace FRCBananaSim::Game
     void BananaGame::DrawStartScreenUI()
     {
         ImGuiIO& io = ImGui::GetIO();
+        float modalW = 780.0f;
+        float modalH = 590.0f;
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(680, 560), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(modalW, modalH), ImGuiCond_Always);
 
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove;
-        ImGui::Begin("##StartScreen", nullptr, flags);
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+        ImGui::Begin("##StartScreenModal", nullptr, flags);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 winPos = ImGui::GetWindowPos();
 
-        // Header Title Banner
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.88f, 0.15f, 1.0f));
-        ImGui::SetWindowFontScale(1.8f);
-        ImGui::Text(" FRC BANANA SIMULATOR");
-        ImGui::SetWindowFontScale(1.2f);
-        ImGui::PopStyleColor();
+        // Top Glowing Cyan Accent Line
+        dl->AddLine(ImVec2(winPos.x + 24, winPos.y + 1), ImVec2(winPos.x + modalW - 24, winPos.y + 1),
+            IM_COL32(0, 220, 255, 230), 2.5f);
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.85f, 1.0f, 1.0f));
-        ImGui::Text(" ROBOT COMP 2: ARCADE SHOOTOUT");
-        ImGui::PopStyleColor();
+        // Header Title
+        ImGui::SetCursorPos(ImVec2(24.0f, 16.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.86f, 0.18f, 1.0f));
+        ImGui::SetWindowFontScale(2.0f);
+        ImGui::Text("FRC BANANA SIMULATOR");
         ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
 
+        ImGui::SetCursorPos(ImVec2(24.0f, 48.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.30f, 0.85f, 1.0f, 1.0f));
+        ImGui::SetWindowFontScale(1.1f);
+        ImGui::Text("ROBOT COMP 2  *  COMPETITION ARCADE SHOOTOUT");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+
+        float curY = 74.0f;
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
         ImGui::Separator();
-        ImGui::Spacing();
+        curY += 10.0f;
 
-        ImGui::TextWrapped("Drive Robot Comp 2 around the arena, deploy the intake to vacuum bouncy foam balls into the basket, and fire balls through the target goal to rack up combos!");
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // Controls Cheatsheet Card
-        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "CONTROLS & KEYBINDINGS:");
-        ImGui::Columns(2, "controlsColumns", false);
-        ImGui::SetColumnWidth(0, 240);
-
-        ImGui::BulletText("W / A / S / D");
-        ImGui::NextColumn();
-        ImGui::Text("Field-Centric Swerve Translation");
-        ImGui::NextColumn();
-
-        ImGui::BulletText("Q / E");
-        ImGui::NextColumn();
-        ImGui::Text("Rotate Robot Heading");
-        ImGui::NextColumn();
-
-        ImGui::BulletText("[1] Spacebar / Shift");
-        ImGui::NextColumn();
-        ImGui::Text("Intake: Runs Rollers + Basket (Deploys Intake)");
-        ImGui::NextColumn();
-
-        ImGui::BulletText("[2] F / RMB / V");
-        ImGui::NextColumn();
-        ImGui::Text("Funnel: Feeds Basket into Funnel Throat");
-        ImGui::NextColumn();
-
-        ImGui::BulletText("[3] Left Mouse / C");
-        ImGui::NextColumn();
-        ImGui::Text("Flywheel: Spins Shooter Flywheel to Fire");
-        ImGui::NextColumn();
-
-        ImGui::BulletText("I");
-        ImGui::NextColumn();
-        ImGui::Text("Toggle Intake Deploy / Undeploy");
-        ImGui::NextColumn();
-
-        ImGui::BulletText("R");
-        ImGui::NextColumn();
-        ImGui::Text("Reset Field (Free Practice only)");
-        ImGui::NextColumn();
-
-        ImGui::BulletText("Z");
-        ImGui::NextColumn();
-        ImGui::Text("Zero Gyroscope Forward Heading");
-        ImGui::NextColumn();
-
-        ImGui::BulletText("ESC / P");
-        ImGui::NextColumn();
-        ImGui::Text("Pause Game");
-        ImGui::NextColumn();
-
-        ImGui::Columns(1);
-        ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.2f, 0.95f, 0.4f, 1.0f),
-            "* Pro-tip: Intake must be DOWN to pick up balls! Press all 3 buttons together to vacuum, feed, and stream balls continuously into the goal!");
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
+        // High Score Trophy Banner (if established)
         if (m_highScore > 0)
         {
-            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "HIGH SCORE: %d PTS", m_highScore);
-            ImGui::Spacing();
+            ImVec2 b0(winPos.x + 24.0f, winPos.y + curY);
+            ImVec2 b1(winPos.x + modalW - 24.0f, winPos.y + curY + 34.0f);
+            dl->AddRectFilled(b0, b1, IM_COL32(36, 30, 10, 220), 8.0f);
+            dl->AddRect(b0, b1, IM_COL32(255, 205, 40, 180), 8.0f, 0, 1.5f);
+            dl->AddText(ImVec2(b0.x + 16, b0.y + 8), IM_COL32(255, 220, 50, 255), "ALL-TIME HIGH SCORE RECORD:");
+            char hsStr[32]; snprintf(hsStr, sizeof(hsStr), "%d PTS", m_highScore);
+            dl->AddText(ImVec2(b1.x - 110, b0.y + 8), IM_COL32(255, 240, 90, 255), hsStr);
+            curY += 42.0f;
         }
 
-        // Action Buttons
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.65f, 0.25f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.80f, 0.32f, 1.0f));
+        // Modern Controls Grid (2 Sleek Cards)
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
+        ImGui::TextColored(ImVec4(0.35f, 0.90f, 1.0f, 1.0f), "COMPETITION PILOT CONTROLS:");
+        curY += 22.0f;
+
+        float colW = (modalW - 48.0f - 14.0f) * 0.5f;
+        float cardH = 168.0f;
+        ImVec2 c0(winPos.x + 24.0f, winPos.y + curY);
+
+        // Left Controls Card
+        dl->AddRectFilled(c0, ImVec2(c0.x + colW, c0.y + cardH), IM_COL32(12, 18, 28, 220), 8.0f);
+        dl->AddRect(c0, ImVec2(c0.x + colW, c0.y + cardH), IM_COL32(40, 70, 110, 160), 8.0f);
+
+        DrawKeycapBadge(dl, ImVec2(c0.x + 12, c0.y + 10), ImVec2(96, 24), "W / A / S / D", false);
+        dl->AddText(ImVec2(c0.x + 116, c0.y + 14), IM_COL32(220, 230, 245, 255), "Field-Centric Swerve");
+
+        DrawKeycapBadge(dl, ImVec2(c0.x + 12, c0.y + 40), ImVec2(96, 24), "Q  /  E", false);
+        dl->AddText(ImVec2(c0.x + 116, c0.y + 44), IM_COL32(220, 230, 245, 255), "Rotate Robot Heading");
+
+        DrawKeycapBadge(dl, ImVec2(c0.x + 12, c0.y + 70), ImVec2(96, 24), "SPACE", false);
+        dl->AddText(ImVec2(c0.x + 116, c0.y + 74), IM_COL32(220, 230, 245, 255), "Intake Rollers + Basket");
+
+        DrawKeycapBadge(dl, ImVec2(c0.x + 12, c0.y + 100), ImVec2(96, 24), "F  /  RMB", false);
+        dl->AddText(ImVec2(c0.x + 116, c0.y + 104), IM_COL32(220, 230, 245, 255), "Feeder Funnel to Shooter");
+
+        DrawKeycapBadge(dl, ImVec2(c0.x + 12, c0.y + 130), ImVec2(96, 24), "LMB  /  C", false);
+        dl->AddText(ImVec2(c0.x + 116, c0.y + 134), IM_COL32(220, 230, 245, 255), "Flywheel Shooter (Fire)");
+
+        // Right Controls Card
+        ImVec2 c1(winPos.x + 24.0f + colW + 14.0f, winPos.y + curY);
+        dl->AddRectFilled(c1, ImVec2(c1.x + colW, c1.y + cardH), IM_COL32(12, 18, 28, 220), 8.0f);
+        dl->AddRect(c1, ImVec2(c1.x + colW, c1.y + cardH), IM_COL32(40, 70, 110, 160), 8.0f);
+
+        DrawKeycapBadge(dl, ImVec2(c1.x + 12, c1.y + 10), ImVec2(80, 24), "I", false);
+        dl->AddText(ImVec2(c1.x + 100, c1.y + 14), IM_COL32(220, 230, 245, 255), "Deploy / Stow Intake Pivot");
+
+        DrawKeycapBadge(dl, ImVec2(c1.x + 12, c1.y + 40), ImVec2(80, 24), "Z", false);
+        dl->AddText(ImVec2(c1.x + 100, c1.y + 44), IM_COL32(220, 230, 245, 255), "Zero Gyroscope Heading");
+
+        DrawKeycapBadge(dl, ImVec2(c1.x + 12, c1.y + 70), ImVec2(80, 24), "R", false);
+        dl->AddText(ImVec2(c1.x + 100, c1.y + 74), IM_COL32(220, 230, 245, 255), "Reset Arena (Practice only)");
+
+        DrawKeycapBadge(dl, ImVec2(c1.x + 12, c1.y + 100), ImVec2(80, 24), "ESC / P", false);
+        dl->AddText(ImVec2(c1.x + 100, c1.y + 104), IM_COL32(220, 230, 245, 255), "Pause Match");
+
+        DrawKeycapBadge(dl, ImVec2(c1.x + 12, c1.y + 130), ImVec2(80, 24), "INFO", false);
+        dl->AddText(ImVec2(c1.x + 100, c1.y + 134), IM_COL32(160, 220, 180, 255), "Intake MUST be down to vacuum!");
+
+        curY += cardH + 12.0f;
+
+        // Pro-Tip Pill
+        ImVec2 p0(winPos.x + 24.0f, winPos.y + curY);
+        ImVec2 p1(winPos.x + modalW - 24.0f, winPos.y + curY + 34.0f);
+        dl->AddRectFilled(p0, p1, IM_COL32(10, 32, 26, 220), 6.0f);
+        dl->AddRect(p0, p1, IM_COL32(0, 200, 130, 180), 6.0f, 0, 1.2f);
+        dl->AddText(ImVec2(p0.x + 14, p0.y + 8), IM_COL32(0, 255, 160, 255),
+            "PRO-TIP: Press [SPACE] + [F] + [LMB] together to continuously vacuum, feed & stream balls!");
+        curY += 44.0f;
+
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
+        ImGui::Separator();
+        curY += 10.0f;
+
+        // Primary Game Mode Action Buttons
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.00f, 0.65f, 0.40f, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.00f, 0.85f, 0.50f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.00f, 0.50f, 0.30f, 1.00f));
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
         ImGui::SetWindowFontScale(1.25f);
-        if (ImGui::Button("START 60s ARCADE CHALLENGE", ImVec2(640, 52)))
+        if (ImGui::Button("START 60s ARCADE CHALLENGE", ImVec2(modalW - 48.0f, 48)))
         {
             StartGame(GameMode::ArcadeRush);
         }
         ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor(2);
+        ImGui::PopStyleColor(3);
 
-        ImGui::Spacing();
+        curY += 56.0f;
 
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.38f, 0.65f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.28f, 0.50f, 0.80f, 1.0f));
-        if (ImGui::Button("FREE PRACTICE (Unlimited Time)", ImVec2(640, 38)))
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.32f, 0.58f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.44f, 0.74f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.08f, 0.24f, 0.46f, 1.00f));
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
+        if (ImGui::Button("FREE PRACTICE (Unlimited Time & Manual [R] Reset)", ImVec2(modalW - 48.0f, 36)))
         {
             StartGame(GameMode::FreePractice);
         }
-        ImGui::PopStyleColor(2);
+        ImGui::PopStyleColor(3);
 
         ImGui::End();
     }
@@ -2130,133 +2403,176 @@ namespace FRCBananaSim::Game
     {
         ImGuiIO& io = ImGui::GetIO();
 
-        // 1. Top Center Score & Timer Header
-        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, 18), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
-        ImGui::SetNextWindowSize(ImVec2(520, 80), ImGuiCond_Always);
+        // Invisible Fullscreen HUD Container
+        ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(io.DisplaySize, ImGuiCond_Always);
         ImGuiWindowFlags hudFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
-                                   ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav;
+                                    ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav |
+                                    ImGuiWindowFlags_NoSavedSettings;
+        ImGui::Begin("##GameHUDOverlay", nullptr, hudFlags);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        ImGui::Begin("##TopHUD", nullptr, hudFlags);
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        ImVec2 p0 = ImGui::GetWindowPos();
-        ImVec2 p1 = ImVec2(p0.x + 520, p0.y + 75);
+        // =========================================================================
+        // 1. TOP CENTER SCOREBOARD RIBBON (Esports Stadium Banner)
+        // =========================================================================
+        float sbW = 580.0f;
+        float sbH = 68.0f;
+        float sbX = (io.DisplaySize.x - sbW) * 0.5f;
+        float sbY = 16.0f;
 
-        // Dark translucent banner backing
-        drawList->AddRectFilled(p0, p1, IM_COL32(18, 22, 28, 210), 12.0f);
-        drawList->AddRect(p0, p1, IM_COL32(80, 140, 220, 160), 12.0f, 0, 2.0f);
+        // Multi-layer drop shadow
+        dl->AddRectFilled(ImVec2(sbX - 3, sbY + 4), ImVec2(sbX + sbW + 3, sbY + sbH + 6), IM_COL32(0, 0, 0, 140), 14.0f);
 
-        // Timer Display
-        ImGui::SetCursorPos(ImVec2(24, 14));
+        // Dark glass pill backdrop
+        dl->AddRectFilledMultiColor(ImVec2(sbX, sbY), ImVec2(sbX + sbW, sbY + sbH),
+            IM_COL32(12, 18, 30, 235), IM_COL32(12, 18, 30, 235),
+            IM_COL32(8, 12, 20, 245), IM_COL32(8, 12, 20, 245));
+
+        // Glowing border
+        dl->AddRect(ImVec2(sbX, sbY), ImVec2(sbX + sbW, sbY + sbH), IM_COL32(45, 95, 165, 180), 12.0f, 0, 1.5f);
+
+        // Top neon cyan accent line
+        dl->AddLine(ImVec2(sbX + 24, sbY + 1), ImVec2(sbX + sbW - 24, sbY + 1), IM_COL32(0, 220, 255, 230), 2.0f);
+
+        // --- Left Column: Match Timer ---
+        float col1Center = sbX + 87.5f;
+        ImVec2 tTitleSz = ImGui::CalcTextSize("MATCH TIME");
+        dl->AddText(ImVec2(col1Center - tTitleSz.x * 0.5f, sbY + 10), IM_COL32(110, 165, 225, 220), "MATCH TIME");
         if (m_mode == GameMode::ArcadeRush)
         {
             int sec = static_cast<int>(m_sessionTimer);
-            ImVec4 timeCol = (sec <= 10) ? ImVec4(1.0f, 0.25f, 0.25f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-            ImGui::PushStyleColor(ImGuiCol_Text, timeCol);
-            ImGui::SetWindowFontScale(1.9f);
-            ImGui::Text("%02d:%02d", sec / 60, sec % 60);
+            char timeStr[16];
+            snprintf(timeStr, sizeof(timeStr), "%02d:%02d", sec / 60, sec % 60);
+
+            ImU32 timeCol = (sec <= 10)
+                ? ((static_cast<int>(m_sessionTimer * 4.0f) % 2 == 0) ? IM_COL32(255, 60, 60, 255) : IM_COL32(255, 180, 60, 255))
+                : IM_COL32(255, 255, 255, 255);
+
+            ImVec2 tValSz = ImGui::CalcTextSize(timeStr);
+            float scaledTW = tValSz.x * 1.85f;
+            ImGui::SetCursorPos(ImVec2(col1Center - scaledTW * 0.5f, sbY + 24));
+            ImGui::SetWindowFontScale(1.85f);
+            ImGui::TextColored(ImColor(timeCol), "%s", timeStr);
             ImGui::SetWindowFontScale(1.0f);
-            ImGui::PopStyleColor();
         }
         else
         {
-            ImGui::SetWindowFontScale(1.4f);
-            ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), "PRACTICE");
+            ImVec2 fpSz = ImGui::CalcTextSize("FREE PLAY");
+            float scaledFPW = fpSz.x * 1.5f;
+            ImGui::SetCursorPos(ImVec2(col1Center - scaledFPW * 0.5f, sbY + 24));
+            ImGui::SetWindowFontScale(1.5f);
+            ImGui::TextColored(ImVec4(0.3f, 0.85f, 1.0f, 1.0f), "FREE PLAY");
             ImGui::SetWindowFontScale(1.0f);
         }
 
-        // Score Display
-        ImGui::SetCursorPos(ImVec2(200, 14));
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.88f, 0.15f, 1.0f));
-        ImGui::SetWindowFontScale(1.9f);
-        ImGui::Text("%d PTS", m_score);
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
+        // Vertical Divider 1
+        dl->AddLine(ImVec2(sbX + 175, sbY + 12), ImVec2(sbX + 175, sbY + sbH - 12), IM_COL32(50, 75, 110, 140), 1.0f);
 
-        // Combo Multiplier Display
+        // --- Center Column: Score ---
+        float col2Center = sbX + 290.0f;
+        ImVec2 sTitleSz = ImGui::CalcTextSize("MATCH SCORE");
+        dl->AddText(ImVec2(col2Center - sTitleSz.x * 0.5f, sbY + 10), IM_COL32(255, 195, 70, 220), "MATCH SCORE");
+        char scoreBuf[32];
+        snprintf(scoreBuf, sizeof(scoreBuf), "%d PTS", m_score);
+        ImVec2 sValSz = ImGui::CalcTextSize(scoreBuf);
+        float scaledSW = sValSz.x * 1.9f;
+        ImGui::SetCursorPos(ImVec2(col2Center - scaledSW * 0.5f, sbY + 24));
+        ImGui::SetWindowFontScale(1.9f);
+        ImGui::TextColored(ImVec4(1.0f, 0.88f, 0.15f, 1.0f), "%s", scoreBuf);
+        ImGui::SetWindowFontScale(1.0f);
+
+        // Vertical Divider 2
+        dl->AddLine(ImVec2(sbX + 405, sbY + 12), ImVec2(sbX + 405, sbY + sbH - 12), IM_COL32(50, 75, 110, 140), 1.0f);
+
+        // --- Right Column: Combo Streak or Session Best ---
+        float col3Center = sbX + 492.5f;
         if (m_comboStreak > 1)
         {
-            ImGui::SetCursorPos(ImVec2(390, 18));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.40f, 0.10f, 1.0f));
-            ImGui::SetWindowFontScale(1.4f);
-            ImGui::Text("x%d COMBO!", m_comboStreak);
+            // Blazing flame streak badge
+            ImVec2 kb0(sbX + 417.0f, sbY + 14);
+            ImVec2 kb1(sbX + sbW - 16.0f, sbY + sbH - 14);
+            dl->AddRectFilled(kb0, kb1, IM_COL32(220, 60, 20, 225), 8.0f);
+            dl->AddRect(kb0, kb1, IM_COL32(255, 205, 30, 255), 8.0f, 0, 1.5f);
+
+            char comboStr[32];
+            snprintf(comboStr, sizeof(comboStr), "x%d STREAK!", m_comboStreak);
+            ImVec2 cSize = ImGui::CalcTextSize(comboStr);
+            dl->AddText(ImVec2(kb0.x + (kb1.x - kb0.x - cSize.x) * 0.5f, kb0.y + 10), IM_COL32(255, 255, 255, 255), comboStr);
+        }
+        else
+        {
+            ImVec2 bTitleSz = ImGui::CalcTextSize("SESSION BEST");
+            dl->AddText(ImVec2(col3Center - bTitleSz.x * 0.5f, sbY + 10), IM_COL32(140, 160, 190, 220), "SESSION BEST");
+            char hsBuf[32];
+            snprintf(hsBuf, sizeof(hsBuf), "%d PTS", m_highScore);
+            ImVec2 bValSz = ImGui::CalcTextSize(hsBuf);
+            float scaledBW = bValSz.x * 1.35f;
+            ImGui::SetCursorPos(ImVec2(col3Center - scaledBW * 0.5f, sbY + 26));
+            ImGui::SetWindowFontScale(1.35f);
+            ImGui::TextColored(ImVec4(0.85f, 0.88f, 0.92f, 1.0f), "%s", hsBuf);
             ImGui::SetWindowFontScale(1.0f);
-            ImGui::PopStyleColor();
         }
 
-        ImGui::End();
-
-        // 2. Countdown Banner
-        if (m_state == GameState::Countdown)
+        // =========================================================================
+        // 2. TOP RIGHT: TARGET AIM ASSIST & DISTANCE HUD
+        // =========================================================================
+        bool isAimedAtGoal = false;
+        float distToGoal = 0.0f;
+        auto* chassisT = m_scene.GetComponent<TransformComponent>(m_robot.chassisEntity);
+        if (chassisT)
         {
-            ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.4f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(400, 160), ImGuiCond_Always);
-            ImGui::Begin("##CountdownWindow", nullptr, hudFlags);
-
-            ImGui::SetWindowFontScale(4.0f);
-            int count = static_cast<int>(std::ceil(m_countdownTimer));
-            if (count > 0)
-            {
-                ImGui::TextColored(ImVec4(1.0f, 0.88f, 0.15f, 1.0f), "   %d", count);
-            }
-            else
-            {
-                ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "  GO!");
-            }
-            ImGui::SetWindowFontScale(1.0f);
-            ImGui::End();
+            glm::vec3 toGoal = m_goalCenter - chassisT->position;
+            distToGoal = std::hypot(toGoal.x, toGoal.z);
+            glm::vec3 robotFwd = chassisT->rotation * glm::vec3(0.0f, 0.0f, 1.0f);
+            glm::vec2 fwd2D = glm::normalize(glm::vec2(robotFwd.x, robotFwd.z));
+            glm::vec2 goal2D = glm::normalize(glm::vec2(toGoal.x, toGoal.z));
+            float dot = glm::dot(fwd2D, goal2D);
+            isAimedAtGoal = (dot > 0.94f); // Within ~20 degrees of target goal
         }
 
-        // 3. Bottom-Left Robot Status Card
-        ImGui::SetNextWindowPos(ImVec2(18, io.DisplaySize.y - 190), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
-        ImGui::SetNextWindowSize(ImVec2(410, 175), ImGuiCond_Always);
-        ImGui::Begin("##RobotHUD", nullptr, hudFlags);
+        float tw = 215.0f;
+        float th = 60.0f;
+        float tx = io.DisplaySize.x - tw - 20.0f;
+        float ty = 16.0f;
 
-        ImVec2 r0 = ImGui::GetWindowPos();
-        ImVec2 r1 = ImVec2(r0.x + 410, r0.y + 175);
-        drawList->AddRectFilled(r0, r1, IM_COL32(18, 22, 28, 215), 8.0f);
-        drawList->AddRect(r0, r1, IM_COL32(60, 100, 160, 160), 8.0f);
+        dl->AddRectFilled(ImVec2(tx, ty), ImVec2(tx + tw, ty + th), IM_COL32(10, 16, 26, 215), 10.0f);
+        dl->AddRect(ImVec2(tx, ty), ImVec2(tx + tw, ty + th),
+            isAimedAtGoal ? IM_COL32(0, 255, 140, 220) : IM_COL32(40, 80, 140, 150), 10.0f, 0, 1.2f);
 
-        ImGui::SetCursorPos(ImVec2(12, 8));
-        ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), "ROBOT COMP 2 (3-STAGE MECH)");
+        char distBuf[32];
+        snprintf(distBuf, sizeof(distBuf), "TARGET GOAL: %.1f m", distToGoal);
+        dl->AddText(ImVec2(tx + 12, ty + 10), IM_COL32(120, 190, 255, 230), distBuf);
 
-        // Intake Pivot Status
-        bool isPivotDown = (m_currentPivotAngle <= -1.40f);
-        float pivotDeg = glm::degrees(m_currentPivotAngle);
-        ImGui::SetCursorPos(ImVec2(12, 26));
-        if (isPivotDown)
+        if (isAimedAtGoal)
         {
-            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "PIVOT: [ DEPLOYED / DOWN ] (%.0f deg)", pivotDeg);
-        }
-        else if (m_currentPivotAngle >= -0.25f)
-        {
-            ImGui::TextColored(ImVec4(0.6f, 0.65f, 0.7f, 1.0f), "PIVOT: [ STOWED / UP ] (Press I / Hold Space)");
+            dl->AddCircleFilled(ImVec2(tx + 18, ty + 38), 5.0f, IM_COL32(0, 255, 130, 255));
+            dl->AddText(ImVec2(tx + 28, ty + 31), IM_COL32(0, 255, 130, 255), "LOCKED ON TARGET");
         }
         else
         {
-            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "PIVOT: [ MOVING... ] (%.0f deg)", pivotDeg);
+            dl->AddCircle(ImVec2(tx + 18, ty + 38), 5.0f, IM_COL32(140, 160, 190, 200), 16, 1.2f);
+            dl->AddText(ImVec2(tx + 28, ty + 31), IM_COL32(140, 160, 190, 220), "YAW TO AIM (Q / E)");
         }
 
-        // Button #1: Intake (Spacebar / Shift)
-        ImGui::SetCursorPos(ImVec2(12, 46));
-        if (m_btnIntake)
-            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "[1] INTAKE:   RUNNING + BASKET (SPACE)");
-        else
-            ImGui::TextColored(ImVec4(0.55f, 0.6f, 0.65f, 1.0f), "[1] INTAKE:   OFF (HOLD SPACE)");
+        // =========================================================================
+        // 3. BOTTOM COCKPIT ACTION DOCK (Ball Inventory & 3 Ability Cards)
+        // =========================================================================
+        float dkW = 790.0f;
+        float dkH = 114.0f;
+        float dkX = (io.DisplaySize.x - dkW) * 0.5f;
+        float dkY = io.DisplaySize.y - dkH - 16.0f;
 
-        // Button #2: Funnel (F / RMB)
-        ImGui::SetCursorPos(ImVec2(12, 66));
-        if (m_btnFunnel)
-            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "[2] FUNNEL:   FEEDING + BASKET (F/RMB)");
-        else
-            ImGui::TextColored(ImVec4(0.55f, 0.6f, 0.65f, 1.0f), "[2] FUNNEL:   OFF (HOLD F / RMB)");
+        // Drop shadow
+        dl->AddRectFilled(ImVec2(dkX - 4, dkY + 4), ImVec2(dkX + dkW + 4, dkY + dkH + 6), IM_COL32(0, 0, 0, 150), 14.0f);
 
-        // Button #3: Flywheel (LMB / C)
-        float rpm = m_flywheel ? static_cast<float>(m_flywheel->angularVelocityRpm) : 0.0f;
-        ImGui::SetCursorPos(ImVec2(12, 86));
-        if (m_btnFlywheel)
-            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "[3] FLYWHEEL: %.0f RPM [FIRING] (LMB)", rpm);
-        else
-            ImGui::TextColored(ImVec4(0.55f, 0.6f, 0.65f, 1.0f), "[3] FLYWHEEL: %.0f RPM [OFF] (HOLD LMB)", rpm);
+        // Frosted glass chassis dock
+        dl->AddRectFilledMultiColor(ImVec2(dkX, dkY), ImVec2(dkX + dkW, dkY + dkH),
+            IM_COL32(10, 16, 26, 240), IM_COL32(10, 16, 26, 240),
+            IM_COL32(6, 10, 18, 250), IM_COL32(6, 10, 18, 250));
+
+        // Border & top neon cyan accent
+        dl->AddRect(ImVec2(dkX, dkY), ImVec2(dkX + dkW, dkY + dkH), IM_COL32(45, 95, 165, 170), 14.0f, 0, 1.5f);
+        dl->AddLine(ImVec2(dkX + 30, dkY + 1), ImVec2(dkX + dkW - 30, dkY + 1), IM_COL32(0, 210, 255, 180), 2.0f);
 
         // Count held balls by slot
         int cntIntake = 0;
@@ -2276,47 +2592,179 @@ namespace FRCBananaSim::Game
         }
         int totalHeld = cntIntake + cntBasket + cntFunnel;
 
-        // Ball Capacity & Inventory Display (Basket: 3 wide x 3 tall = up to 18, Intake: 3 wide = 3, Funnel = 1)
-        ImGui::SetCursorPos(ImVec2(12, 108));
-        if (cntIntake >= 3 && cntBasket >= 18)
+        // --- Zone A: Ball Magazine & Inventory (Left 225px) ---
+        float zX = dkX + 16.0f;
+        float zY = dkY + 10.0f;
+
+        char magTitle[32];
+        snprintf(magTitle, sizeof(magTitle), "BALL STORAGE:  %d / 22", totalHeld);
+        dl->AddText(ImVec2(zX, zY), IM_COL32(255, 205, 50, 255), magTitle);
+
+        // Magazine Capacity Progress Bar
+        float barW = 195.0f;
+        float barH = 7.0f;
+        float fillFrac = std::clamp(static_cast<float>(totalHeld) / 22.0f, 0.0f, 1.0f);
+        dl->AddRectFilled(ImVec2(zX, zY + 18), ImVec2(zX + barW, zY + 18 + barH), IM_COL32(20, 30, 45, 255), 3.5f);
+        ImU32 barCol = (totalHeld >= 22)
+            ? IM_COL32(255, 70, 40, 255)
+            : ((totalHeld >= 16) ? IM_COL32(255, 180, 30, 255) : IM_COL32(0, 220, 120, 255));
+        dl->AddRectFilled(ImVec2(zX, zY + 18), ImVec2(zX + barW * fillFrac, zY + 18 + barH), barCol, 3.5f);
+
+        // Visual Slot Breakdown
+        dl->AddText(ImVec2(zX, zY + 30), IM_COL32(140, 160, 190, 220), "INTAKE TRAY [3]:");
+        for (int p = 0; p < 3; ++p)
         {
-            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.15f, 1.0f), "BALLS: [ %d/22 FULL ] Basket 18/18 | Intake 3/3 | Funnel %d/1",
-                totalHeld, cntFunnel);
-        }
-        else if (totalHeld > 0)
-        {
-            ImGui::TextColored(ImVec4(1.0f, 0.90f, 0.20f, 1.0f), "BALLS: [ %d/22 HELD ] Basket %d/18 | Intake %d/3 | Funnel %d/1",
-                totalHeld, cntBasket, cntIntake, cntFunnel);
-        }
-        else
-        {
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "BALLS: [ 0/22 EMPTY ] - DEPLOY INTAKE & DRIVE OVER BALLS");
+            float px = zX + 120.0f + p * 16.0f;
+            float py = zY + 37.0f;
+            if (p < cntIntake)
+                dl->AddCircleFilled(ImVec2(px, py), 4.5f, IM_COL32(0, 255, 130, 255));
+            else
+                dl->AddCircle(ImVec2(px, py), 4.5f, IM_COL32(40, 65, 95, 200), 12, 1.2f);
         }
 
-        // Intake Status / Guidance
-        ImGui::SetCursorPos(ImVec2(12, 128));
-        if (cntIntake >= 3 && cntBasket >= 18)
+        char bskBuf[32];
+        snprintf(bskBuf, sizeof(bskBuf), "BASKET HOPPER: %d / 18", cntBasket);
+        dl->AddText(ImVec2(zX, zY + 48), IM_COL32(140, 160, 190, 220), bskBuf);
+
+        // Intake Pivot Deployment Indicator
+        bool isPivotDown = (m_currentPivotAngle <= -1.40f);
+        ImVec2 pv0(zX, zY + 68);
+        ImVec2 pv1(zX + barW, zY + 94);
+        if (isPivotDown)
         {
-            ImGui::TextColored(ImVec4(1.0f, 0.50f, 0.20f, 1.0f), "INTAKE FULL: Feed (F) or Fire (LMB) to take more");
-        }
-        else if (!isPivotDown)
-        {
-            ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.20f, 1.0f), "INTAKE IS UP: Press 'I' or Hold Space to deploy");
+            dl->AddRectFilled(pv0, pv1, IM_COL32(12, 38, 24, 220), 5.0f);
+            dl->AddRect(pv0, pv1, IM_COL32(0, 220, 110, 220), 5.0f, 0, 1.2f);
+            dl->AddText(ImVec2(pv0.x + 8, pv0.y + 5), IM_COL32(0, 255, 140, 255), "PIVOT: DEPLOYED (DOWN)");
         }
         else
         {
-            ImGui::TextColored(ImVec4(0.2f, 0.95f, 0.40f, 1.0f), "INTAKE READY: Rollers vacuuming from carpet");
+            dl->AddRectFilled(pv0, pv1, IM_COL32(24, 28, 38, 220), 5.0f);
+            dl->AddRect(pv0, pv1, IM_COL32(60, 75, 95, 180), 5.0f, 0, 1.0f);
+            dl->AddText(ImVec2(pv0.x + 8, pv0.y + 5), IM_COL32(160, 175, 195, 220), "PIVOT: STOWED (UP) [I]");
         }
 
-        // Mode & Reset Indicator
-        ImGui::SetCursorPos(ImVec2(12, 148));
-        if (m_mode == GameMode::FreePractice)
+        // Vertical Divider
+        dl->AddLine(ImVec2(dkX + 235, dkY + 12), ImVec2(dkX + 235, dkY + dkH - 12), IM_COL32(40, 65, 95, 140), 1.0f);
+
+        // --- Zone B: 3 Ability Action Cards (Center/Right) ---
+        float tileY = dkY + 12.0f;
+        float tileH = 90.0f;
+
+        // Card 1: INTAKE & BASKET
+        ImVec2 a0(dkX + 250, tileY);
+        ImVec2 a1(a0.x + 160, tileY + tileH);
+        dl->AddRectFilled(a0, a1, m_btnIntake ? IM_COL32(14, 38, 26, 230) : IM_COL32(14, 20, 32, 220), 8.0f);
+        dl->AddRect(a0, a1, m_btnIntake ? IM_COL32(0, 230, 120, 240) : IM_COL32(40, 65, 95, 180), 8.0f, 0, 1.2f);
+        DrawKeycapBadge(dl, ImVec2(a0.x + 10, a0.y + 8), ImVec2(75, 22), "SPACE", m_btnIntake);
+        dl->AddText(ImVec2(a0.x + 10, a0.y + 36), IM_COL32(230, 240, 255, 255), "INTAKE ROLLERS");
+        dl->AddText(ImVec2(a0.x + 10, a0.y + 52), IM_COL32(120, 150, 185, 220), "Feed into Basket");
+        if (m_btnIntake)
         {
-            ImGui::TextDisabled("MODE: FIELD-CENTRIC | RESET: [R] KEY READY");
+            dl->AddCircleFilled(ImVec2(a0.x + 16, a0.y + 75), 4.5f, IM_COL32(0, 255, 130, 255));
+            dl->AddText(ImVec2(a0.x + 26, a0.y + 68), IM_COL32(0, 255, 130, 255), "RUNNING");
         }
         else
         {
-            ImGui::TextDisabled("MODE: FIELD-CENTRIC | RESET: LOCKED DURING MATCH");
+            dl->AddCircle(ImVec2(a0.x + 16, a0.y + 75), 4.5f, IM_COL32(100, 120, 145, 200), 12, 1.0f);
+            dl->AddText(ImVec2(a0.x + 26, a0.y + 68), IM_COL32(100, 120, 145, 200), "READY");
+        }
+
+        // Card 2: FEEDER FUNNEL
+        ImVec2 b0(dkX + 424, tileY);
+        ImVec2 b1(b0.x + 160, tileY + tileH);
+        dl->AddRectFilled(b0, b1, m_btnFunnel ? IM_COL32(14, 38, 26, 230) : IM_COL32(14, 20, 32, 220), 8.0f);
+        dl->AddRect(b0, b1, m_btnFunnel ? IM_COL32(0, 230, 120, 240) : IM_COL32(40, 65, 95, 180), 8.0f, 0, 1.2f);
+        DrawKeycapBadge(dl, ImVec2(b0.x + 10, b0.y + 8), ImVec2(80, 22), "F / RMB", m_btnFunnel);
+        dl->AddText(ImVec2(b0.x + 10, b0.y + 36), IM_COL32(230, 240, 255, 255), "FEEDER FUNNEL");
+        dl->AddText(ImVec2(b0.x + 10, b0.y + 52), IM_COL32(120, 150, 185, 220), "Lift to Flywheel");
+        if (m_btnFunnel)
+        {
+            dl->AddCircleFilled(ImVec2(b0.x + 16, b0.y + 75), 4.5f, IM_COL32(0, 255, 130, 255));
+            dl->AddText(ImVec2(b0.x + 26, b0.y + 68), IM_COL32(0, 255, 130, 255), "FEEDING");
+        }
+        else
+        {
+            dl->AddCircle(ImVec2(b0.x + 16, b0.y + 75), 4.5f, IM_COL32(100, 120, 145, 200), 12, 1.0f);
+            dl->AddText(ImVec2(b0.x + 26, b0.y + 68), IM_COL32(100, 120, 145, 200), "READY");
+        }
+
+        // Card 3: FLYWHEEL SHOOTER
+        ImVec2 d0(dkX + 598, tileY);
+        ImVec2 d1(d0.x + 178, tileY + tileH);
+        float rpm = m_flywheel ? static_cast<float>(m_flywheel->angularVelocityRpm) : 0.0f;
+        dl->AddRectFilled(d0, d1, m_btnFlywheel ? IM_COL32(38, 28, 12, 230) : IM_COL32(14, 20, 32, 220), 8.0f);
+        dl->AddRect(d0, d1, m_btnFlywheel ? IM_COL32(255, 195, 30, 240) : IM_COL32(40, 65, 95, 180), 8.0f, 0, 1.2f);
+        DrawKeycapBadge(dl, ImVec2(d0.x + 10, d0.y + 8), ImVec2(75, 22), "LMB / C", m_btnFlywheel);
+
+        char rpmBuf[32];
+        snprintf(rpmBuf, sizeof(rpmBuf), "%.0f RPM", rpm);
+        dl->AddText(ImVec2(d0.x + 95, d0.y + 11), m_btnFlywheel ? IM_COL32(255, 215, 40, 255) : IM_COL32(140, 160, 190, 220), rpmBuf);
+
+        dl->AddText(ImVec2(d0.x + 10, d0.y + 36), IM_COL32(230, 240, 255, 255), "SHOOTER FLYWHEEL");
+
+        // RPM Tachometer Power Gauge
+        float rpmFrac = std::clamp(rpm / 5500.0f, 0.0f, 1.0f);
+        float gaugeW = 158.0f;
+        dl->AddRectFilled(ImVec2(d0.x + 10, d0.y + 54), ImVec2(d0.x + 10 + gaugeW, d0.y + 60), IM_COL32(20, 30, 45, 255), 3.0f);
+        ImU32 rpmCol = (rpmFrac > 0.8f) ? IM_COL32(255, 205, 30, 255) : IM_COL32(0, 220, 255, 255);
+        dl->AddRectFilled(ImVec2(d0.x + 10, d0.y + 54), ImVec2(d0.x + 10 + gaugeW * rpmFrac, d0.y + 60), rpmCol, 3.0f);
+
+        if (m_btnFlywheel)
+        {
+            dl->AddCircleFilled(ImVec2(d0.x + 16, d0.y + 75), 4.5f, IM_COL32(255, 200, 30, 255));
+            dl->AddText(ImVec2(d0.x + 26, d0.y + 68), IM_COL32(255, 200, 30, 255), "FIRING");
+        }
+        else
+        {
+            dl->AddCircle(ImVec2(d0.x + 16, d0.y + 75), 4.5f, IM_COL32(100, 120, 145, 200), 12, 1.0f);
+            dl->AddText(ImVec2(d0.x + 26, d0.y + 68), IM_COL32(100, 120, 145, 200), "READY");
+        }
+
+        // =========================================================================
+        // 4. SCREEN-CENTERED COUNTDOWN (3.. 2.. 1.. GO!)
+        // =========================================================================
+        if (m_state == GameState::Countdown)
+        {
+            float cX = io.DisplaySize.x * 0.5f;
+            float cY = io.DisplaySize.y * 0.42f;
+
+            // Halo backing disc
+            dl->AddCircleFilled(ImVec2(cX, cY), 85.0f, IM_COL32(8, 14, 24, 235), 48);
+            dl->AddCircle(ImVec2(cX, cY), 85.0f, IM_COL32(0, 210, 255, 220), 48, 2.5f);
+
+            // Pulsing shockwave ring
+            float pulse = fmod(m_countdownTimer, 1.0f);
+            dl->AddCircle(ImVec2(cX, cY), 85.0f + (1.0f - pulse) * 35.0f,
+                IM_COL32(0, 220, 255, static_cast<int>(pulse * 180.0f)), 48, 2.0f);
+
+            int count = static_cast<int>(std::ceil(m_countdownTimer));
+            if (count > 0)
+            {
+                char cStr[8]; snprintf(cStr, sizeof(cStr), "%d", count);
+                ImVec2 sz = ImGui::CalcTextSize(cStr);
+                float scale = 4.5f;
+                float scaledW = sz.x * scale;
+                float scaledH = sz.y * scale;
+                ImGui::SetCursorPos(ImVec2(cX - scaledW * 0.5f, cY - scaledH * 0.5f));
+                ImGui::SetWindowFontScale(scale);
+                ImGui::TextColored(ImVec4(1.0f, 0.88f, 0.15f, 1.0f), "%s", cStr);
+                ImGui::SetWindowFontScale(1.0f);
+            }
+            else
+            {
+                const char* goStr = "GO!";
+                ImVec2 sz = ImGui::CalcTextSize(goStr);
+                float scale = 4.5f;
+                float scaledW = sz.x * scale;
+                float scaledH = sz.y * scale;
+                ImGui::SetCursorPos(ImVec2(cX - scaledW * 0.5f, cY - scaledH * 0.5f));
+                ImGui::SetWindowFontScale(scale);
+                ImGui::TextColored(ImVec4(0.1f, 1.0f, 0.4f, 1.0f), "%s", goStr);
+                ImGui::SetWindowFontScale(1.0f);
+            }
+
+            ImVec2 subSize = ImGui::CalcTextSize("GET READY TO SHOOT!");
+            dl->AddText(ImVec2(cX - subSize.x * 0.5f, cY + 98.0f), IM_COL32(0, 220, 255, 240), "GET READY TO SHOOT!");
         }
 
         ImGui::End();
@@ -2325,35 +2773,60 @@ namespace FRCBananaSim::Game
     void BananaGame::DrawPauseUI()
     {
         ImGuiIO& io = ImGui::GetIO();
+        float pW = 380.0f;
+        float pH = 275.0f;
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(340, 240), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(pW, pH), ImGuiCond_Always);
 
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove;
-        ImGui::Begin("GAME PAUSED##PauseMenu", nullptr, flags);
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+        ImGui::Begin("##PauseModal", nullptr, flags);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 winPos = ImGui::GetWindowPos();
 
-        ImGui::Spacing();
-        ImGui::SetWindowFontScale(1.4f);
-        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "  GAME PAUSED");
+        // Top Amber Stripe
+        dl->AddLine(ImVec2(winPos.x + 20, winPos.y + 1), ImVec2(winPos.x + pW - 20, winPos.y + 1), IM_COL32(255, 185, 30, 240), 2.5f);
+
+        ImGui::SetCursorPos(ImVec2(24.0f, 16.0f));
+        ImGui::SetWindowFontScale(1.6f);
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "// MATCH PAUSED");
         ImGui::SetWindowFontScale(1.0f);
-        ImGui::Separator();
-        ImGui::Spacing();
 
-        if (ImGui::Button("RESUME (Esc)", ImVec2(310, 38)))
+        ImGui::SetCursorPos(ImVec2(24.0f, 48.0f));
+        ImGui::TextDisabled("Current Score: %d PTS", m_score);
+
+        ImGui::SetCursorPos(ImVec2(24.0f, 72.0f));
+        ImGui::Separator();
+
+        float curY = 88.0f;
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.00f, 0.65f, 0.40f, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.00f, 0.85f, 0.50f, 1.00f));
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
+        if (ImGui::Button("RESUME MATCH [ESC]", ImVec2(pW - 48.0f, 40)))
         {
             m_state = GameState::Playing;
         }
+        ImGui::PopStyleColor(2);
+        curY += 50.0f;
 
-        ImGui::Spacing();
-        if (ImGui::Button("RESTART SESSION", ImVec2(310, 38)))
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.32f, 0.58f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.44f, 0.74f, 1.00f));
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
+        if (ImGui::Button("RESTART MATCH", ImVec2(pW - 48.0f, 38)))
         {
             StartGame(m_mode);
         }
+        ImGui::PopStyleColor(2);
+        curY += 48.0f;
 
-        ImGui::Spacing();
-        if (ImGui::Button("RETURN TO TITLE MENU", ImVec2(310, 38)))
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.22f, 0.36f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.30f, 0.48f, 1.00f));
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
+        if (ImGui::Button("RETURN TO TITLE MENU", ImVec2(pW - 48.0f, 34)))
         {
             m_state = GameState::StartScreen;
         }
+        ImGui::PopStyleColor(2);
 
         ImGui::End();
     }
@@ -2361,57 +2834,123 @@ namespace FRCBananaSim::Game
     void BananaGame::DrawGameOverUI()
     {
         ImGuiIO& io = ImGui::GetIO();
+        float gW = 560.0f;
+        float gH = 460.0f;
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(480, 380), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(gW, gH), ImGuiCond_Always);
 
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove;
-        ImGui::Begin("SESSION COMPLETE##GameOver", nullptr, flags);
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+        ImGui::Begin("##GameOverModal", nullptr, flags);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 winPos = ImGui::GetWindowPos();
 
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.20f, 1.0f));
-        ImGui::SetWindowFontScale(1.8f);
-        ImGui::Text("  TIME'S UP!");
+        // Top Gold Accent Line
+        dl->AddLine(ImVec2(winPos.x + 20, winPos.y + 1), ImVec2(winPos.x + gW - 20, winPos.y + 1), IM_COL32(255, 215, 30, 240), 2.5f);
+
+        ImGui::SetCursorPos(ImVec2(24.0f, 16.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.20f, 1.0f));
+        ImGui::SetWindowFontScale(1.85f);
+        ImGui::Text("MATCH COMPLETE!");
+        ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
-        ImGui::SetWindowFontScale(1.0f);
 
+        ImGui::SetCursorPos(ImVec2(24.0f, 48.0f));
+        ImGui::TextDisabled("Competition round recap & statistics:");
+
+        ImGui::SetCursorPos(ImVec2(24.0f, 72.0f));
         ImGui::Separator();
-        ImGui::Spacing();
 
-        ImGui::SetWindowFontScale(1.4f);
-        ImGui::TextColored(ImVec4(1.0f, 0.88f, 0.15f, 1.0f), "FINAL SCORE: %d PTS", m_score);
+        // 4 Modern Stat Cards in a 2x2 Grid
+        float colW = (gW - 48.0f - 12.0f) * 0.5f;
+        float cardH = 68.0f;
+        float row1Y = 86.0f;
+        float row2Y = row1Y + cardH + 10.0f;
+        float col1X = 24.0f;
+        float col2X = 24.0f + colW + 12.0f;
+
+        // Card 1: Score
+        ImVec2 s0(winPos.x + col1X, winPos.y + row1Y);
+        dl->AddRectFilled(s0, ImVec2(s0.x + colW, s0.y + cardH), IM_COL32(14, 22, 34, 220), 8.0f);
+        dl->AddRect(s0, ImVec2(s0.x + colW, s0.y + cardH), IM_COL32(255, 205, 30, 180), 8.0f, 0, 1.2f);
+        dl->AddText(ImVec2(s0.x + 14, s0.y + 10), IM_COL32(255, 205, 50, 255), "FINAL SCORE");
+        char scBuf[32]; snprintf(scBuf, sizeof(scBuf), "%d PTS", m_score);
+        ImGui::SetCursorPos(ImVec2(col1X + 14.0f, row1Y + 28.0f));
+        ImGui::SetWindowFontScale(1.6f);
+        ImGui::TextColored(ImVec4(1.0f, 0.88f, 0.15f, 1.0f), "%s", scBuf);
         ImGui::SetWindowFontScale(1.0f);
 
+        // Card 2: Goals Made
+        ImVec2 s1(winPos.x + col2X, winPos.y + row1Y);
+        dl->AddRectFilled(s1, ImVec2(s1.x + colW, s1.y + cardH), IM_COL32(14, 22, 34, 220), 8.0f);
+        dl->AddRect(s1, ImVec2(s1.x + colW, s1.y + cardH), IM_COL32(40, 80, 140, 160), 8.0f);
+        dl->AddText(ImVec2(s1.x + 14, s1.y + 10), IM_COL32(120, 180, 255, 240), "GOALS SCORED");
+        char glBuf[32]; snprintf(glBuf, sizeof(glBuf), "%d / %d SHOTS", m_goalsScored, m_ballsFired);
+        ImGui::SetCursorPos(ImVec2(col2X + 14.0f, row1Y + 30.0f));
+        ImGui::SetWindowFontScale(1.35f);
+        ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), "%s", glBuf);
+        ImGui::SetWindowFontScale(1.0f);
+
+        // Card 3: Accuracy
+        ImVec2 s2(winPos.x + col1X, winPos.y + row2Y);
+        float acc = (m_ballsFired > 0) ? (static_cast<float>(m_goalsScored) / m_ballsFired * 100.0f) : 0.0f;
+        dl->AddRectFilled(s2, ImVec2(s2.x + colW, s2.y + cardH), IM_COL32(14, 22, 34, 220), 8.0f);
+        dl->AddRect(s2, ImVec2(s2.x + colW, s2.y + cardH), IM_COL32(40, 80, 140, 160), 8.0f);
+        dl->AddText(ImVec2(s2.x + 14, s2.y + 10), IM_COL32(120, 180, 255, 240), "ACCURACY");
+        char accBuf[32]; snprintf(accBuf, sizeof(accBuf), "%.1f %%", acc);
+        ImGui::SetCursorPos(ImVec2(col1X + 14.0f, row2Y + 30.0f));
+        ImGui::SetWindowFontScale(1.35f);
+        ImVec4 accCol = (acc >= 75.0f) ? ImVec4(0.2f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.85f, 0.2f, 1.0f);
+        ImGui::TextColored(accCol, "%s", accBuf);
+        ImGui::SetWindowFontScale(1.0f);
+
+        // Card 4: Max Combo
+        ImVec2 s3(winPos.x + col2X, winPos.y + row2Y);
+        dl->AddRectFilled(s3, ImVec2(s3.x + colW, s3.y + cardH), IM_COL32(14, 22, 34, 220), 8.0f);
+        dl->AddRect(s3, ImVec2(s3.x + colW, s3.y + cardH), IM_COL32(40, 80, 140, 160), 8.0f);
+        dl->AddText(ImVec2(s3.x + 14, s3.y + 10), IM_COL32(120, 180, 255, 240), "BEST STREAK");
+        char cbBuf[32]; snprintf(cbBuf, sizeof(cbBuf), "x%d COMBO", m_maxCombo);
+        ImGui::SetCursorPos(ImVec2(col2X + 14.0f, row2Y + 30.0f));
+        ImGui::SetWindowFontScale(1.35f);
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", cbBuf);
+        ImGui::SetWindowFontScale(1.0f);
+
+        // High Score / Performance Banner (cleanly below Row 2 at row2Y + cardH + 16 = 248px)
+        float curY = row2Y + cardH + 16.0f;
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
         if (m_score >= m_highScore && m_score > 0)
         {
-            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "*** NEW HIGH SCORE! ***");
+            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "*** NEW HIGH SCORE RECORD ACHIEVED! ***");
         }
+        else
+        {
+            ImGui::TextDisabled("High score to beat: %d PTS", m_highScore);
+        }
+        curY += 26.0f;
 
-        ImGui::Spacing();
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
         ImGui::Separator();
-        ImGui::Spacing();
+        curY += 14.0f;
 
-        ImGui::Text("Goals Made:    %d", m_goalsScored);
-        ImGui::Text("Shots Taken:   %d", m_ballsFired);
-        float acc = (m_ballsFired > 0) ? (static_cast<float>(m_goalsScored) / m_ballsFired * 100.0f) : 0.0f;
-        ImGui::Text("Accuracy:      %.1f %%", acc);
-        ImGui::Text("Max Combo:     x%d", m_maxCombo);
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.65f, 0.25f, 1.0f));
-        if (ImGui::Button("PLAY AGAIN", ImVec2(440, 44)))
+        // Action Buttons
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.00f, 0.65f, 0.40f, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.00f, 0.85f, 0.50f, 1.00f));
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
+        if (ImGui::Button("PLAY AGAIN", ImVec2(gW - 48.0f, 44)))
         {
             StartGame(m_mode);
         }
-        ImGui::PopStyleColor();
+        ImGui::PopStyleColor(2);
+        curY += 54.0f;
 
-        ImGui::Spacing();
-        if (ImGui::Button("MAIN MENU", ImVec2(440, 32)))
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.28f, 0.48f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.38f, 0.62f, 1.00f));
+        ImGui::SetCursorPos(ImVec2(24.0f, curY));
+        if (ImGui::Button("RETURN TO MAIN MENU", ImVec2(gW - 48.0f, 36)))
         {
             m_state = GameState::StartScreen;
         }
+        ImGui::PopStyleColor(2);
 
         ImGui::End();
     }

@@ -323,8 +323,6 @@ static int RunStandaloneGame()
 
             engine.SetRenderCallback([&](double alpha)
                 {
-                    if (renderer.ShouldClose()) return;
-
                     game.Render3D();
                     game.RenderUI();
 

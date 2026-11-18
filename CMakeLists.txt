@@ -17,7 +17,8 @@ add_compile_definitions(
 )
 
 if (MSVC)
-    add_compile_options(/W3 /permissive- /utf-8)
+    add_compile_options(/W3 /permissive- /utf-8 "$<$<CONFIG:Release>:/Zi>")
+    add_link_options("$<$<CONFIG:Release>:/DEBUG>" "$<$<CONFIG:Release>:/OPT:REF>" "$<$<CONFIG:Release>:/OPT:ICF>")
 endif()
 
 # Global include directories

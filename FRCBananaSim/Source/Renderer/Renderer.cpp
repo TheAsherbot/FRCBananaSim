@@ -15,6 +15,7 @@
 #include <GLFW/glfw3.h>
 
 #include <imgui/imgui.h>
+#include <imgui/imgui_internal.h>
 #include <imgui/backend/imgui_impl_glfw.h>
 #include <imgui/backend/imgui_impl_opengl3.h>
 
@@ -456,11 +457,19 @@ void main()
 
     Renderer::~Renderer()
     {
-        if (impl->valid)
+        if (impl && impl->valid)
         {
-            ImGui_ImplOpenGL3_Shutdown();
-            ImGui_ImplGlfw_Shutdown();
-            ImGui::DestroyContext();
+            if (ImGui::GetCurrentContext())
+            {
+                ImGuiContext& g = *GImGui;
+                if (g.WithinFrameScope)
+                {
+                    ImGui::EndFrame();
+                }
+                ImGui_ImplOpenGL3_Shutdown();
+                ImGui_ImplGlfw_Shutdown();
+                ImGui::DestroyContext();
+            }
 
             glDeleteProgram(impl->meshProgram);
             glDeleteProgram(impl->debugLineProgram);
@@ -474,8 +483,13 @@ void main()
             glDeleteVertexArrays(1, &impl->debugLineVao);
             glDeleteBuffers(1, &impl->debugLineVbo);
 
-            glfwDestroyWindow(impl->window);
+            if (impl->window)
+            {
+                glfwDestroyWindow(impl->window);
+                impl->window = nullptr;
+            }
             glfwTerminate();
+            impl->valid = false;
         }
     }
 
