@@ -1324,6 +1324,30 @@ namespace FRCBananaSim::Robot
             worldSpawnPosition, worldSpawnOrientation);
     }
 
+    AssembledRobot RobotAssembler::AssembleFromStrings(std::string_view manifestStr,
+        std::string_view sidecarStr,
+        std::string_view materialsStr,
+        const glm::vec3& worldSpawnPosition,
+        const glm::quat& worldSpawnOrientation)
+    {
+        Schema::RobotSchemaLoader loader;
+        if (!loader.LoadRobotFromStrings(manifestStr, sidecarStr, materialsStr))
+        {
+            AssembledRobot failure;
+            failure.isSuccess = false;
+            std::string err = "Failed to load and validate Schema v1 from embedded strings:\n";
+            for (const auto& error : loader.GetErrors())
+            {
+                err += " - " + error + "\n";
+            }
+            failure.errorMessage = err;
+            return failure;
+        }
+
+        return Assemble(loader.GetManifest(), loader.GetSidecar(), loader.GetMaterials(),
+            worldSpawnPosition, worldSpawnOrientation);
+    }
+
     void RobotAssembler::StepPipeline(AssembledRobot& robot, double dt)
     {
         SIM_PROFILE_SCOPE("RobotAssembler::StepPipeline");

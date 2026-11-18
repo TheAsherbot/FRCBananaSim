@@ -36,6 +36,15 @@ namespace FRCBananaSim::Robot::Schema
         bool LoadRobot(const std::string& manifestPath, const std::string& sidecarPath = "", const std::string& materialsPath = "");
 
         /**
+         * @brief Loads and validates a robot specification directly from embedded JSON strings.
+         * @param manifestJson Manifest JSON string contents.
+         * @param sidecarJson Sidecar JSON string contents.
+         * @param materialsJson Materials JSON string contents.
+         * @return True if all strings parsed and topological validation passed with zero errors.
+         */
+        bool LoadRobotFromStrings(std::string_view manifestJson, std::string_view sidecarJson = "", std::string_view materialsJson = "");
+
+        /**
          * @brief Deserializes a manifest.json file into internal RobotManifest data structures.
          * @param filepath Path to manifest.json.
          * @return True if parsing succeeded.

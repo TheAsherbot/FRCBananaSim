@@ -235,8 +235,9 @@ namespace FRCBananaSim::Game
 
         std::unordered_map<Core::ECS::Core::Entity, HeldBallInfo> m_heldBalls;
 
-        // Arena & Balls Entities
+        // Arena, Robot Visuals & Balls Entities
         std::vector<Core::ECS::Core::Entity> m_arenaEntities;
+        std::vector<Core::ECS::Core::Entity> m_robotVisualEntities;
         std::vector<Core::ECS::Core::Entity> m_ballEntities;
         std::unordered_map<Core::ECS::Core::Entity, float> m_ballScoreCooldown;
         std::unordered_map<Core::ECS::Core::Entity, float> m_activeShots;
