@@ -63,7 +63,6 @@ set(ENGINE_SOURCES
     FRCBananaSim/Source/Interaction/IntakeSurfaceModel.cpp
     FRCBananaSim/Source/Interaction/Systems/RobotGamePieceSystem.cpp
     FRCBananaSim/Source/Interaction/Systems/FlightAerodynamicsSystem.cpp
-    FRCBananaSim/Source/Game/BananaGame.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp
@@ -109,9 +108,44 @@ set(ENGINE_SOURCES
     External/imgui/include/imgui/backend/imgui_impl_opengl3.cpp
 )
 
+# Target: Engine Shared Library (.dll & .lib)
+add_library(FRCBananaEngine SHARED
+    ${ENGINE_SOURCES}
+)
+
+set_target_properties(FRCBananaEngine PROPERTIES
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+)
+
+target_include_directories(FRCBananaEngine PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/FRCBananaSim/Source
+    ${CMAKE_CURRENT_SOURCE_DIR}/External
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/nlohmann
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/glm
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/glfw/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/glad/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/imgui/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/imgui/include/imgui
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/jolt/include
+)
+
+target_link_directories(FRCBananaEngine PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/glfw/bin/$<CONFIG>
+    ${CMAKE_CURRENT_SOURCE_DIR}/External/jolt/bin/$<CONFIG>
+)
+
+target_link_libraries(FRCBananaEngine PRIVATE
+    glfw3
+    Jolt
+    opengl32
+    gdi32
+    ws2_32
+)
+
 # Target 1: Interactive Simulation Executable
 add_executable(FRCBananaSim
     ${ENGINE_SOURCES}
+    FRCBananaSim/Source/Game/BananaGame.cpp
     FRCBananaSim/Source/Main.cpp
 )
 
@@ -223,7 +257,6 @@ set(TEST_SOURCES
     FRCBananaSim/Source/Interaction/IntakeSurfaceModel.cpp
     FRCBananaSim/Source/Interaction/Systems/RobotGamePieceSystem.cpp
     FRCBananaSim/Source/Interaction/Systems/FlightAerodynamicsSystem.cpp
-    FRCBananaSim/Source/Game/BananaGame.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/EncoderSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Models/IMUSensorModel.cpp
     FRCBananaSim/Source/Robot/Sensors/Systems/SensorSystem.cpp

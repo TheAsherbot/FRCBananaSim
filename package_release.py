@@ -72,5 +72,86 @@ GAME CONTROLS:
     print(f"Successfully packaged release bundle: {zip_path} ({zip_size_mb:.2f} MB)")
     return True
 
+def package_engine():
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    build_dir = os.path.join(repo_root, "build", "Release")
+    dll_path = os.path.join(build_dir, "FRCBananaEngine.dll")
+    lib_path = os.path.join(build_dir, "FRCBananaEngine.lib")
+    pdb_path = os.path.join(build_dir, "FRCBananaEngine.pdb")
+    headers_dir = os.path.join(repo_root, "FRCBananaSim", "Source")
+
+    if not os.path.exists(dll_path) or not os.path.exists(lib_path):
+        print(f"Error: FRCBananaEngine.dll or FRCBananaEngine.lib not found at {build_dir}")
+        return False
+
+    staging_dir = os.path.join(repo_root, "build", "FRCBananaEngine-SDK-Release-Windows-x64")
+    if os.path.exists(staging_dir):
+        shutil.rmtree(staging_dir)
+    os.makedirs(staging_dir, exist_ok=True)
+
+    # 1. bin/ directory (DLL + PDB)
+    bin_dir = os.path.join(staging_dir, "bin")
+    os.makedirs(bin_dir, exist_ok=True)
+    shutil.copy2(dll_path, os.path.join(bin_dir, "FRCBananaEngine.dll"))
+    if os.path.exists(pdb_path):
+        shutil.copy2(pdb_path, os.path.join(bin_dir, "FRCBananaEngine.pdb"))
+
+    # 2. lib/ directory (import library .lib)
+    lib_dir = os.path.join(staging_dir, "lib")
+    os.makedirs(lib_dir, exist_ok=True)
+    shutil.copy2(lib_path, os.path.join(lib_dir, "FRCBananaEngine.lib"))
+
+    # 3. include/ directory (C++ header files)
+    include_dir = os.path.join(staging_dir, "include")
+    shutil.copytree(headers_dir, include_dir, ignore=shutil.ignore_patterns("*.cpp", "*.c"))
+
+    # 4. Engine README
+    readme_content = """========================================================================
+FRC BANANA SIMULATOR — ENGINE SDK (DLL & LIB)
+========================================================================
+
+CONTENTS:
+- bin/
+    - FRCBananaEngine.dll : Shared runtime library for Windows x64.
+    - FRCBananaEngine.pdb : Debug symbols.
+- lib/
+    - FRCBananaEngine.lib : Import library for linking with MSVC / C++ compilers.
+- include/
+    - Engine header files (Core, Physics, Robot, Actuation, Interaction, Renderer, etc.)
+
+USAGE:
+1. Add "include/" to your project's include directories.
+2. Add "lib/" to your linker search directories and link against "FRCBananaEngine.lib".
+3. Place "FRCBananaEngine.dll" alongside your application executable.
+
+========================================================================
+"""
+    with open(os.path.join(staging_dir, "README.txt"), "w", encoding="utf-8") as f:
+        f.write(readme_content)
+
+    # 5. Create ZIP archive
+    zip_path = os.path.join(repo_root, "build", "FRCBananaEngine-SDK-Release-Windows-x64.zip")
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(staging_dir):
+            for file in files:
+                abs_file = os.path.join(root, file)
+                rel_file = os.path.relpath(abs_file, staging_dir)
+                zipf.write(abs_file, os.path.join("FRCBananaEngine-SDK", rel_file))
+
+    zip_size_mb = os.path.getsize(zip_path) / (1024 * 1024)
+    print(f"Successfully packaged engine SDK bundle: {zip_path} ({zip_size_mb:.2f} MB)")
+    return True
+
 if __name__ == "__main__":
-    package()
+    import sys
+    if "--engine" in sys.argv:
+        package_engine()
+    elif "--all" in sys.argv:
+        package()
+        package_engine()
+    else:
+        package()
+        package_engine()
